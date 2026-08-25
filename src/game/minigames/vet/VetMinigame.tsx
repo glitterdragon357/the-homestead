@@ -16,6 +16,7 @@ import {
   initialVet,
   kitOf,
   makePatient,
+  nextArrivalDue,
   surgeryOf,
   type Patient,
   type VetSave,
@@ -79,7 +80,7 @@ export function VetMinigame({ onExit }: MinigameProps) {
     const anyExamDone = list.some((p) => p.examiningUntil && t >= p.examiningUntil)
     const walkedOut = list.filter((p) => t - p.arrivedAt >= PATIENCE_MS)
     const roomFree = list.length - walkedOut.length < surgery.beds
-    const dueArrival = t >= (save.nextArrivalAt ?? 0)
+    const dueArrival = t >= nextArrivalDue(save, t)
 
     if (!anyExamDone && !walkedOut.length && !(roomFree && dueArrival)) return
 
@@ -93,7 +94,7 @@ export function VetMinigame({ onExit }: MinigameProps) {
         .filter((p) => Date.now() - p.arrivedAt < PATIENCE_MS)
 
       let nextId = s.nextId ?? 1
-      let arrival = s.nextArrivalAt ?? 0
+      let arrival = nextArrivalDue(s, Date.now())
       if (Date.now() >= arrival && next.length < surgeryOf(s).beds) {
         next = [...next, makePatient(nextId++, Date.now())]
         arrival = Date.now() + surgeryOf(s).arrivalMs
@@ -222,7 +223,7 @@ export function VetMinigame({ onExit }: MinigameProps) {
 
           {patients.length === 0 && (
             <p style={panel.empty}>
-              Nobody waiting. The next one turns up in {formatSecs((save.nextArrivalAt ?? now) - now)}.
+              Nobody waiting. The next one turns up in {formatSecs(nextArrivalDue(save, now) - now)}.
             </p>
           )}
 

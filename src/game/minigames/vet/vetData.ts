@@ -119,10 +119,10 @@ export interface SurgeryLevel {
 }
 
 export const SURGERIES: SurgeryLevel[] = [
-  { label: 'Kitchen Table', cost: 0, beds: 2, arrivalMs: 100_000, blurb: 'Two at a time, and a lot of mess.' },
-  { label: 'Back Room', cost: 200, beds: 3, arrivalMs: 80_000, blurb: 'Three beds, word gets around.' },
-  { label: 'Village Surgery', cost: 520, beds: 4, arrivalMs: 60_000, blurb: 'Four beds and a steady queue.' },
-  { label: 'Animal Hospital', cost: 1100, beds: 6, arrivalMs: 45_000, blurb: 'Six beds, never a quiet moment.' },
+  { label: 'Kitchen Table', cost: 0, beds: 2, arrivalMs: 40_000, blurb: 'Two at a time, and a lot of mess.' },
+  { label: 'Back Room', cost: 200, beds: 3, arrivalMs: 30_000, blurb: 'Three beds, word gets around.' },
+  { label: 'Village Surgery', cost: 520, beds: 4, arrivalMs: 22_000, blurb: 'Four beds and a steady queue.' },
+  { label: 'Animal Hospital', cost: 1100, beds: 6, arrivalMs: 15_000, blurb: 'Six beds, never a quiet moment.' },
 ]
 
 /** How long a patient waits before giving up and going home. */
@@ -187,6 +187,18 @@ export function makePatient(id: number, now: number): Patient {
     examined: false,
     misses: 0,
   }
+}
+
+/**
+ * When the next patient is actually due.
+ *
+ * Clamped to the current arrival interval so a schedule written under an
+ * older, slower setting cannot keep the door shut longer than it should -
+ * without this, retuning arrival speed only takes effect after the stale
+ * wait has run down.
+ */
+export function nextArrivalDue(s: VetSave, now: number): number {
+  return Math.min(s.nextArrivalAt ?? now, now + surgeryOf(s).arrivalMs)
 }
 
 export function kitOf(s: VetSave | undefined): KitLevel {
