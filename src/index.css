@@ -9,4 +9,52 @@ body {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
+  /* The world is a fixed-resolution canvas scaled down to fit. Nothing
+     should ever need sideways scrolling to be seen. */
+  overflow-x: hidden;
+}
+
+#root {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+/*
+ * Pixi renders the world at a fixed 960x640 and we scale that down with
+ * CSS to fit the viewport, letterboxing by aspect ratio rather than
+ * cropping. Pointer hit-testing maps through the canvas bounding rect,
+ * so clicks stay accurate at any displayed size.
+ */
+canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 960px;
+}
+
+/*
+ * The HUD is DOM text laid over a canvas that scales with the viewport.
+ * It can't shrink with the canvas without becoming unreadable, so on
+ * narrow screens it stops floating over the world and sits above it
+ * instead - otherwise it covers the tiles you're trying to tap.
+ */
+.hud {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  max-width: calc(100% - 24px);
+}
+
+@media (max-width: 700px) {
+  .app-shell {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .hud {
+    position: static;
+    max-width: none;
+    margin-top: 8px;
+  }
 }

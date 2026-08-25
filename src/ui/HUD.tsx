@@ -11,7 +11,7 @@ export function HUD() {
   }
 
   return (
-    <div style={styles.wrap}>
+    <div className="hud" style={styles.wrap}>
       <div>The Homestead</div>
       <div style={styles.dim}>
         Position: ({player.x}, {player.y})
@@ -30,13 +30,12 @@ export function HUD() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
+  // Positioning lives in the `.hud` class in index.css so a media query can
+  // lift it off the canvas on narrow screens.
   wrap: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
     color: '#f4ead9',
     fontFamily: 'system-ui, sans-serif',
-    fontSize: 14,
+    fontSize: 'clamp(11px, 2.6vw, 14px)',
     background: 'rgba(0,0,0,0.4)',
     padding: '10px 14px',
     borderRadius: 8,

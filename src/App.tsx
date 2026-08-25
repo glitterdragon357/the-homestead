@@ -4,7 +4,7 @@ import { HUD } from './ui/HUD'
 
 export default function App() {
   return (
-    <div style={{ position: 'relative', display: 'inline-block' }}>
+    <div className="app-shell" style={{ position: 'relative', width: '100%', maxWidth: 960 }}>
       <HomesteadCanvas />
       <HUD />
       <MinigameOverlay />

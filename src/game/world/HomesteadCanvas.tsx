@@ -63,7 +63,9 @@ function TileMesh({ tile, origin }: { tile: HomesteadTile; origin: Origin }) {
         y={origin.y + sy}
         eventMode="static"
         cursor={tile.walkable ? 'pointer' : 'default'}
-        onClick={() => movePlayerTo({ x: tile.x, y: tile.y })}
+        // `click` is mouse-only in Pixi and `tap` is touch-only; `pointertap`
+        // fires for both, so tiles stay tappable on phones and tablets.
+        onPointerTap={() => movePlayerTo({ x: tile.x, y: tile.y })}
       />
       {tile.icon && (
         <pixiText

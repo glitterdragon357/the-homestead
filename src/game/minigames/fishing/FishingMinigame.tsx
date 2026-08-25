@@ -359,14 +359,14 @@ const styles: Record<string, React.CSSProperties> = {
   wrap: {
     background: '#fdf6e3',
     borderRadius: 12,
-    padding: 32,
-    width: 380,
+    padding: 'clamp(16px, 5vw, 32px)',
+    width: 'min(380px, calc(100vw - 20px))',
     textAlign: 'center',
     boxShadow: '0 12px 40px rgba(0,0,0,0.35)',
   },
   title: { margin: '0 0 4px', color: '#3a2e1f' },
   subLabel: { margin: '0 0 16px', color: '#6b5a44', fontSize: 14 },
-  pondWrap: { position: 'relative', margin: '0 auto 16px', width: 300 },
+  pondWrap: { position: 'relative', margin: '0 auto 16px', width: '100%', maxWidth: 300 },
   toastSlot: {
     position: 'absolute',
     top: -30,
