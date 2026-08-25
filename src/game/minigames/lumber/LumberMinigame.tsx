@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MinigameProps } from '../registry'
 import { useHomesteadStore } from '../../state/store'
+import { usePurse } from '../../state/usePurse'
 import { useMinigameProgress } from '../../state/useMinigameProgress'
 import { WoodArt } from './WoodArt'
 import { ITEMS, priceOf } from '../../economy/items'
@@ -42,11 +43,9 @@ type Tab = 'stand' | 'fire' | 'bench' | 'wares'
 
 export function LumberMinigame({ onExit }: MinigameProps) {
   const [save, setSave] = useMinigameProgress<LumberSave>('lumber', initialLumber)
-  const coins = useHomesteadStore((s) => s.coins)
+  const { coins, earn, spend } = usePurse('lumber')
   const inventory = useHomesteadStore((s) => s.inventory)
   const addItem = useHomesteadStore((s) => s.addItem)
-  const earn = useHomesteadStore((s) => s.earn)
-  const spend = useHomesteadStore((s) => s.spend)
   const takeItems = useHomesteadStore((s) => s.takeItems)
 
   const [tab, setTab] = useState<Tab>('stand')

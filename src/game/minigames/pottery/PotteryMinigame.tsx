@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MinigameProps } from '../registry'
 import { useHomesteadStore } from '../../state/store'
+import { usePurse } from '../../state/usePurse'
 import { useMinigameProgress } from '../../state/useMinigameProgress'
 import { PotteryArt } from './PotteryArt'
 import { ITEMS, ITEM_ORDER, priceOf } from '../../economy/items'
@@ -39,11 +40,9 @@ const PATCH_COUNT = 6
 
 export function PotteryMinigame({ onExit }: MinigameProps) {
   const [save, setSave] = useMinigameProgress<PotterySave>('pottery', initialPottery)
-  const coins = useHomesteadStore((s) => s.coins)
+  const { coins, earn, spend } = usePurse('pottery')
   const inventory = useHomesteadStore((s) => s.inventory)
   const addItem = useHomesteadStore((s) => s.addItem)
-  const earn = useHomesteadStore((s) => s.earn)
-  const spend = useHomesteadStore((s) => s.spend)
   const takeItems = useHomesteadStore((s) => s.takeItems)
 
   const [tab, setTab] = useState<Tab>('dig')

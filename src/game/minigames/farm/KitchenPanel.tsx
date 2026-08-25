@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useHomesteadStore } from '../../state/store'
+import { usePurse } from '../../state/usePurse'
 import { useMinigameProgress } from '../../state/useMinigameProgress'
 import { FarmArt } from './FarmArt'
 import { priceOf } from '../../economy/items'
@@ -12,9 +13,8 @@ export function KitchenPanel() {
     recipes: [],
     cooking: [],
   }))
-  const coins = useHomesteadStore((s) => s.coins)
+  const { coins, spend } = usePurse('farmstead')
   const inventory = useHomesteadStore((s) => s.inventory)
-  const spend = useHomesteadStore((s) => s.spend)
   const addItem = useHomesteadStore((s) => s.addItem)
   const takeItems = useHomesteadStore((s) => s.takeItems)
 

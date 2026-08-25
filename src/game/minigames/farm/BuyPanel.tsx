@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useHomesteadStore } from '../../state/store'
+import { usePurse } from '../../state/usePurse'
 import { FarmArt } from './FarmArt'
 import {
   ANIMALS,
@@ -27,9 +28,8 @@ const BUILDING_ORDER: BuildingId[] = ['barn', 'field', 'kitchen']
 const PEN_ID: BuildingId = 'barn'
 
 export function BuyPanel() {
-  const coins = useHomesteadStore((s) => s.coins)
+  const { coins, spend } = usePurse('farmstead')
   const progress = useHomesteadStore((s) => s.progress)
-  const spend = useHomesteadStore((s) => s.spend)
   const setProgress = useHomesteadStore((s) => s.setProgress)
 
   const [toast, setToast] = useState<string | null>(null)

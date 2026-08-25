@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { MinigameProps } from '../registry'
 import { useMinigameProgress } from '../../state/useMinigameProgress'
 import { useHomesteadStore } from '../../state/store'
+import { usePurse } from '../../state/usePurse'
 import { FishArt } from './FishArt'
 import { ITEMS, priceOf } from '../../economy/items'
 import {
@@ -61,11 +62,9 @@ export function FishingMinigame({ onExit }: MinigameProps) {
     rodLevel: 0,
     caught: {},
   }))
-  const coins = useHomesteadStore((s) => s.coins)
+  const { coins, earn, spend } = usePurse('fishing')
   const inventory = useHomesteadStore((s) => s.inventory)
   const addItem = useHomesteadStore((s) => s.addItem)
-  const earn = useHomesteadStore((s) => s.earn)
-  const spend = useHomesteadStore((s) => s.spend)
   const takeItems = useHomesteadStore((s) => s.takeItems)
   const rodLevel = save.rodLevel ?? 0
   const caught = save.caught ?? {}

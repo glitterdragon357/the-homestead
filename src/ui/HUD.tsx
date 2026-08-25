@@ -2,7 +2,7 @@ import { useHomesteadStore } from '../game/state/store'
 import { valueOf } from '../game/economy/items'
 
 export function HUD() {
-  const coins = useHomesteadStore((s) => s.coins)
+  const purses = useHomesteadStore((s) => s.purses)
   const inventory = useHomesteadStore((s) => s.inventory)
   const resetSave = useHomesteadStore((s) => s.resetSave)
   const restoreBackup = useHomesteadStore((s) => s.restoreBackup)
@@ -23,8 +23,10 @@ export function HUD() {
 
   return (
     <div className="hud" style={styles.wrap}>
-      <div>
-        The Homestead &middot; 🪙 {coins}
+      <div>The Homestead</div>
+      <div style={styles.dim}>
+        Purses: {Object.values(purses).reduce((a, b) => a + (b ?? 0), 0)} 🪙 across{' '}
+        {Object.keys(purses).length} trades &middot; each spent where it was earned
       </div>
       <div style={styles.dim}>
         Crate: {crateCount} item{crateCount === 1 ? '' : 's'}

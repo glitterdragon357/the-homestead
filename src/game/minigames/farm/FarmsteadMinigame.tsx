@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { MinigameProps } from '../registry'
 import { useHomesteadStore } from '../../state/store'
+import { usePurse } from '../../state/usePurse'
 import { AnimalPen } from './AnimalPen'
 import { FieldPanel } from './FieldPanel'
 import { KitchenPanel } from './KitchenPanel'
@@ -35,7 +36,7 @@ import { panel } from './farmStyles'
 type Tab = 'animals' | 'field' | 'kitchen' | 'sell' | 'buy'
 
 export function FarmsteadMinigame({ onExit }: MinigameProps) {
-  const coins = useHomesteadStore((s) => s.coins)
+  const { coins } = usePurse('farmstead')
   const progress = useHomesteadStore((s) => s.progress)
   const [tab, setTab] = useState<Tab>('animals')
 

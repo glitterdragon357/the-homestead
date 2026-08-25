@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useHomesteadStore } from '../../state/store'
+import { usePurse } from '../../state/usePurse'
 import { ItemArt } from '../../economy/ItemArt'
 import { ITEMS, ITEM_ORDER, priceOf, type ItemCategory } from '../../economy/items'
 import { panel } from './farmStyles'
@@ -25,8 +26,8 @@ const CATEGORY_LABEL: Record<ItemCategory, string> = {
 }
 
 export function SellPanel() {
+  const { earn } = usePurse('farmstead')
   const inventory = useHomesteadStore((s) => s.inventory)
-  const earn = useHomesteadStore((s) => s.earn)
   const takeItems = useHomesteadStore((s) => s.takeItems)
 
   const [toast, setToast] = useState<string | null>(null)
