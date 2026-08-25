@@ -117,6 +117,12 @@ export interface BuildingLevel {
   cost: number
   /** Animals housed, plots tilled, or dishes cooked at once. */
   capacity: number
+  /**
+   * Barn only: how many of *each* kind fit. The barn is limited per
+   * species rather than by a single total, so you cannot fill every stall
+   * with chickens - a full barn is three of each, nine in all.
+   */
+  perKind?: number
   /** Multiplier on production/growth/cook time - lower is faster. */
   speedMult: number
   blurb: string
@@ -135,10 +141,10 @@ export const BUILDINGS: Record<BuildingId, BuildingSpec> = {
     id: 'barn',
     name: 'Barn',
     levels: [
-      { label: 'Old Shed', cost: 0, capacity: 4, speedMult: 1, blurb: 'Four stalls, if you are not fussy.' },
-      { label: 'Timber Barn', cost: 180, capacity: 7, speedMult: 0.85, blurb: 'Seven stalls and a stronger fence.' },
-      { label: 'Stone Barn', cost: 450, capacity: 10, speedMult: 0.7, blurb: 'Ten stalls. Goats settle better here.' },
-      { label: 'Great Barn', cost: 900, capacity: 14, speedMult: 0.55, blurb: 'Fourteen stalls, tended twice as often.' },
+      { label: 'Old Shed', cost: 0, capacity: 3, perKind: 1, speedMult: 1, blurb: 'One of each, if you are not fussy.' },
+      { label: 'Timber Barn', cost: 180, capacity: 6, perKind: 2, speedMult: 0.85, blurb: 'Two of each, and a stronger fence.' },
+      { label: 'Stone Barn', cost: 450, capacity: 9, perKind: 3, speedMult: 0.7, blurb: 'A full barn: three of each, nine in all.' },
+      { label: 'Great Barn', cost: 900, capacity: 9, perKind: 3, speedMult: 0.55, blurb: 'Still nine, but tended twice as often.' },
     ],
   },
   field: {
@@ -213,6 +219,15 @@ export function levelOf(id: BuildingId, level: number): BuildingLevel {
 
 export function nextLevel(id: BuildingId, level: number): BuildingLevel | null {
   return BUILDINGS[id].levels[level + 1] ?? null
+}
+
+/** How many of one kind fit at this barn level. */
+export function kindCap(level: number): number {
+  return levelOf('barn', level).perKind ?? 1
+}
+
+export function countOfKind(animals: Animal[] | undefined, kind: AnimalKind): number {
+  return (animals ?? []).filter((a) => a.kind === kind).length
 }
 
 export function isGrown(a: Animal, now: number): boolean {

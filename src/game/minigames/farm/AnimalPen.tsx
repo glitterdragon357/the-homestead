@@ -6,7 +6,9 @@ import {
   ANIMALS,
   CHASE_DECAY_PER_TICK,
   CHASE_PER_CLICK,
+  countOfKind,
   isGrown,
+  kindCap,
   levelOf,
   produceMsFor,
   productReady,
@@ -45,7 +47,6 @@ export function AnimalPen({
   const level = levelOf(buildingId, save.level ?? 0)
   const now = Date.now()
   const animals = save.animals ?? []
-  const atCapacity = animals.length >= level.capacity
 
   function showToast(msg: string) {
     setToast(msg)
@@ -171,7 +172,8 @@ export function AnimalPen({
 
   function startBreeding(kind: AnimalKind) {
     const adults = animals.filter((a) => a.kind === kind && isGrown(a, now) && !a.escaped).length
-    if (adults < 2 || save.breeding?.[kind] || atCapacity) return
+    const full = countOfKind(animals, kind) >= kindCap(save.level ?? 0)
+    if (adults < 2 || save.breeding?.[kind] || full) return
     setSave((s) => ({
       ...s,
       breeding: { ...(s.breeding ?? {}), [kind]: Date.now() + ANIMALS[kind].breedMs },
@@ -298,13 +300,16 @@ export function AnimalPen({
       {kinds.map((kind) => {
         const spec = ANIMALS[kind]
         const adults = animals.filter((a) => a.kind === kind && isGrown(a, now) && !a.escaped).length
+        const held = countOfKind(animals, kind)
+        const cap = kindCap(save.level ?? 0)
         const due = save.breeding?.[kind]
-        const blocked = atCapacity
+        const blocked = held >= cap
         return (
           <div key={kind} style={panel.breedRow}>
             <FarmArt subject={kind} size={30} />
             <span style={panel.breedLabel}>
-              {spec.plural} &middot; {adults} adult{adults === 1 ? '' : 's'}
+              {spec.plural} &middot; {held}/{cap}
+              {adults ? ` · ${adults} adult${adults === 1 ? '' : 's'}` : ''}
             </span>
             {due ? (
               <span style={panel.rowNote}>baby in {formatSecs(due - now)}</span>

@@ -4,6 +4,8 @@ import { FarmArt } from './FarmArt'
 import {
   ANIMALS,
   BUILDINGS,
+  countOfKind,
+  kindCap,
   levelOf,
   nextLevel,
   type AnimalKind,
@@ -53,8 +55,9 @@ export function BuyPanel() {
     const spec = ANIMALS[kind]
     const pen = progress[PEN_ID] as PenSave | undefined
     if (!pen) return
-    if ((pen.animals ?? []).length >= levelOf(PEN_ID, pen.level ?? 0).capacity) {
-      showToast('The barn is full - upgrade it first')
+    const cap = kindCap(pen.level ?? 0)
+    if (countOfKind(pen.animals, kind) >= cap) {
+      showToast(`The barn only holds ${cap} ${spec.plural.toLowerCase()}`)
       return
     }
     if (!spend(spec.price)) return
@@ -81,7 +84,7 @@ export function BuyPanel() {
   const pen = progress[PEN_ID] as PenSave | undefined
   const capacity = pen ? levelOf(PEN_ID, pen.level ?? 0).capacity : 0
   const housed = pen?.animals?.length ?? 0
-  const barnFull = housed >= capacity
+  const perKind = kindCap(pen?.level ?? 0)
 
   return (
     <>
@@ -125,6 +128,8 @@ export function BuyPanel() {
       </div>
       {(Object.keys(ANIMALS) as AnimalKind[]).map((kind) => {
         const spec = ANIMALS[kind]
+        const held = countOfKind(pen?.animals, kind)
+        const kindFull = held >= perKind
         return (
           <div key={kind} style={{ ...panel.row, marginTop: 6 }}>
             <div style={panel.rowArt}>
@@ -136,15 +141,17 @@ export function BuyPanel() {
                 gives {spec.product} every {Math.round(spec.produceMs / 1000)}s
                 {spec.boredomMs ? ' · needs play' : ''}
               </div>
-              <div style={panel.rowNote}>arrives fully grown</div>
+              <div style={panel.rowNote}>
+                {held}/{perKind} in the barn &middot; arrives fully grown
+              </div>
             </div>
             <div style={panel.rowActions}>
               <button
-                style={{ ...panel.smallButton, opacity: coins >= spec.price && !barnFull ? 1 : 0.35 }}
+                style={{ ...panel.smallButton, opacity: coins >= spec.price && !kindFull ? 1 : 0.35 }}
                 onClick={() => buyAnimal(kind)}
-                disabled={coins < spec.price || barnFull}
+                disabled={coins < spec.price || kindFull}
               >
-                {barnFull ? 'Full' : `Buy · ${spec.price}`}
+                {kindFull ? 'Full' : `Buy · ${spec.price}`}
               </button>
             </div>
           </div>
