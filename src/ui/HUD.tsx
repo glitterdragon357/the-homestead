@@ -1,8 +1,13 @@
 import { useHomesteadStore } from '../game/state/store'
+import { valueOf } from '../game/economy/items'
 
 export function HUD() {
-  const player = useHomesteadStore((s) => s.player)
+  const coins = useHomesteadStore((s) => s.coins)
+  const inventory = useHomesteadStore((s) => s.inventory)
   const resetSave = useHomesteadStore((s) => s.resetSave)
+
+  const crateCount = Object.values(inventory).reduce((a, b) => a + (b ?? 0), 0)
+  const crateValue = valueOf(inventory)
 
   function handleReset() {
     if (window.confirm('Erase your homestead save? This cannot be undone.')) {
@@ -12,12 +17,15 @@ export function HUD() {
 
   return (
     <div className="hud" style={styles.wrap}>
-      <div>The Homestead</div>
-      <div style={styles.dim}>
-        Position: ({player.x}, {player.y})
+      <div>
+        The Homestead &middot; 🪙 {coins}
       </div>
       <div style={styles.dim}>
-        Click a tile to move. Dirt patches, the 🐱 and the pond launch minigames.
+        Crate: {crateCount} item{crateCount === 1 ? '' : 's'}
+        {crateCount > 0 && ` · worth ${crateValue} at market`}
+      </div>
+      <div style={styles.dim}>
+        Click a building to visit it. A badge means something is waiting.
       </div>
       <div style={styles.dim}>
         Progress saves automatically &middot;{' '}

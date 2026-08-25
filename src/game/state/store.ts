@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { GridPoint } from '../isometric/coords'
 import { buildStarterMap, tileAt, type HomesteadTile } from '../world/tiles'
+import { initialProgress } from '../minigames/farm/farmData'
 
 interface HomesteadState {
   tiles: HomesteadTile[]
@@ -13,16 +14,31 @@ interface HomesteadState {
   /**
    * Saved progress, keyed by minigame id. The store deliberately does not
    * know the shape of any entry - each minigame owns its own save format
-   * and reads/writes it through `useMinigameProgress`. That keeps
-   * minigames self-contained: adding one still means a component plus a
-   * registry entry, with no store changes.
+   * and reads/writes it through `useMinigameProgress`.
    */
   progress: Record<string, unknown>
+
+  /**
+   * One wallet and one crate for the whole homestead. Every game feeds the
+   * same inventory and every sale happens at the market, so a trout and a
+   * dozen eggs are worth exactly what the market says they are and nothing
+   * has to know where anything came from.
+   */
+  coins: number
+  inventory: Record<string, number>
 
   movePlayerTo: (pos: GridPoint) => void
   openMinigame: (id: string) => void
   closeMinigame: () => void
   setProgress: (id: string, value: unknown) => void
+
+  earn: (amount: number) => void
+  /** Returns false (and changes nothing) when the purse is short. */
+  spend: (amount: number) => boolean
+  addItem: (key: string, qty?: number) => void
+  /** Returns false (and changes nothing) unless every item is in stock. */
+  takeItems: (needs: Record<string, number>) => boolean
+
   resetSave: () => void
 }
 
@@ -32,7 +48,9 @@ export const useHomesteadStore = create<HomesteadState>()(
       tiles: buildStarterMap(),
       player: { x: 0, y: 0 },
       activeMinigameId: null,
-      progress: {},
+      progress: initialProgress(),
+      coins: 40,
+      inventory: {},
 
       movePlayerTo: (pos) => {
         const tile = tileAt(get().tiles, pos)
@@ -51,18 +69,69 @@ export const useHomesteadStore = create<HomesteadState>()(
       setProgress: (id, value) =>
         set((state) => ({ progress: { ...state.progress, [id]: value } })),
 
-      resetSave: () => set({ progress: {}, player: { x: 0, y: 0 } }),
+      earn: (amount) => set((s) => ({ coins: s.coins + amount })),
+
+      spend: (amount) => {
+        if (get().coins < amount) return false
+        set((s) => ({ coins: s.coins - amount }))
+        return true
+      },
+
+      addItem: (key, qty = 1) =>
+        set((s) => ({ inventory: { ...s.inventory, [key]: (s.inventory[key] ?? 0) + qty } })),
+
+      takeItems: (needs) => {
+        const inv = get().inventory
+        for (const [key, qty] of Object.entries(needs)) {
+          if ((inv[key] ?? 0) < qty) return false
+        }
+        const next = { ...inv }
+        for (const [key, qty] of Object.entries(needs)) {
+          next[key] = (next[key] ?? 0) - qty
+        }
+        set({ inventory: next })
+        return true
+      },
+
+      resetSave: () =>
+        set({ progress: initialProgress(), player: { x: 0, y: 0 }, coins: 40, inventory: {} }),
     }),
     {
       name: 'the-homestead-save',
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => localStorage),
       /**
        * Only persist what the player actually earned. `tiles` is rebuilt
        * from code on every load, so saving it would freeze the map at
        * whatever layout shipped when the save was written.
        */
-      partialize: (state) => ({ progress: state.progress, player: state.player }),
+      partialize: (state) => ({
+        progress: state.progress,
+        player: state.player,
+        coins: state.coins,
+        inventory: state.inventory,
+      }),
+      /**
+       * v1 kept coins inside each minigame's own save. Pull the fishing
+       * and farmstead purses into the shared wallet rather than making
+       * anyone start over.
+       */
+      migrate: (persisted, version) => {
+        const state = (persisted ?? {}) as Record<string, unknown>
+        if (version >= 2) return state
+
+        const progress = (state.progress ?? {}) as Record<string, { coins?: number }>
+        const carried =
+          (progress.fishing?.coins ?? 0) + (progress.farmstead?.coins ?? 0)
+
+        return {
+          ...state,
+          coins: ((state.coins as number) ?? 0) + carried || 40,
+          inventory: state.inventory ?? {},
+          // The split retired these two saves; their buildings start fresh.
+          progress: initialProgress(),
+        }
+      },
     }
   )
 )

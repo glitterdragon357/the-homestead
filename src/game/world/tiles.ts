@@ -16,6 +16,29 @@ export interface HomesteadTile {
   walkable: boolean
 }
 
+interface Placement {
+  x: number
+  y: number
+  type: TileType
+  label: string
+  icon: string
+  minigameId: string
+}
+
+/**
+ * Where each building sits. The homestead is laid out so the market is
+ * central - it's the tile you return to most - with the animal buildings
+ * clustered west, crops and kitchen east, and the pond in its corner.
+ */
+const PLACEMENTS: Placement[] = [
+  { x: 1, y: 4, type: 'building', label: 'Chicken Coop', icon: '🐔', minigameId: 'coop' },
+  { x: 1, y: 6, type: 'building', label: 'Barn', icon: '🐄', minigameId: 'barn' },
+  { x: 3, y: 5, type: 'building', label: 'Market', icon: '🏪', minigameId: 'market' },
+  { x: 2, y: 2, type: 'dirt', label: 'Field', icon: '🌾', minigameId: 'field' },
+  { x: 5, y: 1, type: 'building', label: 'Kitchen', icon: '🍳', minigameId: 'kitchen' },
+  { x: 4, y: 3, type: 'grass', label: 'Kitten', icon: '🐱', minigameId: 'kitten' },
+]
+
 /**
  * Starter homestead layout. Replace with a real map (loaded from JSON,
  * a level editor, or eventually DynamoDB) once the scaffold is proven out.
@@ -47,29 +70,13 @@ export function buildStarterMap(): HomesteadTile[] {
     }
   }
 
-  // A farm plot that opens the farming minigame.
-  const farmTile = tiles.find((t) => t.x === 2 && t.y === 2)
-  if (farmTile) {
-    farmTile.type = 'dirt'
-    farmTile.label = 'Vegetable Patch'
-    farmTile.minigameId = 'farming'
-  }
-
-  // A kitten to take care of.
-  const kittenTile = tiles.find((t) => t.x === 4 && t.y === 3)
-  if (kittenTile) {
-    kittenTile.label = 'Kitten'
-    kittenTile.icon = '🐱'
-    kittenTile.minigameId = 'kitten'
-  }
-
-  // The barn: livestock, field and farm kitchen.
-  const farmsteadTile = tiles.find((t) => t.x === 1 && t.y === 5)
-  if (farmsteadTile) {
-    farmsteadTile.type = 'building'
-    farmsteadTile.label = 'Farmstead'
-    farmsteadTile.icon = '🐄'
-    farmsteadTile.minigameId = 'farmstead'
+  for (const p of PLACEMENTS) {
+    const tile = tiles.find((t) => t.x === p.x && t.y === p.y)
+    if (!tile) continue
+    tile.type = p.type
+    tile.label = p.label
+    tile.icon = p.icon
+    tile.minigameId = p.minigameId
   }
 
   return tiles

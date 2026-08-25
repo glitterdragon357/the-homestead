@@ -1,9 +1,10 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Application, extend } from '@pixi/react'
 import { Container, Graphics, Text } from 'pixi.js'
 import type { Graphics as PixiGraphics } from 'pixi.js'
 import { useHomesteadStore } from '../state/store'
 import { gridToScreen, DEFAULT_TILE, type GridPoint } from '../isometric/coords'
+import { MINIGAME_REGISTRY, type PendingBadge } from '../minigames/registry'
 import type { HomesteadTile } from './tiles'
 
 // Register the Pixi classes we use as JSX components (pixi/react v8 pattern).
@@ -26,6 +27,11 @@ function computeOrigin(tiles: HomesteadTile[]) {
   return { x: CANVAS_WIDTH / 2, y: Math.max(8, (CANVAS_HEIGHT - mapHeight) / 2) }
 }
 
+interface Origin {
+  x: number
+  y: number
+}
+
 const TILE_COLORS: Record<HomesteadTile['type'], number> = {
   grass: 0x6fa84f,
   dirt: 0x8a6a3d,
@@ -33,12 +39,15 @@ const TILE_COLORS: Record<HomesteadTile['type'], number> = {
   building: 0x9a8f7c,
 }
 
-interface Origin {
-  x: number
-  y: number
-}
-
-function TileMesh({ tile, origin }: { tile: HomesteadTile; origin: Origin }) {
+function TileMesh({
+  tile,
+  origin,
+  badge,
+}: {
+  tile: HomesteadTile
+  origin: Origin
+  badge: PendingBadge | null
+}) {
   const movePlayerTo = useHomesteadStore((s) => s.movePlayerTo)
   const { x: sx, y: sy } = gridToScreen(tile, DEFAULT_TILE)
   const w = DEFAULT_TILE.width
@@ -53,6 +62,18 @@ function TileMesh({ tile, origin }: { tile: HomesteadTile; origin: Origin }) {
       g.stroke({ width: 1, color: 0x2f2a20, alpha: 0.25 })
     },
     [color, h, w, tile.walkable]
+  )
+
+  const badgeColor = badge?.urgent ? 0xd9534f : 0xe0a32f
+  const drawBadge = useCallback(
+    (g: PixiGraphics) => {
+      g.clear()
+      if (!badge) return
+      g.circle(0, 0, 11)
+      g.fill({ color: badgeColor })
+      g.stroke({ width: 2, color: 0xfdf6e3 })
+    },
+    [badge, badgeColor]
   )
 
   return (
@@ -72,10 +93,28 @@ function TileMesh({ tile, origin }: { tile: HomesteadTile; origin: Origin }) {
           text={tile.icon}
           anchor={0.5}
           x={origin.x + sx}
-          y={origin.y + sy + h / 2 - 6}
-          style={{ fontSize: 28 }}
+          y={origin.y + sy + h / 2 - 8}
+          style={{ fontSize: 26 }}
           eventMode="none"
         />
+      )}
+      {badge && (
+        <>
+          <pixiGraphics
+            draw={drawBadge}
+            x={origin.x + sx + 16}
+            y={origin.y + sy + h / 2 - 22}
+            eventMode="none"
+          />
+          <pixiText
+            text={String(badge.count)}
+            anchor={0.5}
+            x={origin.x + sx + 16}
+            y={origin.y + sy + h / 2 - 22}
+            style={{ fontSize: 13, fill: 0xffffff, fontWeight: 'bold' }}
+            eventMode="none"
+          />
+        </>
       )}
     </>
   )
@@ -103,13 +142,36 @@ function PlayerMarker({ position, origin }: { position: GridPoint; origin: Origi
 export function HomesteadCanvas() {
   const tiles = useHomesteadStore((s) => s.tiles)
   const player = useHomesteadStore((s) => s.player)
+  const progress = useHomesteadStore((s) => s.progress)
   const origin = useMemo(() => computeOrigin(tiles), [tiles])
+
+  // The badges are time-based, so the map needs its own slow heartbeat to
+  // notice that an egg finished or a crop ripened while you were standing
+  // out here. One second is plenty for timers measured in minutes.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(interval)
+  }, [])
+
+  const badges = useMemo(() => {
+    const out: Record<string, PendingBadge | null> = {}
+    for (const [id, def] of Object.entries(MINIGAME_REGISTRY)) {
+      out[id] = def.pending ? def.pending(progress[id], now) : null
+    }
+    return out
+  }, [progress, now])
 
   return (
     <Application width={CANVAS_WIDTH} height={CANVAS_HEIGHT} background={0x1c2a1a}>
       <pixiContainer>
         {tiles.map((tile) => (
-          <TileMesh key={`${tile.x}-${tile.y}`} tile={tile} origin={origin} />
+          <TileMesh
+            key={`${tile.x}-${tile.y}`}
+            tile={tile}
+            origin={origin}
+            badge={tile.minigameId ? badges[tile.minigameId] ?? null : null}
+          />
         ))}
         <PlayerMarker position={player} origin={origin} />
       </pixiContainer>
