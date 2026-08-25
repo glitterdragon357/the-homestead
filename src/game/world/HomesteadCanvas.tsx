@@ -12,8 +12,10 @@ extend({ Container, Graphics, Text })
 const CANVAS_WIDTH = 960
 const CANVAS_HEIGHT = 640
 
-// Screen-space origin so the map is roughly centered in the canvas.
-const ORIGIN = { x: CANVAS_WIDTH / 2, y: 80 }
+// Screen-space origin so the map is roughly centered in the canvas. The
+// taller 30-degree tile makes the whole diamond deeper, so this sits higher
+// than it would for a flatter 2:1 grid - drop it and the far corner clips.
+const ORIGIN = { x: CANVAS_WIDTH / 2, y: 32 }
 
 const TILE_COLORS: Record<HomesteadTile['type'], number> = {
   grass: 0x6fa84f,

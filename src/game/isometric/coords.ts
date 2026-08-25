@@ -1,9 +1,16 @@
 /**
- * Isometric (2:1 diamond) coordinate math.
+ * Isometric coordinate math.
  *
  * Grid coordinates (gx, gy) are simple integer tile indices, like a normal
  * 2D array. Screen coordinates are where that tile should be drawn in the
  * Pixi canvas, relative to a chosen origin (usually the canvas center).
+ *
+ * The tile's height:width ratio *is* the camera angle: a tile edge sits
+ * atan(height / width) below horizontal. The classic 2:1 diamond (128x64)
+ * gives 26.57 degrees - that ratio exists because it steps a clean 2 pixels
+ * across per 1 down, which mattered for hand-drawn pixel art and doesn't
+ * for antialiased WebGL polygons. True isometric, where all three axes
+ * foreshorten equally, is 30 degrees: height = width * tan(30) ~= 0.577.
  */
 
 export interface TileSize {
@@ -11,7 +18,8 @@ export interface TileSize {
   height: number
 }
 
-export const DEFAULT_TILE: TileSize = { width: 128, height: 64 }
+/** 128 x 74 -> atan(74/128) = 30 degrees, true isometric. */
+export const DEFAULT_TILE: TileSize = { width: 128, height: 74 }
 
 export interface ScreenPoint {
   x: number

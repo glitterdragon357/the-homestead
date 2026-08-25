@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react'
 import { FarmingMinigame } from './farming/FarmingMinigame'
 import { KittenCareMinigame } from './kitten/KittenCareMinigame'
+import { FishingMinigame } from './fishing/FishingMinigame'
 
 export interface MinigameDefinition {
   id: string
@@ -32,15 +33,22 @@ export const MINIGAME_REGISTRY: Record<string, MinigameDefinition> = {
   farming: {
     id: 'farming',
     name: 'Tend the Vegetable Patch',
-    description: 'Time the marker to plant a row of vegetables.',
+    description: 'Plant, water, and harvest a 3x3 patch of crops.',
     icon: '🌱',
     component: FarmingMinigame,
   },
   kitten: {
     id: 'kitten',
     name: 'Kitten Care',
-    description: 'Milk, pacifier, toys, and naps - keep the kitten happy.',
+    description: 'Tend to the kitten through day and night as it grows up.',
     icon: '🐱',
     component: KittenCareMinigame,
+  },
+  fishing: {
+    id: 'fishing',
+    name: 'Fishing Spot',
+    description: 'Hook and reel in fish, then spend coins on rod upgrades.',
+    icon: '🎣',
+    component: FishingMinigame,
   },
 }

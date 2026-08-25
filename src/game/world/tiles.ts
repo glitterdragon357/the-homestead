@@ -31,7 +31,7 @@ export function buildStarterMap(): HomesteadTile[] {
     }
   }
 
-  // A pond in the corner.
+  // A pond in the corner that opens the fishing minigame.
   for (const [x, y] of [
     [6, 6],
     [7, 6],
@@ -41,7 +41,9 @@ export function buildStarterMap(): HomesteadTile[] {
     const t = tiles.find((t) => t.x === x && t.y === y)
     if (t) {
       t.type = 'water'
-      t.walkable = false
+      t.walkable = true
+      t.label = 'Fishing Spot'
+      t.minigameId = 'fishing'
     }
   }
 
