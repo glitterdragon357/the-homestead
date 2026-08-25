@@ -1,5 +1,6 @@
 import { FishArt } from '../minigames/fishing/FishArt'
 import { FarmArt } from '../minigames/farm/FarmArt'
+import { PotteryArt } from '../minigames/pottery/PotteryArt'
 import { ITEMS } from './items'
 
 /**
@@ -10,5 +11,6 @@ import { ITEMS } from './items'
 export function ItemArt({ item, size = 40 }: { item: string; size?: number }) {
   const def = ITEMS[item]
   if (def?.art === 'fish') return <FishArt species={item} size={size} />
+  if (def?.art === 'pottery') return <PotteryArt subject={item} size={size} />
   return <FarmArt subject={item} size={size} />
 }

@@ -3,6 +3,8 @@ import { KittenCareMinigame } from './kitten/KittenCareMinigame'
 import { FishingMinigame } from './fishing/FishingMinigame'
 import { FarmsteadMinigame, farmsteadPending } from './farm/FarmsteadMinigame'
 import { RECIPES } from './farm/farmData'
+import { PotteryMinigame } from './pottery/PotteryMinigame'
+import { potteryPending, type PotterySave } from './pottery/potteryData'
 
 /**
  * A badge drawn on this minigame's map tile. The map is the hub now, so a
@@ -56,6 +58,14 @@ export const MINIGAME_REGISTRY: Record<string, MinigameDefinition> = {
     icon: '🚜',
     component: FarmsteadMinigame,
     pending: farmsteadPending,
+  },
+  pottery: {
+    id: 'pottery',
+    name: 'Pottery',
+    description: 'Dig riverside clay, wedge it, and throw it into pottery.',
+    icon: '🏺',
+    component: PotteryMinigame,
+    pending: (p, now) => potteryPending(p.pottery as PotterySave, now),
   },
   fishing: {
     id: 'fishing',

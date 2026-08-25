@@ -26,12 +26,14 @@ interface Placement {
 }
 
 /**
- * Where each building sits. Three places to go: the farmstead west, the
- * kitten north-east and the pond in its corner.
+ * Where each building sits: the farmstead west, the kitten north-east,
+ * the pond in its corner, and the clay bank on the pond's edge - the
+ * pottery only makes sense next to the water it digs from.
  */
 const PLACEMENTS: Placement[] = [
   { x: 1, y: 5, type: 'building', label: 'Farmstead', icon: '🚜', minigameId: 'farmstead' },
   { x: 4, y: 1, type: 'grass', label: 'Kitten', icon: '🐱', minigameId: 'kitten' },
+  { x: 5, y: 6, type: 'dirt', label: 'Clay Bank', icon: '🏺', minigameId: 'pottery' },
 ]
 
 /**

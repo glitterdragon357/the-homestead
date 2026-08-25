@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import type { GridPoint } from '../isometric/coords'
 import { buildStarterMap, tileAt, type HomesteadTile } from '../world/tiles'
 import { initialProgress } from '../minigames/farm/farmData'
+import { initialPottery } from '../minigames/pottery/potteryData'
 
 interface HomesteadState {
   tiles: HomesteadTile[]
@@ -48,7 +49,7 @@ export const useHomesteadStore = create<HomesteadState>()(
       tiles: buildStarterMap(),
       player: { x: 0, y: 0 },
       activeMinigameId: null,
-      progress: initialProgress(),
+      progress: { ...initialProgress(), pottery: initialPottery() },
       coins: 40,
       inventory: {},
 
@@ -94,7 +95,12 @@ export const useHomesteadStore = create<HomesteadState>()(
       },
 
       resetSave: () =>
-        set({ progress: initialProgress(), player: { x: 0, y: 0 }, coins: 40, inventory: {} }),
+        set({
+          progress: { ...initialProgress(), pottery: initialPottery() },
+          player: { x: 0, y: 0 },
+          coins: 40,
+          inventory: {},
+        }),
     }),
     {
       name: 'the-homestead-save',

@@ -7,9 +7,9 @@ import { panel } from './farmStyles'
 /**
  * Selling what the farm produces: raw goods and cooked dishes.
  *
- * Fish are deliberately absent. The pond is its own game with its own
- * shopfront, so a day's catch is sold there rather than being carted
- * through the farmstead.
+ * Fish and pottery are deliberately absent. The pond and the clay bank
+ * are their own games with their own shopfronts, so their goods are sold
+ * where they were made rather than carted through the farmstead.
  */
 
 /** Categories this panel trades in. Fish sell at the pond. */
@@ -19,6 +19,7 @@ const CATEGORY_LABEL: Record<ItemCategory, string> = {
   produce: 'Produce',
   dish: 'Kitchen',
   fish: 'Catch',
+  craft: 'Pottery',
 }
 
 export function SellPanel() {

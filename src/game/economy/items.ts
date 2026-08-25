@@ -7,7 +7,7 @@ import { FISH } from '../minigames/fishing/fishData'
  * and dishes, the pond sells the catch.
  */
 
-export type ItemCategory = 'fish' | 'produce' | 'dish'
+export type ItemCategory = 'fish' | 'produce' | 'dish' | 'craft'
 
 export interface ItemDef {
   key: string
@@ -15,7 +15,7 @@ export interface ItemDef {
   price: number
   category: ItemCategory
   /** Which art component draws it. */
-  art: 'fish' | 'farm'
+  art: 'fish' | 'farm' | 'pottery'
 }
 
 const PRODUCE: ItemDef[] = [
@@ -35,6 +35,23 @@ const DISHES: ItemDef[] = [
 ]
 
 /**
+ * Clay and pottery. `river clay` and `wedged clay` are stock rather than
+ * wares - they carry a price so the crate can value them, but the studio
+ * only puts fired pieces up for sale.
+ */
+const CRAFT: ItemDef[] = [
+  { key: 'river clay', label: 'River clay', price: 3, category: 'craft', art: 'pottery' },
+  { key: 'wedged clay', label: 'Wedged clay', price: 8, category: 'craft', art: 'pottery' },
+  { key: 'bowl', label: 'Bowl', price: 22, category: 'craft', art: 'pottery' },
+  { key: 'mug', label: 'Mug', price: 26, category: 'craft', art: 'pottery' },
+  { key: 'bird whistle', label: 'Bird whistle', price: 38, category: 'craft', art: 'pottery' },
+  { key: 'jug', label: 'Jug', price: 55, category: 'craft', art: 'pottery' },
+  { key: 'vase', label: 'Vase', price: 65, category: 'craft', art: 'pottery' },
+  { key: 'cat figurine', label: 'Cat figurine', price: 80, category: 'craft', art: 'pottery' },
+  { key: 'urn', label: 'Urn', price: 105, category: 'craft', art: 'pottery' },
+]
+
+/**
  * Fish enter the catalogue straight from the fishing tables, so a species
  * is still defined in exactly one place and its market price is the coin
  * value its tier already implied.
@@ -48,12 +65,13 @@ const FISH_ITEMS: ItemDef[] = FISH.map((f) => ({
 }))
 
 export const ITEMS: Record<string, ItemDef> = Object.fromEntries(
-  [...PRODUCE, ...DISHES, ...FISH_ITEMS].map((i) => [i.key, i])
+  [...PRODUCE, ...DISHES, ...CRAFT, ...FISH_ITEMS].map((i) => [i.key, i])
 )
 
 export const ITEM_ORDER: string[] = [
   ...PRODUCE.map((i) => i.key),
   ...DISHES.map((i) => i.key),
+  ...CRAFT.map((i) => i.key),
   ...FISH_ITEMS.map((i) => i.key),
 ]
 
