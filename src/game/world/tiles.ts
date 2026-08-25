@@ -8,6 +8,8 @@ export interface HomesteadTile {
   type: TileType
   /** Display label shown on hover/interaction, e.g. "Vegetable Patch". */
   label?: string
+  /** Emoji drawn on top of the tile, e.g. a cat icon for the kitten tile. */
+  icon?: string
   /** If set, interacting with this tile launches the given minigame. */
   minigameId?: string
   /** Whether the player can stand on this tile. */
@@ -49,6 +51,14 @@ export function buildStarterMap(): HomesteadTile[] {
     farmTile.type = 'dirt'
     farmTile.label = 'Vegetable Patch'
     farmTile.minigameId = 'farming'
+  }
+
+  // A kitten to take care of.
+  const kittenTile = tiles.find((t) => t.x === 4 && t.y === 3)
+  if (kittenTile) {
+    kittenTile.label = 'Kitten'
+    kittenTile.icon = '🐱'
+    kittenTile.minigameId = 'kitten'
   }
 
   return tiles

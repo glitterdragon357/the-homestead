@@ -9,7 +9,7 @@ export function HUD() {
       <div style={styles.dim}>
         Position: ({player.x}, {player.y})
       </div>
-      <div style={styles.dim}>Click a tile to move. Dirt patches launch minigames.</div>
+      <div style={styles.dim}>Click a tile to move. Dirt patches and the 🐱 launch minigames.</div>
     </div>
   )
 }
