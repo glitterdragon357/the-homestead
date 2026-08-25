@@ -20,6 +20,7 @@ const CATEGORY_LABEL: Record<ItemCategory, string> = {
   dish: 'Kitchen',
   fish: 'Catch',
   craft: 'Pottery',
+  wood: 'Timber',
 }
 
 export function SellPanel() {

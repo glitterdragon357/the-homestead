@@ -4,6 +4,7 @@ import type { GridPoint } from '../isometric/coords'
 import { buildStarterMap, tileAt, type HomesteadTile } from '../world/tiles'
 import { initialProgress } from '../minigames/farm/farmData'
 import { initialPottery } from '../minigames/pottery/potteryData'
+import { initialLumber } from '../minigames/lumber/lumberData'
 
 interface HomesteadState {
   tiles: HomesteadTile[]
@@ -71,7 +72,7 @@ export const useHomesteadStore = create<HomesteadState>()(
       tiles: buildStarterMap(),
       player: { x: 0, y: 0 },
       activeMinigameId: null,
-      progress: { ...initialProgress(), pottery: initialPottery() },
+      progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber() },
       coins: 40,
       inventory: {},
 
@@ -137,7 +138,7 @@ export const useHomesteadStore = create<HomesteadState>()(
 
       resetSave: () =>
         set({
-          progress: { ...initialProgress(), pottery: initialPottery() },
+          progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber() },
           player: { x: 0, y: 0 },
           coins: 40,
           inventory: {},

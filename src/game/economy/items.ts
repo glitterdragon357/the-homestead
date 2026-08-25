@@ -1,4 +1,5 @@
 import { FISH } from '../minigames/fishing/fishData'
+import { PRODUCTS, SPECIES, SPECIES_ORDER, logKey } from '../minigames/lumber/lumberData'
 
 /**
  * Everything that can sit in the crate, in one catalogue. Fish, produce
@@ -7,7 +8,7 @@ import { FISH } from '../minigames/fishing/fishData'
  * and dishes, the pond sells the catch.
  */
 
-export type ItemCategory = 'fish' | 'produce' | 'dish' | 'craft'
+export type ItemCategory = 'fish' | 'produce' | 'dish' | 'craft' | 'wood'
 
 export interface ItemDef {
   key: string
@@ -15,7 +16,7 @@ export interface ItemDef {
   price: number
   category: ItemCategory
   /** Which art component draws it. */
-  art: 'fish' | 'farm' | 'pottery'
+  art: 'fish' | 'farm' | 'pottery' | 'wood'
 }
 
 const PRODUCE: ItemDef[] = [
@@ -52,6 +53,29 @@ const CRAFT: ItemDef[] = [
 ]
 
 /**
+ * Timber. Logs are stock rather than wares - priced so the crate can
+ * value them, but the woodlot only sells what has been burned or carved.
+ * Both lists come straight from the lumber tables so a species or a
+ * product is still defined in exactly one place.
+ */
+const WOOD: ItemDef[] = [
+  ...SPECIES_ORDER.map((sp) => ({
+    key: logKey(sp),
+    label: `${SPECIES[sp].label} log`,
+    price: SPECIES[sp].price,
+    category: 'wood' as const,
+    art: 'wood' as const,
+  })),
+  ...PRODUCTS.map((p) => ({
+    key: p.id,
+    label: p.label,
+    price: p.price,
+    category: 'wood' as const,
+    art: 'wood' as const,
+  })),
+]
+
+/**
  * Fish enter the catalogue straight from the fishing tables, so a species
  * is still defined in exactly one place and its market price is the coin
  * value its tier already implied.
@@ -65,13 +89,14 @@ const FISH_ITEMS: ItemDef[] = FISH.map((f) => ({
 }))
 
 export const ITEMS: Record<string, ItemDef> = Object.fromEntries(
-  [...PRODUCE, ...DISHES, ...CRAFT, ...FISH_ITEMS].map((i) => [i.key, i])
+  [...PRODUCE, ...DISHES, ...CRAFT, ...WOOD, ...FISH_ITEMS].map((i) => [i.key, i])
 )
 
 export const ITEM_ORDER: string[] = [
   ...PRODUCE.map((i) => i.key),
   ...DISHES.map((i) => i.key),
   ...CRAFT.map((i) => i.key),
+  ...WOOD.map((i) => i.key),
   ...FISH_ITEMS.map((i) => i.key),
 ]
 

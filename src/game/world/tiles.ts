@@ -1,6 +1,6 @@
 import type { GridPoint } from '../isometric/coords'
 
-export type TileType = 'grass' | 'dirt' | 'water' | 'building'
+export type TileType = 'grass' | 'dirt' | 'water' | 'building' | 'forest'
 
 export interface HomesteadTile {
   x: number
@@ -34,6 +34,7 @@ const PLACEMENTS: Placement[] = [
   { x: 1, y: 5, type: 'building', label: 'Farmstead', icon: '🚜', minigameId: 'farmstead' },
   { x: 4, y: 1, type: 'grass', label: 'Kitten', icon: '🐱', minigameId: 'kitten' },
   { x: 5, y: 6, type: 'dirt', label: 'Clay Bank', icon: '🏺', minigameId: 'pottery' },
+  { x: 6, y: 2, type: 'forest', label: 'Woodlot', icon: '🌲', minigameId: 'lumber' },
 ]
 
 /**

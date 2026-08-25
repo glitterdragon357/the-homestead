@@ -37,6 +37,7 @@ const TILE_COLORS: Record<HomesteadTile['type'], number> = {
   dirt: 0x8a6a3d,
   water: 0x3f7fbf,
   building: 0x9a8f7c,
+  forest: 0x3f6b38,
 }
 
 function TileMesh({
