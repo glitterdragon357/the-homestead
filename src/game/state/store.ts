@@ -6,6 +6,7 @@ import { initialProgress } from '../minigames/farm/farmData'
 import { initialPottery } from '../minigames/pottery/potteryData'
 import { initialLumber } from '../minigames/lumber/lumberData'
 import { initialFruit } from '../minigames/fruit/fruitData'
+import { initialVet } from '../minigames/vet/vetData'
 
 interface HomesteadState {
   tiles: HomesteadTile[]
@@ -56,7 +57,7 @@ interface HomesteadState {
 }
 
 /** Every game that trades. The kitten has no economy. */
-export const EARNING_GAMES = ['farmstead', 'fishing', 'pottery', 'lumber', 'fruit'] as const
+export const EARNING_GAMES = ['farmstead', 'fishing', 'pottery', 'lumber', 'fruit', 'vet'] as const
 
 /**
  * Seed money, per game. Each has to fund its own first upgrade out of its
@@ -92,7 +93,7 @@ export const useHomesteadStore = create<HomesteadState>()(
       tiles: buildStarterMap(),
       player: { x: 0, y: 0 },
       activeMinigameId: null,
-      progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit() },
+      progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet() },
       purses: startingPurses(),
       inventory: {},
 
@@ -161,7 +162,7 @@ export const useHomesteadStore = create<HomesteadState>()(
 
       resetSave: () =>
         set({
-          progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit() },
+          progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet() },
           player: { x: 0, y: 0 },
           purses: startingPurses(),
           inventory: {},
@@ -169,7 +170,7 @@ export const useHomesteadStore = create<HomesteadState>()(
     }),
     {
       name: SAVE_KEY,
-      version: 4,
+      version: 5,
       storage: createJSONStorage(() => localStorage),
       // Runs before rehydration, so this captures the previous session's
       // save rather than anything this one has written.
@@ -237,6 +238,13 @@ export const useHomesteadStore = create<HomesteadState>()(
           // The odd coins go to the farmstead rather than evaporating.
           purses.farmstead += remainder
           delete state.coins
+        }
+
+        // v4 -> v5, and any future trade: a game added after the split has
+        // no purse yet. Seed it rather than leaving it on zero, which would
+        // mean opening a brand-new trade with no float to stock it.
+        for (const g of EARNING_GAMES) {
+          if (purses[g] === undefined) purses[g] = 40
         }
 
         return { ...state, progress, purses }
