@@ -37,6 +37,7 @@ const PLACEMENTS: Placement[] = [
   { x: 6, y: 2, type: 'forest', label: 'Woodlot', icon: '🌲', minigameId: 'lumber' },
   { x: 2, y: 2, type: 'orchard', label: 'Orchard', icon: '🍎', minigameId: 'fruit' },
   { x: 4, y: 4, type: 'building', label: 'Vet', icon: '🩺', minigameId: 'vet' },
+  { x: 5, y: 3, type: 'building', label: 'Doctor', icon: '⚕️', minigameId: 'doctor' },
 ]
 
 /**

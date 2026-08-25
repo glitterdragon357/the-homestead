@@ -11,6 +11,8 @@ import { FruitMinigame } from './fruit/FruitMinigame'
 import { fruitPending, type FruitSave } from './fruit/fruitData'
 import { VetMinigame } from './vet/VetMinigame'
 import { vetPending, type VetSave } from './vet/vetData'
+import { DoctorMinigame } from './doctor/DoctorMinigame'
+import { doctorPending, type DoctorSave } from './doctor/doctorData'
 
 /**
  * A badge drawn on this minigame's map tile. The map is the hub now, so a
@@ -96,6 +98,14 @@ export const MINIGAME_REGISTRY: Record<string, MinigameDefinition> = {
     icon: '🩺',
     component: VetMinigame,
     pending: (p, now) => vetPending(p.vet as VetSave, now),
+  },
+  doctor: {
+    id: 'doctor',
+    name: 'Doctor',
+    description: 'Narrow a complaint down with tests, then prescribe.',
+    icon: '⚕️',
+    component: DoctorMinigame,
+    pending: (p, now) => doctorPending(p.doctor as DoctorSave, now),
   },
   fishing: {
     id: 'fishing',

@@ -7,6 +7,7 @@ import { initialPottery } from '../minigames/pottery/potteryData'
 import { initialLumber } from '../minigames/lumber/lumberData'
 import { initialFruit } from '../minigames/fruit/fruitData'
 import { initialVet } from '../minigames/vet/vetData'
+import { initialDoctor } from '../minigames/doctor/doctorData'
 import { saveKeysOf, shiftTimestamps } from './gameClock'
 
 interface HomesteadState {
@@ -68,7 +69,7 @@ interface HomesteadState {
 }
 
 /** Every game that trades. The kitten has no economy. */
-export const EARNING_GAMES = ['farmstead', 'fishing', 'pottery', 'lumber', 'fruit', 'vet'] as const
+export const EARNING_GAMES = ['farmstead', 'fishing', 'pottery', 'lumber', 'fruit', 'vet', 'doctor'] as const
 
 /**
  * Seed money, per game. Each has to fund its own first upgrade out of its
@@ -104,11 +105,11 @@ export const useHomesteadStore = create<HomesteadState>()(
       tiles: buildStarterMap(),
       player: { x: 0, y: 0 },
       activeMinigameId: null,
-      progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet() },
+      progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet(), doctor: initialDoctor() },
       purses: startingPurses(),
       // Everything starts frozen; the first game you open is the first to run.
       pausedAt: Object.fromEntries(
-        Object.keys({ ...initialProgress(), pottery: 0, lumber: 0, fruit: 0, vet: 0 }).map((k) => [
+        Object.keys({ ...initialProgress(), pottery: 0, lumber: 0, fruit: 0, vet: 0, doctor: 0 }).map((k) => [
           k,
           Date.now(),
         ])
@@ -222,7 +223,7 @@ export const useHomesteadStore = create<HomesteadState>()(
 
       resetSave: () =>
         set({
-          progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet() },
+          progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet(), doctor: initialDoctor() },
           player: { x: 0, y: 0 },
           purses: startingPurses(),
           inventory: {},
