@@ -18,8 +18,17 @@ export interface TileSize {
   height: number
 }
 
-/** 128 x 74 -> atan(74/128) = 30 degrees, true isometric. */
-export const DEFAULT_TILE: TileSize = { width: 128, height: 74 }
+/**
+ * 112 x 40 -> atan(40/112) = 19.7 degrees.
+ *
+ * Flatter than the classic 2:1 diamond (26.6 degrees), which drops the
+ * camera toward the horizon: you look *across* the homestead rather than
+ * down onto it. A flatter grid foreshortens the ground plane, so anything
+ * standing on it (buildings, trees, the player) reads taller and more
+ * side-on. Push this much below ~15 degrees and the diamond collapses
+ * into a squashed sliver where depth gets hard to judge.
+ */
+export const DEFAULT_TILE: TileSize = { width: 112, height: 40 }
 
 export interface ScreenPoint {
   x: number
