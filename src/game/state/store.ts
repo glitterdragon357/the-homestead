@@ -20,9 +20,9 @@ interface HomesteadState {
 
   /**
    * One wallet and one crate for the whole homestead. Every game feeds the
-   * same inventory and every sale happens at the market, so a trout and a
-   * dozen eggs are worth exactly what the market says they are and nothing
-   * has to know where anything came from.
+   * same inventory and draws on the same purse, but each sells its own
+   * goods: farm produce at the farmstead, fish at the pond. The crate is
+   * shared plumbing, not a shared shopfront.
    */
   coins: number
   inventory: Record<string, number>

@@ -3,6 +3,7 @@ import type { MinigameProps } from '../registry'
 import { useMinigameProgress } from '../../state/useMinigameProgress'
 import { useHomesteadStore } from '../../state/store'
 import { FishArt } from './FishArt'
+import { ITEMS, priceOf } from '../../economy/items'
 import {
   FISH,
   RODS,
@@ -17,9 +18,10 @@ import {
  * While reeling you only know how the fish *feels* - the species is
  * revealed at the moment you land it.
  *
- * Landed fish go straight into the shared crate rather than paying out
- * coins here; they are sold at the farmstead, where rods are bought too,
- * so the pond is purely about the fight.
+ * The pond is self-contained: you catch fish here, sell them here, and
+ * buy rods here. It shares the homestead's purse but nothing else - the
+ * farm has no say in your tackle and you never carry a trout across the
+ * map to cash it in.
  *
  * THE ROD IS A DIFFICULTY MODIFIER, NOT A GATE. Any rod can land any
  * fish - a marlin on a twig rod is a genuine feat rather than an error
@@ -60,7 +62,11 @@ export function FishingMinigame({ onExit }: MinigameProps) {
     caught: {},
   }))
   const coins = useHomesteadStore((s) => s.coins)
+  const inventory = useHomesteadStore((s) => s.inventory)
   const addItem = useHomesteadStore((s) => s.addItem)
+  const earn = useHomesteadStore((s) => s.earn)
+  const spend = useHomesteadStore((s) => s.spend)
+  const takeItems = useHomesteadStore((s) => s.takeItems)
   const rodLevel = save.rodLevel ?? 0
   const caught = save.caught ?? {}
 
@@ -177,6 +183,27 @@ export function FishingMinigame({ onExit }: MinigameProps) {
     showToast(`Good pull! ${done}/${fight.reels}`)
   }
 
+  /** Fish held in the crate, with what the lot is worth. */
+  const catchHeld = Object.entries(inventory).filter(
+    ([key, qty]) => (qty ?? 0) > 0 && ITEMS[key]?.category === 'fish'
+  )
+  const catchCount = catchHeld.reduce((n, [, qty]) => n + (qty ?? 0), 0)
+  const catchValue = catchHeld.reduce((sum, [key, qty]) => sum + priceOf(key) * (qty ?? 0), 0)
+
+  function sellCatch() {
+    if (!catchCount) return
+    const batch = Object.fromEntries(catchHeld.map(([k, q]) => [k, q ?? 0]))
+    if (!takeItems(batch)) return
+    earn(catchValue)
+    showToast(`Sold ${catchCount} fish for ${catchValue} 🪙`)
+  }
+
+  function upgradeRod() {
+    if (!nextRod || !spend(nextRod.cost)) return
+    setSave((s) => ({ ...s, rodLevel: (s.rodLevel ?? 0) + 1 }))
+    showToast(`Upgraded to ${nextRod.name}!`)
+  }
+
   function resetToIdle() {
     setPhase('idle')
     setHooked(null)
@@ -226,7 +253,7 @@ export function FishingMinigame({ onExit }: MinigameProps) {
             <div style={styles.catchBox}>
               <FishArt species={hooked.name} size={240} />
               <span style={styles.catchName}>{hooked.name}</span>
-              <span style={styles.catchCoins}>worth {hooked.coins} 🪙 at market</span>
+              <span style={styles.catchCoins}>worth {hooked.coins} 🪙</span>
             </div>
           )}
 
@@ -281,13 +308,30 @@ export function FishingMinigame({ onExit }: MinigameProps) {
         )}
       </div>
 
+      {catchCount > 0 && (
+        <button style={{ ...styles.button, width: '100%', marginBottom: 10 }} onClick={sellCatch}>
+          Sell catch ({catchCount}) &middot; {catchValue} 🪙
+        </button>
+      )}
+
       <div style={styles.shop}>
         <div style={styles.shopLeft}>
-          <span style={styles.shopTitle}>{rod.name}</span>
+          <span style={styles.shopTitle}>
+            {nextRod ? `${nextRod.name} · ${nextRod.cost} 🪙` : rod.name}
+          </span>
           <span style={styles.shopBlurb}>
-            {nextRod ? `Next: ${nextRod.name} · buy it at the farmstead` : 'Best rod in the shed 🎉'}
+            {nextRod ? nextRod.blurb : 'Best rod in the shed 🎉'}
           </span>
         </div>
+        {nextRod && (
+          <button
+            style={{ ...styles.upgradeButton, opacity: coins >= nextRod.cost ? 1 : 0.4 }}
+            onClick={upgradeRod}
+            disabled={coins < nextRod.cost}
+          >
+            Upgrade
+          </button>
+        )}
       </div>
 
       <button style={styles.bookToggle} onClick={() => setShowBook((v) => !v)}>

@@ -22,7 +22,7 @@ export function HUD() {
       </div>
       <div style={styles.dim}>
         Crate: {crateCount} item{crateCount === 1 ? '' : 's'}
-        {crateCount > 0 && ` · worth ${crateValue} at market`}
+        {crateCount > 0 && ` · worth ${crateValue} 🪙`}
       </div>
       <div style={styles.dim}>
         Click a building to visit it. A badge means something is waiting.

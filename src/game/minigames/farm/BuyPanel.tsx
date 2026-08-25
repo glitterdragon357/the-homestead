@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useHomesteadStore } from '../../state/store'
 import { FarmArt } from './FarmArt'
-import { RODS } from '../fishing/fishData'
 import {
   ANIMALS,
   BUILDINGS,
@@ -14,12 +13,11 @@ import {
 import { panel } from './farmStyles'
 
 /**
- * Everything you spend coins on: building upgrades, livestock, and
- * fishing tackle.
+ * What the farm spends coins on: building upgrades and livestock.
  *
- * These sat on a separate market tile for a while. Splitting them out
- * meant every improvement was a trip somewhere else, so they live here
- * next to the things they improve.
+ * Fishing tackle is not here. The pond is a separate game and sells its
+ * own rods, so improving the farm and improving your fishing never send
+ * you to the same screen.
  */
 
 const BUILDING_ORDER: BuildingId[] = ['barn', 'field', 'kitchen']
@@ -80,22 +78,10 @@ export function BuyPanel() {
     showToast(`Bought a ${spec.label.toLowerCase()}`)
   }
 
-  function upgradeRod() {
-    const fishing = (progress.fishing ?? {}) as { rodLevel?: number }
-    const current = fishing.rodLevel ?? 0
-    const next = RODS[current + 1]
-    if (!next || !spend(next.cost)) return
-    setProgress('fishing', { ...fishing, rodLevel: current + 1 })
-    showToast(`Upgraded to ${next.name}`)
-  }
-
   const pen = progress[PEN_ID] as PenSave | undefined
   const capacity = pen ? levelOf(PEN_ID, pen.level ?? 0).capacity : 0
   const housed = pen?.animals?.length ?? 0
   const barnFull = housed >= capacity
-
-  const rodLevel = ((progress.fishing ?? {}) as { rodLevel?: number }).rodLevel ?? 0
-  const nextRod = RODS[rodLevel + 1]
 
   return (
     <>
@@ -165,31 +151,6 @@ export function BuyPanel() {
         )
       })}
 
-      <div style={panel.sectionLabel}>Tackle</div>
-      <div style={{ ...panel.row, marginTop: 6 }}>
-        <div style={panel.rowBody}>
-          <div style={panel.rowTitle}>Fishing rod</div>
-          <div style={panel.rowNote}>now: {RODS[rodLevel].name}</div>
-          {nextRod ? (
-            <div style={panel.rowNote}>
-              next: {nextRod.name} &middot; {nextRod.blurb}
-            </div>
-          ) : (
-            <div style={panel.rowNote}>best rod in the shed 🎉</div>
-          )}
-        </div>
-        <div style={panel.rowActions}>
-          {nextRod && (
-            <button
-              style={{ ...panel.darkButton, opacity: coins >= nextRod.cost ? 1 : 0.4 }}
-              onClick={upgradeRod}
-              disabled={coins < nextRod.cost}
-            >
-              {nextRod.cost} 🪙
-            </button>
-          )}
-        </div>
-      </div>
     </>
   )
 }

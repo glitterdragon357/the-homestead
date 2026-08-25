@@ -1,14 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import { useHomesteadStore } from '../../state/store'
 import { ItemArt } from '../../economy/ItemArt'
-import { ITEMS, ITEM_ORDER, priceOf, valueOf, type ItemCategory } from '../../economy/items'
+import { ITEMS, ITEM_ORDER, priceOf, type ItemCategory } from '../../economy/items'
 import { panel } from './farmStyles'
 
 /**
- * Selling. Everything the homestead produces lands in one crate, so
- * produce, cooked dishes and the day's catch all sell from this one list
- * regardless of which part of the farm - or the pond - they came from.
+ * Selling what the farm produces: raw goods and cooked dishes.
+ *
+ * Fish are deliberately absent. The pond is its own game with its own
+ * shopfront, so a day's catch is sold there rather than being carted
+ * through the farmstead.
  */
+
+/** Categories this panel trades in. Fish sell at the pond. */
+const FARM_CATEGORIES: ItemCategory[] = ['produce', 'dish']
 
 const CATEGORY_LABEL: Record<ItemCategory, string> = {
   produce: 'Produce',
@@ -31,8 +36,10 @@ export function SellPanel() {
     toastTimeout.current = window.setTimeout(() => setToast(null), 1500)
   }
 
-  const held = ITEM_ORDER.filter((key) => (inventory[key] ?? 0) > 0)
-  const total = valueOf(inventory)
+  const held = ITEM_ORDER.filter(
+    (key) => (inventory[key] ?? 0) > 0 && FARM_CATEGORIES.includes(ITEMS[key].category)
+  )
+  const total = held.reduce((sum, key) => sum + priceOf(key) * (inventory[key] ?? 0), 0)
 
   function sell(key: string, qty: number) {
     const n = Math.min(qty, inventory[key] ?? 0)
@@ -43,7 +50,8 @@ export function SellPanel() {
 
   function sellAll() {
     if (total <= 0) return
-    if (!takeItems({ ...inventory })) return
+    const batch = Object.fromEntries(held.map((k) => [k, inventory[k] ?? 0]))
+    if (!takeItems(batch)) return
     earn(total)
     showToast(`Sold everything for ${total} 🪙`)
   }
@@ -52,9 +60,9 @@ export function SellPanel() {
     <>
       <div style={panel.toastSlot}>{toast && <span style={panel.toast}>{toast}</span>}</div>
 
-      {held.length === 0 && <p style={panel.empty}>Your crate is empty. Go gather something.</p>}
+      {held.length === 0 && <p style={panel.empty}>Nothing from the farm to sell yet.</p>}
 
-      {(['produce', 'dish', 'fish'] as ItemCategory[]).map((cat) => {
+      {FARM_CATEGORIES.map((cat) => {
         const rows = held.filter((k) => ITEMS[k].category === cat)
         if (!rows.length) return null
         return (

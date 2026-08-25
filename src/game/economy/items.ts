@@ -1,10 +1,10 @@
 import { FISH } from '../minigames/fishing/fishData'
 
 /**
- * Everything that can sit in the crate and be sold at market, in one
- * catalogue. Fish, produce and cooked dishes are all just items with a
- * price - the market doesn't care which building they came from, which
- * is what lets one wallet serve the whole homestead.
+ * Everything that can sit in the crate, in one catalogue. Fish, produce
+ * and cooked dishes are all just items with a price; `category` is what
+ * lets each game show only its own goods - the farmstead sells produce
+ * and dishes, the pond sells the catch.
  */
 
 export type ItemCategory = 'fish' | 'produce' | 'dish'
