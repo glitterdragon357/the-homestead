@@ -5,6 +5,7 @@ import { buildStarterMap, tileAt, type HomesteadTile } from '../world/tiles'
 import { initialProgress } from '../minigames/farm/farmData'
 import { initialPottery } from '../minigames/pottery/potteryData'
 import { initialLumber } from '../minigames/lumber/lumberData'
+import { initialFruit } from '../minigames/fruit/fruitData'
 
 interface HomesteadState {
   tiles: HomesteadTile[]
@@ -72,7 +73,7 @@ export const useHomesteadStore = create<HomesteadState>()(
       tiles: buildStarterMap(),
       player: { x: 0, y: 0 },
       activeMinigameId: null,
-      progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber() },
+      progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit() },
       coins: 40,
       inventory: {},
 
@@ -138,7 +139,7 @@ export const useHomesteadStore = create<HomesteadState>()(
 
       resetSave: () =>
         set({
-          progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber() },
+          progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit() },
           player: { x: 0, y: 0 },
           coins: 40,
           inventory: {},

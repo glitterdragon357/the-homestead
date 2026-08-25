@@ -21,6 +21,7 @@ const CATEGORY_LABEL: Record<ItemCategory, string> = {
   fish: 'Catch',
   craft: 'Pottery',
   wood: 'Timber',
+  fruit: 'Orchard',
 }
 
 export function SellPanel() {
