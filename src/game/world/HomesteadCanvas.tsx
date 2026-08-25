@@ -5,6 +5,7 @@ import type { Graphics as PixiGraphics } from 'pixi.js'
 import { useHomesteadStore } from '../state/store'
 import { gridToScreen, DEFAULT_TILE, type GridPoint } from '../isometric/coords'
 import { MINIGAME_REGISTRY, type PendingBadge } from '../minigames/registry'
+import { saveKeysOf } from '../state/gameClock'
 import type { HomesteadTile } from './tiles'
 
 // Register the Pixi classes we use as JSX components (pixi/react v8 pattern).
@@ -145,6 +146,7 @@ export function HomesteadCanvas() {
   const tiles = useHomesteadStore((s) => s.tiles)
   const player = useHomesteadStore((s) => s.player)
   const progress = useHomesteadStore((s) => s.progress)
+  const pausedAt = useHomesteadStore((s) => s.pausedAt)
   const origin = useMemo(() => computeOrigin(tiles), [tiles])
 
   // The badges are time-based, so the map needs its own slow heartbeat to
@@ -159,10 +161,17 @@ export function HomesteadCanvas() {
   const badges = useMemo(() => {
     const out: Record<string, PendingBadge | null> = {}
     for (const [id, def] of Object.entries(MINIGAME_REGISTRY)) {
-      out[id] = def.pending ? def.pending(progress, now) : null
+      if (!def.pending) {
+        out[id] = null
+        continue
+      }
+      // A frozen game must be judged at the moment it was frozen, or its
+      // badge would keep counting up for work its own timers never did.
+      const frozen = pausedAt[saveKeysOf(id)[0]]
+      out[id] = def.pending(progress, frozen ?? now)
     }
     return out
-  }, [progress, now])
+  }, [progress, pausedAt, now])
 
   return (
     <Application width={CANVAS_WIDTH} height={CANVAS_HEIGHT} background={0x1c2a1a}>

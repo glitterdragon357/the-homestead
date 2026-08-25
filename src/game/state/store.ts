@@ -7,6 +7,7 @@ import { initialPottery } from '../minigames/pottery/potteryData'
 import { initialLumber } from '../minigames/lumber/lumberData'
 import { initialFruit } from '../minigames/fruit/fruitData'
 import { initialVet } from '../minigames/vet/vetData'
+import { saveKeysOf, shiftTimestamps } from './gameClock'
 
 interface HomesteadState {
   tiles: HomesteadTile[]
@@ -21,6 +22,14 @@ interface HomesteadState {
    * and reads/writes it through `useMinigameProgress`.
    */
   progress: Record<string, unknown>
+
+  /**
+   * Wall-clock time each game was last left, keyed by game id. A game with
+   * an entry here is frozen: its timers are pushed forward by the time you
+   * were away the moment you come back, so only the game you are actually
+   * playing advances.
+   */
+  pausedAt: Record<string, number>
 
   /**
    * A separate purse per game, keyed by minigame id. Money earned at the
@@ -40,6 +49,8 @@ interface HomesteadState {
   movePlayerTo: (pos: GridPoint) => void
   openMinigame: (id: string) => void
   closeMinigame: () => void
+  /** Freeze the game being left and thaw the one being entered. */
+  switchGame: (next: string | null) => void
   setProgress: (id: string, value: unknown) => void
 
   /** What one game's purse holds. */
@@ -95,6 +106,13 @@ export const useHomesteadStore = create<HomesteadState>()(
       activeMinigameId: null,
       progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet() },
       purses: startingPurses(),
+      // Everything starts frozen; the first game you open is the first to run.
+      pausedAt: Object.fromEntries(
+        Object.keys({ ...initialProgress(), pottery: 0, lumber: 0, fruit: 0, vet: 0 }).map((k) => [
+          k,
+          Date.now(),
+        ])
+      ),
       inventory: {},
 
       movePlayerTo: (pos) => {
@@ -104,12 +122,51 @@ export const useHomesteadStore = create<HomesteadState>()(
 
         // Auto-launch a minigame when the player steps onto a tile that has one.
         if (tile.minigameId) {
-          set({ activeMinigameId: tile.minigameId })
+          get().switchGame(tile.minigameId)
         }
       },
 
-      openMinigame: (id) => set({ activeMinigameId: id }),
-      closeMinigame: () => set({ activeMinigameId: null }),
+      openMinigame: (id) => get().switchGame(id),
+      closeMinigame: () => get().switchGame(null),
+
+      /**
+       * Move between games, freezing the one being left and thawing the one
+       * being entered. Doing both in one place is what guarantees a game is
+       * never left running in the background - there is only one way in and
+       * one way out.
+       */
+      switchGame: (next) => {
+        const { activeMinigameId, pausedAt, progress } = get()
+        if (activeMinigameId === next) return
+        const now = Date.now()
+
+        const nextPaused = { ...pausedAt }
+        let nextProgress = progress
+
+        // Freeze the game being left, along with every key it owns.
+        if (activeMinigameId) {
+          for (const key of saveKeysOf(activeMinigameId)) nextPaused[key] = now
+        }
+
+        // Thaw the one being entered by pushing its timers past the gap.
+        if (next) {
+          const patched: Record<string, unknown> = { ...progress }
+          let changed = false
+          for (const key of saveKeysOf(next)) {
+            const since = nextPaused[key]
+            if (since === undefined) continue
+            const away = now - since
+            if (away > 0 && patched[key] !== undefined) {
+              patched[key] = shiftTimestamps(patched[key], away)
+              changed = true
+            }
+            delete nextPaused[key]
+          }
+          if (changed) nextProgress = patched
+        }
+
+        set({ activeMinigameId: next, pausedAt: nextPaused, progress: nextProgress })
+      },
 
       setProgress: (id, value) =>
         set((state) => ({ progress: { ...state.progress, [id]: value } })),
@@ -147,12 +204,15 @@ export const useHomesteadStore = create<HomesteadState>()(
           if (!raw) return false
           const parsed = JSON.parse(raw) as { state?: Partial<HomesteadState> }
           if (!parsed?.state) return false
-          const { progress, player, purses, inventory } = parsed.state
+          const { progress, player, purses, inventory, pausedAt } = parsed.state
           set({
             progress: progress ?? {},
             player: player ?? { x: 0, y: 0 },
             purses: purses ?? startingPurses(),
             inventory: inventory ?? {},
+            pausedAt: pausedAt ?? {},
+            // Whatever was open before the rollback is not open now.
+            activeMinigameId: null,
           })
           return true
         } catch {
@@ -166,11 +226,13 @@ export const useHomesteadStore = create<HomesteadState>()(
           player: { x: 0, y: 0 },
           purses: startingPurses(),
           inventory: {},
+          pausedAt: {},
+          activeMinigameId: null,
         }),
     }),
     {
       name: SAVE_KEY,
-      version: 5,
+      version: 6,
       storage: createJSONStorage(() => localStorage),
       // Runs before rehydration, so this captures the previous session's
       // save rather than anything this one has written.
@@ -185,6 +247,7 @@ export const useHomesteadStore = create<HomesteadState>()(
        */
       partialize: (state) => ({
         progress: state.progress,
+        pausedAt: state.pausedAt,
         player: state.player,
         purses: state.purses,
         inventory: state.inventory,
@@ -247,7 +310,14 @@ export const useHomesteadStore = create<HomesteadState>()(
           if (purses[g] === undefined) purses[g] = 40
         }
 
-        return { ...state, progress, purses }
+        // v5 -> v6: games used to run on wall-clock time whether or not you
+        // were in them. Freeze everything as of now, so the first visit to
+        // each game catches up once and it pauses properly from then on.
+        const pausedAt: Record<string, number> =
+          (state.pausedAt as Record<string, number>) ??
+          Object.fromEntries(Object.keys(progress).map((k) => [k, Date.now()]))
+
+        return { ...state, progress, purses, pausedAt }
       },
     }
   )
