@@ -7,7 +7,6 @@ import {
   AILMENT_BY_ID,
   KITS,
   MAX_MISSES,
-  PATIENCE_MS,
   SURGERIES,
   TREATMENTS,
   TREATMENT_BY_ID,
@@ -33,7 +32,8 @@ import { panel } from '../farm/farmStyles'
  *
  * That trade is the whole game: guess for throughput, examine for
  * certainty. A wrong guess still uses up the medicine and docks the fee,
- * so bad hunches cost real money rather than just a retry.
+ * so bad hunches cost real money rather than just a retry - but no patient
+ * is ever lost to the clock.
  *
  * Self-contained like the other trades. It earns fees rather than making
  * goods, so it never touches the crate - the only thing it buys is
@@ -71,27 +71,24 @@ export function VetMinigame({ onExit }: MinigameProps) {
     toastTimeout.current = window.setTimeout(() => setToast(null), 1800)
   }
 
-  // Finish examinations, admit new arrivals, and send home anyone who has
-  // waited too long. One pass so the ward only rewrites the save when
-  // something actually changed.
+  // Finish examinations and admit new arrivals. Nobody is sent home for
+  // waiting - the only way out is cured, or two wrong treatments. One pass
+  // so the ward only rewrites the save when something actually changed.
   useEffect(() => {
     const t = Date.now()
     const list = patients
     const anyExamDone = list.some((p) => p.examiningUntil && t >= p.examiningUntil)
-    const walkedOut = list.filter((p) => t - p.arrivedAt >= PATIENCE_MS)
-    const roomFree = list.length - walkedOut.length < surgery.beds
+    const roomFree = list.length < surgery.beds
     const dueArrival = t >= nextArrivalDue(save, t)
 
-    if (!anyExamDone && !walkedOut.length && !(roomFree && dueArrival)) return
+    if (!anyExamDone && !(roomFree && dueArrival)) return
 
     setSave((s) => {
-      let next = (s.patients ?? [])
-        .map((p) =>
-          p.examiningUntil && Date.now() >= p.examiningUntil
-            ? { ...p, examined: true, examiningUntil: undefined }
-            : p
-        )
-        .filter((p) => Date.now() - p.arrivedAt < PATIENCE_MS)
+      let next = (s.patients ?? []).map((p) =>
+        p.examiningUntil && Date.now() >= p.examiningUntil
+          ? { ...p, examined: true, examiningUntil: undefined }
+          : p
+      )
 
       let nextId = s.nextId ?? 1
       let arrival = nextArrivalDue(s, Date.now())
@@ -102,9 +99,6 @@ export function VetMinigame({ onExit }: MinigameProps) {
       return { ...s, patients: next, nextId, nextArrivalAt: arrival }
     })
 
-    if (walkedOut.length) {
-      showToast(`${walkedOut.length} patient${walkedOut.length > 1 ? 's' : ''} gave up waiting.`)
-    }
   }, [patients, now, save.nextArrivalAt, surgery.beds, setSave])
 
   function examine(id: number) {
@@ -231,7 +225,6 @@ export function VetMinigame({ onExit }: MinigameProps) {
             const ailment = AILMENT_BY_ID[p.ailmentId]
             const examining = !!p.examiningUntil && now < p.examiningUntil
             const candidates = p.examined ? [ailment] : ailmentsWith(p.shownSymptom)
-            const patience = 100 - clampPct(((now - p.arrivedAt) / PATIENCE_MS) * 100)
             const open = treating === p.id
 
             return (
@@ -241,7 +234,7 @@ export function VetMinigame({ onExit }: MinigameProps) {
                   ...panel.row,
                   flexDirection: 'column',
                   alignItems: 'stretch',
-                  ...(patience < 25 ? panel.rowAlert : null),
+                  ...(p.examined ? panel.rowReady : null),
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
@@ -268,15 +261,6 @@ export function VetMinigame({ onExit }: MinigameProps) {
                         : p.examined
                           ? `diagnosed: ${ailment?.label}`
                           : `could be ${candidates.map((c) => c?.label).join(' or ')}`}
-                    </div>
-                    <div style={panel.barTrack}>
-                      <div
-                        style={{
-                          ...panel.barFill,
-                          width: `${patience}%`,
-                          background: patience < 25 ? '#d9534f' : '#5cb8e0',
-                        }}
-                      />
                     </div>
                   </div>
                   <div style={panel.rowActions}>
@@ -419,10 +403,6 @@ function UpgradeRow({
       </div>
     </div>
   )
-}
-
-function clampPct(v: number): number {
-  return Math.max(0, Math.min(100, v))
 }
 
 function formatSecs(ms: number): string {

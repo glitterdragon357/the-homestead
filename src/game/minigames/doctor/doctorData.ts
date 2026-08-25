@@ -8,8 +8,9 @@
  * candidates. You may prescribe at any point, so the real decision is how
  * much certainty to buy before committing.
  *
- * Tests cost a fee and take time, and the patient is waiting throughout.
- * Testing everything is always safe and always slow.
+ * Tests cost a fee and take time, but nobody is on a clock - patients
+ * wait as long as it takes. Being thorough costs coins and throughput,
+ * never a lost patient, so caution is a trade rather than a gamble.
  *
  * This is a game, not medical advice - the conditions and remedies are
  * period flavour and are not how anything is actually diagnosed.
@@ -154,8 +155,6 @@ export const CLINICS: ClinicLevel[] = [
   { label: 'Infirmary', cost: 1300, beds: 6, arrivalMs: 17_000, blurb: 'Six beds and a full list.' },
 ]
 
-/** How long a patient sits before giving up. */
-export const PATIENCE_MS = 300_000
 /** A wrong prescription costs this share of the fee. */
 export const MISS_PENALTY = 0.4
 export const MAX_MISSES = 2
@@ -230,11 +229,14 @@ export function feeFor(p: DoctorPatient): number {
   return Math.max(1, Math.round(base * (1 - MISS_PENALTY * p.misses)))
 }
 
-/** What the surgery has waiting, for the map badge. */
+/**
+ * What the surgery has waiting, for the map badge.
+ *
+ * Nobody is on a clock, so this is a plain count with nothing urgent
+ * about it - a full waiting room is a queue, not a warning.
+ */
 export function doctorPending(s: DoctorSave | undefined, now: number) {
   if (!s) return null
   const waiting = (s.patients ?? []).filter((p) => !p.running || now >= p.running.doneAt).length
-  if (!waiting) return null
-  const urgent = (s.patients ?? []).some((p) => now - p.arrivedAt > PATIENCE_MS * 0.75)
-  return { count: waiting, urgent }
+  return waiting > 0 ? { count: waiting } : null
 }

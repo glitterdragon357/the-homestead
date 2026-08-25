@@ -8,8 +8,9 @@
  * it. Examining reveals the second symptom but costs time.
  *
  * That is the whole decision. Treat on a hunch and you are right half the
- * time but fast; examine first and you are certain but slower, and the
- * patient's patience is running down either way.
+ * time but fast; examine first and you are certain but slower. Nothing is
+ * on a clock - patients wait as long as it takes, so the cost of being
+ * careful is throughput, never a lost patient.
  */
 
 export type SymptomKey =
@@ -125,8 +126,6 @@ export const SURGERIES: SurgeryLevel[] = [
   { label: 'Animal Hospital', cost: 1100, beds: 6, arrivalMs: 15_000, blurb: 'Six beds, never a quiet moment.' },
 ]
 
-/** How long a patient waits before giving up and going home. */
-export const PATIENCE_MS = 260_000
 /** A wrong treatment costs this share of the fee. */
 export const MISS_PENALTY = 0.35
 /** Two wrong guesses and they walk out. */
@@ -214,16 +213,16 @@ export function feeFor(patient: Patient): number {
   return Math.max(1, Math.round(base * (1 - MISS_PENALTY * patient.misses)))
 }
 
-/** What the surgery has waiting, for the map badge. */
+/**
+ * What the surgery has waiting, for the map badge.
+ *
+ * Patients wait indefinitely - there is no clock on them - so the badge
+ * is a simple count with nothing urgent about it.
+ */
 export function vetPending(s: VetSave | undefined, now: number) {
   if (!s) return null
   const waiting = (s.patients ?? []).filter(
     (p) => !p.examiningUntil || now >= p.examiningUntil
   ).length
-  if (!waiting) return null
-  // A patient about to walk out is worth a red badge.
-  const urgent = (s.patients ?? []).some(
-    (p) => now - p.arrivedAt > PATIENCE_MS * 0.75
-  )
-  return { count: waiting, urgent }
+  return waiting > 0 ? { count: waiting } : null
 }

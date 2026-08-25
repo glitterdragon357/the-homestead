@@ -8,7 +8,6 @@ import {
   CONDITION_BY_ID,
   KITS,
   MAX_MISSES,
-  PATIENCE_MS,
   REMEDIES,
   REMEDY_BY_ID,
   TESTS,
@@ -32,8 +31,8 @@ import { panel } from '../farm/farmStyles'
  * Where the vet is one binary reveal, this is progressive elimination: a
  * complaint leaves three possibilities, and each test you run splits what
  * is left. You may prescribe at any moment, so the decision is how much
- * certainty to buy - tests cost a fee and take time, and the patient is
- * waiting the whole while.
+ * certainty to buy - tests cost a fee and take time, but no one is on a
+ * clock, so being careful costs coins rather than patients.
  *
  * The candidate list is shown and shrinks as results land, so the
  * deduction is visible rather than something to hold in your head.
@@ -68,17 +67,17 @@ export function DoctorMinigame({ onExit }: MinigameProps) {
     toastTimeout.current = window.setTimeout(() => setToast(null), 1800)
   }
 
-  // Land finished tests, admit arrivals, and let the impatient leave.
+  // Land finished tests and admit arrivals. Nobody is ever removed for
+  // waiting - the only way a patient leaves is treated, or two wrong calls.
   useEffect(() => {
     const t = Date.now()
     const testDone = patients.some((p) => p.running && t >= p.running.doneAt)
-    const walkedOut = patients.filter((p) => t - p.arrivedAt >= PATIENCE_MS)
-    const roomFree = patients.length - walkedOut.length < clinic.beds
+    const roomFree = patients.length < clinic.beds
     const due = t >= nextArrivalDue(save, t)
-    if (!testDone && !walkedOut.length && !(roomFree && due)) return
+    if (!testDone && !(roomFree && due)) return
 
     setSave((s) => {
-      let next = (s.patients ?? [])
+      let next: DoctorPatient[] = (s.patients ?? [])
         .map((p) => {
           if (!p.running || Date.now() < p.running.doneAt) return p
           const condition = CONDITION_BY_ID[p.conditionId]
@@ -89,7 +88,6 @@ export function DoctorMinigame({ onExit }: MinigameProps) {
             running: undefined,
           }
         })
-        .filter((p) => Date.now() - p.arrivedAt < PATIENCE_MS)
 
       let nextId = s.nextId ?? 1
       let arrival = nextArrivalDue(s, Date.now())
@@ -100,9 +98,6 @@ export function DoctorMinigame({ onExit }: MinigameProps) {
       return { ...s, patients: next, nextId, nextArrivalAt: arrival }
     })
 
-    if (walkedOut.length) {
-      showToast(`${walkedOut.length} left without being seen.`)
-    }
   }, [patients, now, save.nextArrivalAt, clinic.beds, setSave])
 
   function runTest(patient: DoctorPatient, key: TestKey) {
@@ -214,7 +209,6 @@ export function DoctorMinigame({ onExit }: MinigameProps) {
           {patients.map((p) => {
             const candidates = candidatesFor(p.complaint, p.results)
             const solved = candidates.length === 1
-            const patience = 100 - clampPct(((now - p.arrivedAt) / PATIENCE_MS) * 100)
             const open = prescribing === p.id
 
             return (
@@ -224,7 +218,7 @@ export function DoctorMinigame({ onExit }: MinigameProps) {
                   ...panel.row,
                   flexDirection: 'column',
                   alignItems: 'stretch',
-                  ...(patience < 25 ? panel.rowAlert : solved ? panel.rowReady : null),
+                  ...(solved ? panel.rowReady : null),
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
@@ -250,15 +244,6 @@ export function DoctorMinigame({ onExit }: MinigameProps) {
                           .join(' · ')}
                       </div>
                     )}
-                    <div style={panel.barTrack}>
-                      <div
-                        style={{
-                          ...panel.barFill,
-                          width: `${patience}%`,
-                          background: patience < 25 ? '#d9534f' : '#5cb8e0',
-                        }}
-                      />
-                    </div>
                   </div>
                   <div style={panel.rowActions}>
                     <button style={panel.smallButton} onClick={() => setPrescribing(open ? null : p.id)}>
@@ -392,10 +377,6 @@ function UpgradeRow({
       </div>
     </div>
   )
-}
-
-function clampPct(v: number): number {
-  return Math.max(0, Math.min(100, v))
 }
 
 function formatSecs(ms: number): string {
