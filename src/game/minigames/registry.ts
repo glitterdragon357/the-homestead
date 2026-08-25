@@ -2,7 +2,6 @@ import type { ComponentType } from 'react'
 import { KittenCareMinigame } from './kitten/KittenCareMinigame'
 import { FishingMinigame } from './fishing/FishingMinigame'
 import { FarmsteadMinigame, farmsteadPending } from './farm/FarmsteadMinigame'
-import { MarketMinigame } from './market/MarketMinigame'
 import { RECIPES } from './farm/farmData'
 
 /**
@@ -53,17 +52,10 @@ export const MINIGAME_REGISTRY: Record<string, MinigameDefinition> = {
   farmstead: {
     id: 'farmstead',
     name: 'Farmstead',
-    description: 'Animals, field, kitchen and upgrades - the whole farm.',
+    description: 'Animals, field, kitchen, market and upgrades - the whole farm.',
     icon: '🚜',
     component: FarmsteadMinigame,
     pending: farmsteadPending,
-  },
-  market: {
-    id: 'market',
-    name: 'Market',
-    description: 'Sell everything you gather; buy stock and tackle.',
-    icon: '🏪',
-    component: MarketMinigame,
   },
   fishing: {
     id: 'fishing',

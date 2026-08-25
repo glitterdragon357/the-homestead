@@ -4,7 +4,8 @@ import { useHomesteadStore } from '../../state/store'
 import { AnimalPen } from './AnimalPen'
 import { FieldPanel } from './FieldPanel'
 import { KitchenPanel } from './KitchenPanel'
-import { UpgradesPanel } from './UpgradesPanel'
+import { SellPanel } from './SellPanel'
+import { BuyPanel } from './BuyPanel'
 import {
   cropProgress,
   levelOf,
@@ -17,20 +18,21 @@ import {
 import { panel } from './farmStyles'
 
 /**
- * The whole farm behind a single icon: animals, field, kitchen and
- * upgrades as tabs of one panel.
+ * The whole farm behind a single icon: animals, field, kitchen, selling
+ * and buying as tabs of one panel.
  *
- * This was briefly split into four map tiles. It read as errands rather
+ * This was briefly split across five map tiles. It read as errands rather
  * than a farm - you had to remember which building held which job, and
- * upgrading meant a trip to the market. Keeping the parts as tabs means
- * one click gets you everything, while each part still keeps its own save
- * and its own upgrade ladder underneath.
+ * every improvement meant a walk somewhere else. As tabs, one click gets
+ * you everything, while each part still keeps its own save and its own
+ * upgrade ladder underneath.
  *
- * Livestock and tackle are still bought at the market; this panel handles
- * the buildings themselves.
+ * The market briefly lived on its own tile too. Selling a crate and
+ * buying a cow are part of running the farm, so they are tabs here rather
+ * than a walk across the map - one icon really does hold the whole thing.
  */
 
-type Tab = 'animals' | 'field' | 'kitchen' | 'upgrades'
+type Tab = 'animals' | 'field' | 'kitchen' | 'sell' | 'buy'
 
 export function FarmsteadMinigame({ onExit }: MinigameProps) {
   const coins = useHomesteadStore((s) => s.coins)
@@ -44,7 +46,8 @@ export function FarmsteadMinigame({ onExit }: MinigameProps) {
     { key: 'animals', label: 'Animals' },
     { key: 'field', label: 'Field' },
     { key: 'kitchen', label: 'Kitchen' },
-    { key: 'upgrades', label: 'Upgrades' },
+    { key: 'sell', label: 'Sell' },
+    { key: 'buy', label: 'Buy' },
   ]
 
   return (
@@ -71,12 +74,13 @@ export function FarmsteadMinigame({ onExit }: MinigameProps) {
         <AnimalPen
           buildingId="barn"
           kinds={['chicken', 'goat', 'cow']}
-          emptyHint="No livestock. Buy some at the market."
+          emptyHint="No livestock. Buy some on the Buy tab."
         />
       )}
       {tab === 'field' && <FieldPanel />}
       {tab === 'kitchen' && <KitchenPanel />}
-      {tab === 'upgrades' && <UpgradesPanel />}
+      {tab === 'sell' && <SellPanel />}
+      {tab === 'buy' && <BuyPanel />}
 
       <button style={panel.exitButton} onClick={onExit}>
         Leave farmstead
@@ -99,7 +103,7 @@ function tabBadges(progress: Record<string, unknown>, now: number): Record<Tab, 
   const kitchen = progress.kitchen as KitchenSave | undefined
   const plated = kitchen?.cooking?.filter((c) => now >= c.doneAt).length ?? 0
 
-  return { animals: barn?.count ?? 0, field: ripe, kitchen: plated, upgrades: 0 }
+  return { animals: barn?.count ?? 0, field: ripe, kitchen: plated, sell: 0, buy: 0 }
 }
 
 /**

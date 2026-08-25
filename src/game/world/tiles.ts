@@ -26,12 +26,11 @@ interface Placement {
 }
 
 /**
- * Where each building sits. Four places to go: the farmstead west, the
- * market central, the kitten north-east and the pond in its corner.
+ * Where each building sits. Three places to go: the farmstead west, the
+ * kitten north-east and the pond in its corner.
  */
 const PLACEMENTS: Placement[] = [
   { x: 1, y: 5, type: 'building', label: 'Farmstead', icon: '🚜', minigameId: 'farmstead' },
-  { x: 4, y: 4, type: 'building', label: 'Market', icon: '🏪', minigameId: 'market' },
   { x: 4, y: 1, type: 'grass', label: 'Kitten', icon: '🐱', minigameId: 'kitten' },
 ]
 

@@ -18,8 +18,8 @@ import {
  * revealed at the moment you land it.
  *
  * Landed fish go straight into the shared crate rather than paying out
- * coins here; selling them is the market's job. Rod upgrades are bought
- * there too, so the pond is purely about the fight.
+ * coins here; they are sold at the farmstead, where rods are bought too,
+ * so the pond is purely about the fight.
  *
  * THE ROD IS A DIFFICULTY MODIFIER, NOT A GATE. Any rod can land any
  * fish - a marlin on a twig rod is a genuine feat rather than an error
@@ -27,8 +27,8 @@ import {
  * slack, so a poor rod makes them punishing without ever making them
  * impossible.
  *
- * Species, tiers and rods all live in fishData.ts so the market can price
- * a catch and sell tackle without importing this component.
+ * Species, tiers and rods all live in fishData.ts so the selling and
+ * tackle screens can price a catch without importing this component.
  */
 
 type Phase = 'idle' | 'waiting' | 'biting' | 'reeling' | 'caught' | 'escaped'
@@ -285,7 +285,7 @@ export function FishingMinigame({ onExit }: MinigameProps) {
         <div style={styles.shopLeft}>
           <span style={styles.shopTitle}>{rod.name}</span>
           <span style={styles.shopBlurb}>
-            {nextRod ? `Next: ${nextRod.name} · buy it at the market` : 'Best rod in the shed 🎉'}
+            {nextRod ? `Next: ${nextRod.name} · buy it at the farmstead` : 'Best rod in the shed 🎉'}
           </span>
         </div>
       </div>
