@@ -5,6 +5,7 @@ export function HUD() {
   const coins = useHomesteadStore((s) => s.coins)
   const inventory = useHomesteadStore((s) => s.inventory)
   const resetSave = useHomesteadStore((s) => s.resetSave)
+  const restoreBackup = useHomesteadStore((s) => s.restoreBackup)
 
   const crateCount = Object.values(inventory).reduce((a, b) => a + (b ?? 0), 0)
   const crateValue = valueOf(inventory)
@@ -13,6 +14,11 @@ export function HUD() {
     if (window.confirm('Erase your homestead save? This cannot be undone.')) {
       resetSave()
     }
+  }
+
+  function handleRestore() {
+    if (!window.confirm('Roll back to the save as it was when this session started?')) return
+    if (!restoreBackup()) window.alert('No snapshot available yet.')
   }
 
   return (
@@ -31,6 +37,10 @@ export function HUD() {
         Progress saves automatically &middot;{' '}
         <button style={styles.reset} onClick={handleReset}>
           reset save
+        </button>{' '}
+        &middot;{' '}
+        <button style={styles.reset} onClick={handleRestore}>
+          undo to session start
         </button>
       </div>
     </div>

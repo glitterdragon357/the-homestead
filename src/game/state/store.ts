@@ -41,6 +41,28 @@ interface HomesteadState {
   takeItems: (needs: Record<string, number>) => boolean
 
   resetSave: () => void
+  /** Roll back to the snapshot taken when this session loaded. */
+  restoreBackup: () => boolean
+}
+
+const SAVE_KEY = 'the-homestead-save'
+/** Snapshot of the save as it looked when this session started. */
+const BACKUP_KEY = 'the-homestead-save.prev'
+
+/**
+ * Copy the on-disk save aside before the app starts writing over it.
+ *
+ * The game autosaves constantly, so a bad write - a bug, a stray console
+ * command, a mistaken reset - is normally unrecoverable the moment it
+ * lands. One session-old snapshot costs nothing and makes that survivable.
+ */
+function snapshotSave() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY)
+    if (raw) localStorage.setItem(BACKUP_KEY, raw)
+  } catch {
+    // Storage unavailable (private mode, quota) - the game still runs.
+  }
 }
 
 export const useHomesteadStore = create<HomesteadState>()(
@@ -94,6 +116,25 @@ export const useHomesteadStore = create<HomesteadState>()(
         return true
       },
 
+      restoreBackup: () => {
+        try {
+          const raw = localStorage.getItem(BACKUP_KEY)
+          if (!raw) return false
+          const parsed = JSON.parse(raw) as { state?: Partial<HomesteadState> }
+          if (!parsed?.state) return false
+          const { progress, player, coins, inventory } = parsed.state
+          set({
+            progress: progress ?? {},
+            player: player ?? { x: 0, y: 0 },
+            coins: coins ?? 40,
+            inventory: inventory ?? {},
+          })
+          return true
+        } catch {
+          return false
+        }
+      },
+
       resetSave: () =>
         set({
           progress: { ...initialProgress(), pottery: initialPottery() },
@@ -103,9 +144,15 @@ export const useHomesteadStore = create<HomesteadState>()(
         }),
     }),
     {
-      name: 'the-homestead-save',
+      name: SAVE_KEY,
       version: 3,
       storage: createJSONStorage(() => localStorage),
+      // Runs before rehydration, so this captures the previous session's
+      // save rather than anything this one has written.
+      onRehydrateStorage: () => {
+        snapshotSave()
+        return undefined
+      },
       /**
        * Only persist what the player actually earned. `tiles` is rebuilt
        * from code on every load, so saving it would freeze the map at
