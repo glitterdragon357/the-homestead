@@ -26,17 +26,13 @@ interface Placement {
 }
 
 /**
- * Where each building sits. The homestead is laid out so the market is
- * central - it's the tile you return to most - with the animal buildings
- * clustered west, crops and kitchen east, and the pond in its corner.
+ * Where each building sits. Four places to go: the farmstead west, the
+ * market central, the kitten north-east and the pond in its corner.
  */
 const PLACEMENTS: Placement[] = [
-  { x: 1, y: 4, type: 'building', label: 'Chicken Coop', icon: '🐔', minigameId: 'coop' },
-  { x: 1, y: 6, type: 'building', label: 'Barn', icon: '🐄', minigameId: 'barn' },
-  { x: 3, y: 5, type: 'building', label: 'Market', icon: '🏪', minigameId: 'market' },
-  { x: 2, y: 2, type: 'dirt', label: 'Field', icon: '🌾', minigameId: 'field' },
-  { x: 5, y: 1, type: 'building', label: 'Kitchen', icon: '🍳', minigameId: 'kitchen' },
-  { x: 4, y: 3, type: 'grass', label: 'Kitten', icon: '🐱', minigameId: 'kitten' },
+  { x: 1, y: 5, type: 'building', label: 'Farmstead', icon: '🚜', minigameId: 'farmstead' },
+  { x: 4, y: 4, type: 'building', label: 'Market', icon: '🏪', minigameId: 'market' },
+  { x: 4, y: 1, type: 'grass', label: 'Kitten', icon: '🐱', minigameId: 'kitten' },
 ]
 
 /**

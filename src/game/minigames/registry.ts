@@ -1,20 +1,9 @@
 import type { ComponentType } from 'react'
 import { KittenCareMinigame } from './kitten/KittenCareMinigame'
 import { FishingMinigame } from './fishing/FishingMinigame'
-import { CoopMinigame } from './farm/CoopMinigame'
-import { BarnMinigame } from './farm/BarnMinigame'
-import { FieldMinigame } from './farm/FieldMinigame'
-import { KitchenMinigame } from './farm/KitchenMinigame'
+import { FarmsteadMinigame, farmsteadPending } from './farm/FarmsteadMinigame'
 import { MarketMinigame } from './market/MarketMinigame'
-import {
-  RECIPES,
-  cropProgress,
-  levelOf,
-  penPending,
-  type FieldSave,
-  type KitchenSave,
-  type PenSave,
-} from './farm/farmData'
+import { RECIPES } from './farm/farmData'
 
 /**
  * A badge drawn on this minigame's map tile. The map is the hub now, so a
@@ -41,11 +30,12 @@ export interface MinigameDefinition {
    */
   component: ComponentType<MinigameProps>
   /**
-   * Optional: given this minigame's saved progress, how many things are
-   * waiting for the player right now. Pure and cheap - it runs for every
-   * tile on every map repaint.
+   * Optional: given the whole saved-progress map, how many things are
+   * waiting for the player right now. It gets everything rather than just
+   * this minigame's slice because the farmstead's data lives under
+   * several keys. Pure and cheap - it runs on every map repaint.
    */
-  pending?: (progress: unknown, now: number) => PendingBadge | null
+  pending?: (progress: Record<string, unknown>, now: number) => PendingBadge | null
 }
 
 export interface MinigameProps {
@@ -60,55 +50,18 @@ export interface MinigameProps {
  * tiles.ts is enough to put it on the map.
  */
 export const MINIGAME_REGISTRY: Record<string, MinigameDefinition> = {
-  coop: {
-    id: 'coop',
-    name: 'Chicken Coop',
-    description: 'Hens, eggs and chicks.',
-    icon: '🐔',
-    component: CoopMinigame,
-    pending: (p, now) => penPending('coop', p as PenSave, now),
-  },
-  barn: {
-    id: 'barn',
-    name: 'Barn',
-    description: 'Goats and cows - milk them, and keep the goats entertained.',
-    icon: '🐄',
-    component: BarnMinigame,
-    pending: (p, now) => penPending('barn', p as PenSave, now),
-  },
-  field: {
-    id: 'field',
-    name: 'Field',
-    description: 'Wheat and corn to plant, water and harvest.',
-    icon: '🌾',
-    component: FieldMinigame,
-    pending: (p, now) => {
-      const save = p as FieldSave | undefined
-      if (!save?.plots) return null
-      const speed = levelOf('field', save.level ?? 0).speedMult
-      const ripe = save.plots.filter(
-        (plot) => plot.crop && cropProgress(plot, now, speed) >= 100
-      ).length
-      return ripe > 0 ? { count: ripe } : null
-    },
-  },
-  kitchen: {
-    id: 'kitchen',
-    name: 'Kitchen',
-    description: 'Turn raw goods into dishes worth far more.',
-    icon: '🍳',
-    component: KitchenMinigame,
-    pending: (p, now) => {
-      const save = p as KitchenSave | undefined
-      if (!save?.cooking?.length) return null
-      const done = save.cooking.filter((c) => now >= c.doneAt).length
-      return done > 0 ? { count: done } : null
-    },
+  farmstead: {
+    id: 'farmstead',
+    name: 'Farmstead',
+    description: 'Animals, field, kitchen and upgrades - the whole farm.',
+    icon: '🚜',
+    component: FarmsteadMinigame,
+    pending: farmsteadPending,
   },
   market: {
     id: 'market',
     name: 'Market',
-    description: 'Sell everything you gather; buy stock, tackle and upgrades.',
+    description: 'Sell everything you gather; buy stock and tackle.',
     icon: '🏪',
     component: MarketMinigame,
   },

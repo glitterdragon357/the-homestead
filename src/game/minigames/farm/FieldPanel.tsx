@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import type { MinigameProps } from '../registry'
 import { useHomesteadStore } from '../../state/store'
 import { useMinigameProgress } from '../../state/useMinigameProgress'
 import { FarmArt } from './FarmArt'
@@ -14,12 +13,11 @@ import {
 } from './farmData'
 import { panel } from './farmStyles'
 
-export function FieldMinigame({ onExit }: MinigameProps) {
+export function FieldPanel() {
   const [save, setSave] = useMinigameProgress<FieldSave>('field', () => ({
     level: 0,
     plots: Array.from({ length: levelOf('field', 0).capacity }, () => ({ ...EMPTY_PLOT })),
   }))
-  const coins = useHomesteadStore((s) => s.coins)
   const addItem = useHomesteadStore((s) => s.addItem)
 
   const [plantChoice, setPlantChoice] = useState<CropKey>('wheat')
@@ -122,13 +120,8 @@ export function FieldMinigame({ onExit }: MinigameProps) {
   const columns = plots.length > 9 ? 4 : 3
 
   return (
-    <div style={panel.wrap}>
+    <>
       <style>{keyframes}</style>
-
-      <div style={panel.header}>
-        <h2 style={panel.title}>Field</h2>
-        <span style={panel.coins}>🪙 {coins}</span>
-      </div>
 
       <div style={panel.subhead}>
         <span>
@@ -198,10 +191,7 @@ export function FieldMinigame({ onExit }: MinigameProps) {
         })}
       </div>
 
-      <button style={panel.exitButton} onClick={onExit}>
-        Leave field
-      </button>
-    </div>
+    </>
   )
 }
 

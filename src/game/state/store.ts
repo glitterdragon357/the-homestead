@@ -98,7 +98,7 @@ export const useHomesteadStore = create<HomesteadState>()(
     }),
     {
       name: 'the-homestead-save',
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => localStorage),
       /**
        * Only persist what the player actually earned. `tiles` is rebuilt
@@ -112,25 +112,42 @@ export const useHomesteadStore = create<HomesteadState>()(
         inventory: state.inventory,
       }),
       /**
-       * v1 kept coins inside each minigame's own save. Pull the fishing
-       * and farmstead purses into the shared wallet rather than making
-       * anyone start over.
+       * v1 kept coins inside each minigame's own save; v2 split the farm
+       * across four buildings. Carry old purses into the shared wallet,
+       * and tip any coop birds back into the single barn.
        */
       migrate: (persisted, version) => {
         const state = (persisted ?? {}) as Record<string, unknown>
-        if (version >= 2) return state
+        const progress = { ...((state.progress ?? {}) as Record<string, any>) }
 
-        const progress = (state.progress ?? {}) as Record<string, { coins?: number }>
-        const carried =
-          (progress.fishing?.coins ?? 0) + (progress.farmstead?.coins ?? 0)
-
-        return {
-          ...state,
-          coins: ((state.coins as number) ?? 0) + carried || 40,
-          inventory: state.inventory ?? {},
-          // The split retired these two saves; their buildings start fresh.
-          progress: initialProgress(),
+        if (version < 2) {
+          const carried =
+            (progress.fishing?.coins ?? 0) + (progress.farmstead?.coins ?? 0)
+          return {
+            ...state,
+            coins: ((state.coins as number) ?? 0) + carried || 40,
+            inventory: state.inventory ?? {},
+            progress: initialProgress(),
+          }
         }
+
+        // v2 -> v3: the coop was folded into the barn, so its birds move in.
+        if (progress.coop) {
+          const barn = progress.barn ?? { level: 0, nextId: 1, animals: [], breeding: {} }
+          const birds = progress.coop.animals ?? []
+          let nextId = Math.max(barn.nextId ?? 1, ...birds.map((a: any) => a.id ?? 0)) + 1
+          progress.barn = {
+            ...barn,
+            animals: [
+              ...(barn.animals ?? []),
+              ...birds.map((a: any) => ({ ...a, id: nextId++ })),
+            ],
+            nextId,
+          }
+          delete progress.coop
+        }
+
+        return { ...state, progress }
       },
     }
   )

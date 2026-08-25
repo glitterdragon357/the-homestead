@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import type { MinigameProps } from '../registry'
 import { useHomesteadStore } from '../../state/store'
 import { useMinigameProgress } from '../../state/useMinigameProgress'
 import { FarmArt } from './FarmArt'
@@ -7,7 +6,7 @@ import { priceOf } from '../../economy/items'
 import { RECIPES, levelOf, type KitchenSave } from './farmData'
 import { panel } from './farmStyles'
 
-export function KitchenMinigame({ onExit }: MinigameProps) {
+export function KitchenPanel() {
   const [save, setSave] = useMinigameProgress<KitchenSave>('kitchen', () => ({
     level: 0,
     recipes: [],
@@ -79,12 +78,7 @@ export function KitchenMinigame({ onExit }: MinigameProps) {
   }
 
   return (
-    <div style={panel.wrap}>
-      <div style={panel.header}>
-        <h2 style={panel.title}>Kitchen</h2>
-        <span style={panel.coins}>🪙 {coins}</span>
-      </div>
-
+    <>
       <div style={panel.subhead}>
         <span>
           {level.label} &middot; {cooking.length}/{level.capacity} pots going
@@ -153,10 +147,7 @@ export function KitchenMinigame({ onExit }: MinigameProps) {
         )
       })}
 
-      <button style={panel.exitButton} onClick={onExit}>
-        Leave kitchen
-      </button>
-    </div>
+    </>
   )
 }
 

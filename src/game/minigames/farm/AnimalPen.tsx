@@ -28,17 +28,13 @@ import { panel } from './farmStyles'
 export function AnimalPen({
   buildingId,
   kinds,
-  onExit,
   emptyHint,
 }: {
   buildingId: BuildingId
   kinds: AnimalKind[]
-  onExit: () => void
   emptyHint: string
 }) {
-  const [save, setSave] = useMinigameProgress<PenSave>(buildingId, () =>
-    initialPen(buildingId)
-  )
+  const [save, setSave] = useMinigameProgress<PenSave>(buildingId, initialPen)
   const addItem = useHomesteadStore((s) => s.addItem)
 
   const [toast, setToast] = useState<string | null>(null)
@@ -327,9 +323,6 @@ export function AnimalPen({
         )
       })}
 
-      <button style={panel.exitButton} onClick={onExit}>
-        Leave
-      </button>
     </>
   )
 }

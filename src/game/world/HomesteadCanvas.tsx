@@ -157,7 +157,7 @@ export function HomesteadCanvas() {
   const badges = useMemo(() => {
     const out: Record<string, PendingBadge | null> = {}
     for (const [id, def] of Object.entries(MINIGAME_REGISTRY)) {
-      out[id] = def.pending ? def.pending(progress[id], now) : null
+      out[id] = def.pending ? def.pending(progress, now) : null
     }
     return out
   }, [progress, now])

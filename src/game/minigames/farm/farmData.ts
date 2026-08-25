@@ -128,27 +128,17 @@ export interface BuildingSpec {
   levels: BuildingLevel[]
 }
 
-export type BuildingId = 'coop' | 'barn' | 'field' | 'kitchen'
+export type BuildingId = 'barn' | 'field' | 'kitchen'
 
 export const BUILDINGS: Record<BuildingId, BuildingSpec> = {
-  coop: {
-    id: 'coop',
-    name: 'Chicken Coop',
-    levels: [
-      { label: 'Lean-to', cost: 0, capacity: 3, speedMult: 1, blurb: 'Three hens and a draught.' },
-      { label: 'Timber Coop', cost: 120, capacity: 5, speedMult: 0.85, blurb: 'Room for five, and they lay quicker.' },
-      { label: 'Deep-litter Coop', cost: 320, capacity: 8, speedMult: 0.7, blurb: 'Eight hens, warm and productive.' },
-      { label: 'Hen Palace', cost: 700, capacity: 12, speedMult: 0.55, blurb: 'Twelve hens laying at double speed.' },
-    ],
-  },
   barn: {
     id: 'barn',
     name: 'Barn',
     levels: [
-      { label: 'Old Shed', cost: 0, capacity: 2, speedMult: 1, blurb: 'Two stalls, if you are not fussy.' },
-      { label: 'Timber Barn', cost: 200, capacity: 4, speedMult: 0.85, blurb: 'Four stalls and a stronger fence.' },
-      { label: 'Stone Barn', cost: 500, capacity: 6, speedMult: 0.7, blurb: 'Six stalls. Goats settle better here.' },
-      { label: 'Great Barn', cost: 1000, capacity: 9, speedMult: 0.55, blurb: 'Nine stalls, milked twice as often.' },
+      { label: 'Old Shed', cost: 0, capacity: 4, speedMult: 1, blurb: 'Four stalls, if you are not fussy.' },
+      { label: 'Timber Barn', cost: 180, capacity: 7, speedMult: 0.85, blurb: 'Seven stalls and a stronger fence.' },
+      { label: 'Stone Barn', cost: 450, capacity: 10, speedMult: 0.7, blurb: 'Ten stalls. Goats settle better here.' },
+      { label: 'Great Barn', cost: 900, capacity: 14, speedMult: 0.55, blurb: 'Fourteen stalls, tended twice as often.' },
     ],
   },
   field: {
@@ -252,9 +242,9 @@ export function cropProgress(plot: CropPlot, now: number, speedMult: number): nu
  * progress directly, so a building that has never been opened would
  * otherwise sit silent and the homestead would look dead on day one.
  */
-export function initialPen(buildingId: BuildingId): PenSave {
+export function initialPen(): PenSave {
   const now = Date.now()
-  const stock: AnimalKind[] = buildingId === 'coop' ? ['chicken', 'chicken'] : ['goat']
+  const stock: AnimalKind[] = ['chicken', 'chicken', 'goat']
   return {
     level: 0,
     nextId: stock.length + 1,
@@ -272,8 +262,7 @@ export function initialPen(buildingId: BuildingId): PenSave {
 
 export function initialProgress(): Record<string, unknown> {
   return {
-    coop: initialPen('coop'),
-    barn: initialPen('barn'),
+    barn: initialPen(),
     field: {
       level: 0,
       plots: Array.from({ length: BUILDINGS.field.levels[0].capacity }, () => ({ ...EMPTY_PLOT })),

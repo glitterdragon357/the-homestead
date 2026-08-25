@@ -8,7 +8,6 @@ import {
   ANIMALS,
   BUILDINGS,
   levelOf,
-  nextLevel,
   type AnimalKind,
   type BuildingId,
   type PenSave,
@@ -19,17 +18,17 @@ import { panel } from '../farm/farmStyles'
 /**
  * The market is where the whole homestead cashes out. Every game feeds one
  * inventory and one purse, so a marlin and a wheel of cheese are sold from
- * the same list, and every upgrade in the game - buildings, livestock,
- * fishing rods - is bought here rather than inside the building it affects.
- * That keeps the other buildings about *doing the thing* and gives the
- * market a reason to exist beyond a sell button.
+ * the same list.
+ *
+ * It handles commerce only: selling, buying livestock, and buying tackle.
+ * Improving a farm building is something you do to the farm, so those
+ * upgrades live in the farmstead panel next to what they improve.
  */
 
 type Tab = 'sell' | 'stock' | 'upgrades'
 
-const BUILDING_ORDER: BuildingId[] = ['coop', 'barn', 'field', 'kitchen']
-/** Which pen a bought animal walks into. */
-const PEN_FOR: Record<AnimalKind, BuildingId> = { chicken: 'coop', goat: 'barn', cow: 'barn' }
+/** Every animal shares the one barn now. */
+const PEN_ID: BuildingId = 'barn'
 
 const CATEGORY_LABEL: Record<ItemCategory, string> = {
   produce: 'Produce',
@@ -80,7 +79,7 @@ export function MarketMinigame({ onExit }: MinigameProps) {
 
   function buyAnimal(kind: AnimalKind) {
     const spec = ANIMALS[kind]
-    const penId = PEN_FOR[kind]
+    const penId = PEN_ID
     const pen = progress[penId] as PenSave | undefined
     if (!pen) {
       showToast(`Visit the ${BUILDINGS[penId].name.toLowerCase()} first`)
@@ -112,16 +111,6 @@ export function MarketMinigame({ onExit }: MinigameProps) {
     showToast(`Bought a ${spec.label.toLowerCase()}`)
   }
 
-  function upgradeBuilding(id: BuildingId) {
-    const saved = (progress[id] ?? {}) as { level?: number }
-    const current = saved.level ?? 0
-    const next = nextLevel(id, current)
-    if (!next) return
-    if (!spend(next.cost)) return
-    setProgress(id, { ...saved, level: current + 1 })
-    showToast(`${BUILDINGS[id].name}: ${next.label}`)
-  }
-
   function upgradeRod() {
     const fishing = (progress.fishing ?? {}) as { rodLevel?: number }
     const current = fishing.rodLevel ?? 0
@@ -139,7 +128,7 @@ export function MarketMinigame({ onExit }: MinigameProps) {
   const TABS: { key: Tab; label: string }[] = [
     { key: 'sell', label: 'Sell' },
     { key: 'stock', label: 'Livestock' },
-    { key: 'upgrades', label: 'Upgrades' },
+    { key: 'upgrades', label: 'Tackle' },
   ]
 
   return (
@@ -213,7 +202,7 @@ export function MarketMinigame({ onExit }: MinigameProps) {
           <p style={panel.hint}>Bought animals arrive fully grown, straight into their pen.</p>
           {(Object.keys(ANIMALS) as AnimalKind[]).map((kind) => {
             const spec = ANIMALS[kind]
-            const penId = PEN_FOR[kind]
+            const penId = PEN_ID
             const pen = progress[penId] as PenSave | undefined
             const cap = pen ? levelOf(penId, pen.level ?? 0).capacity : 0
             const housed = pen?.animals?.length ?? 0
@@ -251,39 +240,6 @@ export function MarketMinigame({ onExit }: MinigameProps) {
 
       {tab === 'upgrades' && (
         <>
-          <div style={panel.sectionLabel}>Buildings</div>
-          {BUILDING_ORDER.map((id) => {
-            const saved = (progress[id] ?? {}) as { level?: number }
-            const current = levelOf(id, saved.level ?? 0)
-            const next = nextLevel(id, saved.level ?? 0)
-            return (
-              <div key={id} style={{ ...panel.row, marginTop: 6 }}>
-                <div style={panel.rowBody}>
-                  <div style={panel.rowTitle}>{BUILDINGS[id].name}</div>
-                  <div style={panel.rowNote}>now: {current.label}</div>
-                  {next ? (
-                    <div style={panel.rowNote}>
-                      next: {next.label} &middot; {next.blurb}
-                    </div>
-                  ) : (
-                    <div style={panel.rowNote}>fully upgraded 🎉</div>
-                  )}
-                </div>
-                <div style={panel.rowActions}>
-                  {next && (
-                    <button
-                      style={{ ...panel.darkButton, opacity: coins >= next.cost ? 1 : 0.4 }}
-                      onClick={() => upgradeBuilding(id)}
-                      disabled={coins < next.cost}
-                    >
-                      {next.cost} 🪙
-                    </button>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-
           <div style={panel.sectionLabel}>Tackle</div>
           <div style={{ ...panel.row, marginTop: 6 }}>
             <div style={panel.rowBody}>
