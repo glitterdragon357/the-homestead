@@ -126,10 +126,16 @@ export const SURGERIES: SurgeryLevel[] = [
   { label: 'Animal Hospital', cost: 1100, beds: 6, arrivalMs: 15_000, blurb: 'Six beds, never a quiet moment.' },
 ]
 
-/** A wrong treatment costs this share of the fee. */
+/**
+ * What a wrong treatment costs, as a share of the remaining fee.
+ *
+ * Applied multiplicatively rather than subtracted, so the fee decays
+ * (65%, 42%, 27%...) instead of falling off a cliff. There is no limit on
+ * attempts - you can work through the whole cupboard if you like - but
+ * each wrong one costs a medicine and shrinks the payout, so guessing is
+ * expensive rather than forbidden.
+ */
 export const MISS_PENALTY = 0.35
-/** Two wrong guesses and they walk out. */
-export const MAX_MISSES = 2
 
 // --- save shape -------------------------------------------------------
 
@@ -210,7 +216,7 @@ export function surgeryOf(s: VetSave | undefined): SurgeryLevel {
 /** Fee after any wrong guesses have been docked. */
 export function feeFor(patient: Patient): number {
   const base = AILMENT_BY_ID[patient.ailmentId]?.fee ?? 0
-  return Math.max(1, Math.round(base * (1 - MISS_PENALTY * patient.misses)))
+  return Math.max(1, Math.round(base * Math.pow(1 - MISS_PENALTY, patient.misses)))
 }
 
 /**

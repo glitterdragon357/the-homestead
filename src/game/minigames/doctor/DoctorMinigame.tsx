@@ -7,7 +7,6 @@ import {
   CLINICS,
   CONDITION_BY_ID,
   KITS,
-  MAX_MISSES,
   REMEDIES,
   REMEDY_BY_ID,
   TESTS,
@@ -32,7 +31,8 @@ import { panel } from '../farm/farmStyles'
  * complaint leaves three possibilities, and each test you run splits what
  * is left. You may prescribe at any moment, so the decision is how much
  * certainty to buy - tests cost a fee and take time, but no one is on a
- * clock, so being careful costs coins rather than patients.
+ * clock and wrong calls only shrink the fee, so care and haste are both
+ * paid for in money rather than in lost patients.
  *
  * The candidate list is shown and shrinks as results land, so the
  * deduction is visible rather than something to hold in your head.
@@ -67,8 +67,8 @@ export function DoctorMinigame({ onExit }: MinigameProps) {
     toastTimeout.current = window.setTimeout(() => setToast(null), 1800)
   }
 
-  // Land finished tests and admit arrivals. Nobody is ever removed for
-  // waiting - the only way a patient leaves is treated, or two wrong calls.
+  // Land finished tests and admit arrivals. The only way a patient leaves
+  // is successfully treated.
   useEffect(() => {
     const t = Date.now()
     const testDone = patients.some((p) => p.running && t >= p.running.doneAt)
@@ -134,20 +134,13 @@ export function DoctorMinigame({ onExit }: MinigameProps) {
       return
     }
 
+    // Wrong, but they stay in the chair - only the fee suffers.
     const misses = patient.misses + 1
-    const gaveUp = misses >= MAX_MISSES
     setSave((s) => ({
       ...s,
-      patients: gaveUp
-        ? (s.patients ?? []).filter((p) => p.id !== patient.id)
-        : (s.patients ?? []).map((p) => (p.id === patient.id ? { ...p, misses } : p)),
+      patients: (s.patients ?? []).map((p) => (p.id === patient.id ? { ...p, misses } : p)),
     }))
-    if (gaveUp) {
-      setPrescribing(null)
-      showToast('No better. They went to find another doctor.')
-    } else {
-      showToast('That did not help. Try again, but the fee is reduced.')
-    }
+    showToast('That did not help. Try again - the fee is reduced.')
   }
 
   function upgrade(kind: 'kit' | 'clinic') {

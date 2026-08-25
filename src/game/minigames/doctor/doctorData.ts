@@ -155,9 +155,15 @@ export const CLINICS: ClinicLevel[] = [
   { label: 'Infirmary', cost: 1300, beds: 6, arrivalMs: 17_000, blurb: 'Six beds and a full list.' },
 ]
 
-/** A wrong prescription costs this share of the fee. */
+/**
+ * What a wrong prescription costs, as a share of the remaining fee.
+ *
+ * Multiplicative rather than subtracted, so the fee decays (60%, 36%,
+ * 22%...) instead of hitting a floor. Attempts are unlimited - the
+ * patient stays until treated - so a wrong call costs money, not the
+ * consultation.
+ */
 export const MISS_PENALTY = 0.4
-export const MAX_MISSES = 2
 
 /** People who come to the door. */
 export const FACES = 6
@@ -226,7 +232,7 @@ export function nextArrivalDue(s: DoctorSave, now: number): number {
 
 export function feeFor(p: DoctorPatient): number {
   const base = CONDITION_BY_ID[p.conditionId]?.fee ?? 0
-  return Math.max(1, Math.round(base * (1 - MISS_PENALTY * p.misses)))
+  return Math.max(1, Math.round(base * Math.pow(1 - MISS_PENALTY, p.misses)))
 }
 
 /**

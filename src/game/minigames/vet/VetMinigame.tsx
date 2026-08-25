@@ -6,7 +6,6 @@ import { PatientArt, TreatmentArt } from './VetArt'
 import {
   AILMENT_BY_ID,
   KITS,
-  MAX_MISSES,
   SURGERIES,
   TREATMENTS,
   TREATMENT_BY_ID,
@@ -32,8 +31,8 @@ import { panel } from '../farm/farmStyles'
  *
  * That trade is the whole game: guess for throughput, examine for
  * certainty. A wrong guess still uses up the medicine and docks the fee,
- * so bad hunches cost real money rather than just a retry - but no patient
- * is ever lost to the clock.
+ * so bad hunches cost real money rather than just a retry - but nothing is
+ * ever lost outright: no clock, no limit on attempts.
  *
  * Self-contained like the other trades. It earns fees rather than making
  * goods, so it never touches the crate - the only thing it buys is
@@ -71,9 +70,9 @@ export function VetMinigame({ onExit }: MinigameProps) {
     toastTimeout.current = window.setTimeout(() => setToast(null), 1800)
   }
 
-  // Finish examinations and admit new arrivals. Nobody is sent home for
-  // waiting - the only way out is cured, or two wrong treatments. One pass
-  // so the ward only rewrites the save when something actually changed.
+  // Finish examinations and admit new arrivals. The only way a patient
+  // leaves is cured. One pass so the ward only rewrites the save when
+  // something actually changed.
   useEffect(() => {
     const t = Date.now()
     const list = patients
@@ -133,21 +132,14 @@ export function VetMinigame({ onExit }: MinigameProps) {
       return
     }
 
+    // Wrong, but the patient stays: only the medicine and the fee are lost.
     const misses = patient.misses + 1
-    const gaveUp = misses >= MAX_MISSES
     setSave((s) => ({
       ...s,
       supplies: { ...s.supplies, [treatmentId]: (s.supplies[treatmentId] ?? 0) - 1 },
-      patients: gaveUp
-        ? (s.patients ?? []).filter((p) => p.id !== patient.id)
-        : (s.patients ?? []).map((p) => (p.id === patient.id ? { ...p, misses } : p)),
+      patients: (s.patients ?? []).map((p) => (p.id === patient.id ? { ...p, misses } : p)),
     }))
-    if (gaveUp) {
-      setTreating(null)
-      showToast('That did not help either - they took the animal home.')
-    } else {
-      showToast('That is not it. The medicine is wasted.')
-    }
+    showToast('That is not it. The medicine is wasted - try another.')
   }
 
   function restock(treatmentId: string, qty: number) {
