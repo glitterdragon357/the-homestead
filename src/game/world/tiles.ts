@@ -63,6 +63,15 @@ export function buildStarterMap(): HomesteadTile[] {
     kittenTile.minigameId = 'kitten'
   }
 
+  // The barn: livestock, field and farm kitchen.
+  const farmsteadTile = tiles.find((t) => t.x === 1 && t.y === 5)
+  if (farmsteadTile) {
+    farmsteadTile.type = 'building'
+    farmsteadTile.label = 'Farmstead'
+    farmsteadTile.icon = '🐄'
+    farmsteadTile.minigameId = 'farmstead'
+  }
+
   return tiles
 }
 
