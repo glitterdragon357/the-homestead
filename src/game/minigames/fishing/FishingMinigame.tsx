@@ -57,8 +57,8 @@ const TIERS: Record<TierKey, Tier> = {
   small: { hint: 'A light little tug', baseCoins: 4, markerSpeed: 2.4, targetWidth: 32, reels: 1, slack: 4 },
   medium: { hint: 'A steady, decent pull', baseCoins: 9, markerSpeed: 3.0, targetWidth: 27, reels: 2, slack: 4 },
   large: { hint: "Heavy - this one's got some weight", baseCoins: 18, markerSpeed: 3.6, targetWidth: 24, reels: 2, slack: 3 },
-  huge: { hint: 'Feels HUGE - it is really fighting!', baseCoins: 34, markerSpeed: 4.2, targetWidth: 22, reels: 3, slack: 3 },
-  legendary: { hint: 'Something enormous is on the line!', baseCoins: 65, markerSpeed: 4.8, targetWidth: 20, reels: 3, slack: 2 },
+  huge: { hint: 'Feels HUGE - it is really fighting!', baseCoins: 34, markerSpeed: 4.0, targetWidth: 24, reels: 3, slack: 4 },
+  legendary: { hint: 'Something enormous is on the line!', baseCoins: 65, markerSpeed: 4.4, targetWidth: 23, reels: 3, slack: 3 },
 }
 
 interface FishDef {
@@ -120,6 +120,12 @@ interface RodTier {
   blurb: string
 }
 
+/**
+ * The shed. Bonuses are flat additions, which means they help most where
+ * the margins are thinnest: +10 points of target width is a rounding error
+ * on a minnow's 38% band but nearly doubles a marlin's 23%. So the good
+ * rods quietly specialise in big fish without needing a separate rule.
+ */
 const RODS: RodTier[] = [
   {
     name: 'Twig Rod',
@@ -133,35 +139,68 @@ const RODS: RodTier[] = [
     blurb: 'Bare minimum. Big fish are landable, but barely.',
   },
   {
-    name: 'Bamboo Rod',
-    cost: 24,
-    biteDelay: [1400, 3200],
-    hookWindowMs: 850,
-    speedMult: 0.93,
+    name: 'Cane Rod',
+    cost: 18,
+    biteDelay: [1650, 3500],
+    hookWindowMs: 800,
+    speedMult: 0.96,
     targetBonus: 2,
     slackBonus: 1,
-    depthBonus: 1,
-    blurb: 'Steadier fight, one extra slip forgiven.',
+    depthBonus: 0.6,
+    blurb: 'A bit of give. One extra slip forgiven.',
+  },
+  {
+    name: 'Bamboo Rod',
+    cost: 45,
+    biteDelay: [1400, 3200],
+    hookWindowMs: 860,
+    speedMult: 0.92,
+    targetBonus: 3,
+    slackBonus: 1,
+    depthBonus: 1.2,
+    blurb: 'Springy and forgiving. Bites come quicker.',
+  },
+  {
+    name: 'Fiberglass Rod',
+    cost: 95,
+    biteDelay: [1200, 2900],
+    hookWindowMs: 920,
+    speedMult: 0.88,
+    targetBonus: 5,
+    slackBonus: 2,
+    depthBonus: 2,
+    blurb: 'Holds a bend. Heavy fish stop running the show.',
   },
   {
     name: 'Steel Rod',
-    cost: 80,
+    cost: 175,
     biteDelay: [1000, 2600],
-    hookWindowMs: 950,
-    speedMult: 0.86,
-    targetBonus: 4,
+    hookWindowMs: 980,
+    speedMult: 0.84,
+    targetBonus: 6,
     slackBonus: 2,
-    depthBonus: 2.5,
+    depthBonus: 2.8,
     blurb: 'Real backbone. Big fish stop being a gamble.',
   },
   {
-    name: 'Golden Rod',
-    cost: 200,
-    biteDelay: [700, 2000],
-    hookWindowMs: 1100,
-    speedMult: 0.78,
-    targetBonus: 6,
+    name: 'Graphite Rod',
+    cost: 300,
+    biteDelay: [850, 2300],
+    hookWindowMs: 1050,
+    speedMult: 0.79,
+    targetBonus: 8,
     slackBonus: 3,
+    depthBonus: 3.8,
+    blurb: 'Light and fast. The monsters start showing up.',
+  },
+  {
+    name: 'Golden Rod',
+    cost: 500,
+    biteDelay: [700, 2000],
+    hookWindowMs: 1150,
+    speedMult: 0.74,
+    targetBonus: 10,
+    slackBonus: 4,
     depthBonus: 5,
     blurb: 'Tames anything in the water.',
   },
@@ -362,7 +401,7 @@ export function FishingMinigame({ onExit }: MinigameProps) {
       <div style={styles.pondWrap}>
         <div style={styles.toastSlot}>{toast && <span style={styles.toast}>{toast}</span>}</div>
 
-        <div style={styles.pond}>
+        <div style={phase === 'caught' ? { ...styles.pond, ...styles.pondCaught } : styles.pond}>
           {phase === 'idle' && <span style={styles.pondText}>🎣 Cast your line</span>}
           {phase === 'waiting' && <span style={styles.pondText}>〰️ Waiting for a bite...</span>}
           {phase === 'biting' && <span style={styles.bite}>❗ Bite! Hook it!</span>}
@@ -391,7 +430,7 @@ export function FishingMinigame({ onExit }: MinigameProps) {
 
           {phase === 'caught' && hooked && (
             <div style={styles.catchBox}>
-              <FishArt species={hooked.name} size={92} />
+              <FishArt species={hooked.name} size={240} />
               <span style={styles.catchName}>{hooked.name}</span>
               <span style={styles.catchCoins}>+{coinsFor(hooked)} 🪙</span>
             </div>
@@ -539,6 +578,16 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 10,
     padding: 8,
   },
+  /**
+   * On a catch the pond drops its water colour: the fish is the thing to
+   * look at, and a mid-blue behind a blue-grey fish hides exactly the
+   * markings that tell the species apart.
+   */
+  pondCaught: {
+    background: '#fbf6ea',
+    borderColor: '#d8c9a4',
+    minHeight: 172,
+  },
   pondText: { color: '#eaf3fb', fontSize: 15, fontWeight: 600, padding: '0 8px', textAlign: 'center' },
   bite: { color: '#fff3c4', fontSize: 18, fontWeight: 800 },
   pipRow: { marginTop: 8, display: 'flex', gap: 6, justifyContent: 'center' },
@@ -551,9 +600,15 @@ const styles: Record<string, React.CSSProperties> = {
     textTransform: 'uppercase',
   },
   slackPip: { color: '#ffd98a', fontSize: 13, marginLeft: 2 },
-  catchBox: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 },
-  catchName: { color: '#ffffff', fontSize: 15, fontWeight: 700 },
-  catchCoins: { color: '#ffe9a8', fontSize: 13, fontWeight: 600 },
+  catchBox: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 2,
+    width: '100%',
+  },
+  catchName: { color: '#3a2e1f', fontSize: 16, fontWeight: 700 },
+  catchCoins: { color: '#8a6b1f', fontSize: 13.5, fontWeight: 600 },
   reelTrack: {
     position: 'relative',
     height: 20,

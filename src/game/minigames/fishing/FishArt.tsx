@@ -317,7 +317,9 @@ export function FishArt({
       height={(size * 40) / 72}
       role="img"
       aria-label={species}
-      style={{ display: 'block' }}
+      // Scales down rather than overflowing when asked for more width than
+      // the container has, which matters at the larger catch-screen size.
+      style={{ display: 'block', maxWidth: '100%', height: 'auto' }}
     >
       {ART[species] ?? GENERIC}
     </svg>
