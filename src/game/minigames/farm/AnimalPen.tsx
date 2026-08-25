@@ -48,6 +48,21 @@ export function AnimalPen({
   const now = Date.now()
   const animals = save.animals ?? []
 
+  /**
+   * Always grouped by kind, whatever order things were bought or born in.
+   * The save keeps insertion order - a new animal is appended - so sorting
+   * has to happen at render or the list drifts out of order the first time
+   * you buy anything. Ties break by id so the oldest of a kind stays top
+   * and rows never shuffle under a click.
+   */
+  const rank = (kind: AnimalKind) => {
+    const i = kinds.indexOf(kind)
+    return i === -1 ? kinds.length : i
+  }
+  const ordered = [...animals].sort(
+    (a, b) => rank(a.kind) - rank(b.kind) || a.id - b.id
+  )
+
   function showToast(msg: string) {
     setToast(msg)
     window.clearTimeout(toastTimeout.current)
@@ -200,7 +215,7 @@ export function AnimalPen({
 
       {animals.length === 0 && <p style={panel.empty}>{emptyHint}</p>}
 
-      {animals.map((a) => {
+      {ordered.map((a) => {
         const spec = ANIMALS[a.kind]
         const grown = isGrown(a, now)
         const ready = productReady(a, now, level.speedMult)
