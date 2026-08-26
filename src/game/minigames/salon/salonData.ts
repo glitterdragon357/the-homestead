@@ -30,13 +30,13 @@ export interface Step {
 }
 
 export const STEPS: Step[] = [
-  { key: 'demat', label: 'De-mat', ms: 14_000, anxiety: 30, after: [], tooEarly: '' },
-  { key: 'brush', label: 'Brush', ms: 8_000, anxiety: 10, after: ['demat'], tooEarly: 'The mats have to come out before a brush will go through.' },
-  { key: 'bath', label: 'Bath', ms: 12_000, anxiety: 25, after: ['demat', 'brush'], tooEarly: 'Washing a tangled coat only sets the knots.' },
-  { key: 'dry', label: 'Dry', ms: 11_000, anxiety: 30, after: ['bath'], tooEarly: 'Nothing to dry yet.' },
-  { key: 'clip', label: 'Clip', ms: 13_000, anxiety: 20, after: ['dry'], tooEarly: 'Never clip a wet coat - it drags and pulls.' },
-  { key: 'nails', label: 'Nails', ms: 7_000, anxiety: 20, after: [], tooEarly: '' },
-  { key: 'bow', label: 'Bow', ms: 4_000, anxiety: 5, after: ['demat', 'brush', 'bath', 'dry', 'clip', 'nails'], tooEarly: 'Finish the grooming first, then the ribbon.' },
+  { key: 'demat', label: 'De-mat', ms: 5_000, anxiety: 30, after: [], tooEarly: '' },
+  { key: 'brush', label: 'Brush', ms: 5_000, anxiety: 10, after: ['demat'], tooEarly: 'The mats have to come out before a brush will go through.' },
+  { key: 'bath', label: 'Bath', ms: 5_000, anxiety: 25, after: ['demat', 'brush'], tooEarly: 'Washing a tangled coat only sets the knots.' },
+  { key: 'dry', label: 'Dry', ms: 5_000, anxiety: 30, after: ['bath'], tooEarly: 'Nothing to dry yet.' },
+  { key: 'clip', label: 'Clip', ms: 5_000, anxiety: 20, after: ['dry'], tooEarly: 'Never clip a wet coat - it drags and pulls.' },
+  { key: 'nails', label: 'Nails', ms: 5_000, anxiety: 20, after: [], tooEarly: '' },
+  { key: 'bow', label: 'Bow', ms: 5_000, anxiety: 5, after: ['demat', 'brush', 'bath', 'dry', 'clip', 'nails'], tooEarly: 'Finish the grooming first, then the ribbon.' },
 ]
 
 export const STEP_BY_KEY: Record<StepKey, Step> = Object.fromEntries(
@@ -110,10 +110,10 @@ export interface TreatLevel {
 }
 
 export const TREATS: TreatLevel[] = [
-  { label: 'Kind Words', cost: 0, calm: 25, ms: 7_000, blurb: 'Free, and slow.' },
-  { label: 'Biscuit Tin', cost: 160, calm: 40, ms: 6_000, blurb: 'Settles them faster.' },
+  { label: 'Kind Words', cost: 0, calm: 25, ms: 5_000, blurb: 'Free, and it takes the edge off.' },
+  { label: 'Biscuit Tin', cost: 160, calm: 40, ms: 5_000, blurb: 'Settles them noticeably better.' },
   { label: 'Liver Treats', cost: 420, calm: 58, ms: 5_000, blurb: 'Works on almost anyone.' },
-  { label: 'Calming Spray', cost: 880, calm: 80, ms: 4_000, blurb: 'Near-instant calm.' },
+  { label: 'Calming Spray', cost: 880, calm: 80, ms: 5_000, blurb: 'Calms all but the worst of them.' },
 ]
 
 export interface SalonLevel {
@@ -125,10 +125,10 @@ export interface SalonLevel {
 }
 
 export const SALONS: SalonLevel[] = [
-  { label: 'Kitchen Sink', cost: 0, chairs: 2, arrivalMs: 45_000, blurb: 'Two at a time, and a wet floor.' },
-  { label: 'Back Room', cost: 240, chairs: 3, arrivalMs: 34_000, blurb: 'Three chairs, word gets around.' },
-  { label: 'High Street Salon', cost: 600, chairs: 4, arrivalMs: 25_000, blurb: 'Four chairs and a steady book.' },
-  { label: 'Grooming Parlour', cost: 1250, chairs: 6, arrivalMs: 17_000, blurb: 'Six chairs, never empty.' },
+  { label: 'Kitchen Sink', cost: 0, chairs: 2, arrivalMs: 5_000, blurb: 'Two at a time, and a wet floor.' },
+  { label: 'Back Room', cost: 240, chairs: 3, arrivalMs: 5_000, blurb: 'Three chairs on the go.' },
+  { label: 'High Street Salon', cost: 600, chairs: 4, arrivalMs: 5_000, blurb: 'Four chairs and a steady book.' },
+  { label: 'Grooming Parlour', cost: 1250, chairs: 6, arrivalMs: 5_000, blurb: 'Six chairs, never empty.' },
 ]
 
 /** Tip as a share of the fee when the animal leaves perfectly calm. */

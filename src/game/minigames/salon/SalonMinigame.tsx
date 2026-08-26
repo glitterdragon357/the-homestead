@@ -59,7 +59,7 @@ export function SalonMinigame({ onExit }: MinigameProps) {
   const pets = save.pets ?? []
 
   useEffect(() => {
-    const interval = window.setInterval(() => repaint((n) => n + 1), 500)
+    const interval = window.setInterval(() => repaint((n) => n + 1), 250)
     return () => window.clearInterval(interval)
   }, [])
   useEffect(() => () => window.clearTimeout(toastTimeout.current), [])
