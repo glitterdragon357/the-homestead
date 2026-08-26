@@ -20,6 +20,7 @@ import {
   type VetSave,
 } from './vetData'
 import { panel } from '../farm/farmStyles'
+import { GiftRow } from '../../economy/GiftRow'
 
 /**
  * The veterinary surgery: diagnose, then treat.
@@ -182,6 +183,8 @@ export function VetMinigame({ onExit }: MinigameProps) {
         <h2 style={panel.title}>Vet</h2>
         <span style={panel.coins}>🪙 {coins}</span>
       </div>
+
+      <GiftRow from="vet" />
 
       <div style={styles.tabs}>
         {TABS.map((t) => (

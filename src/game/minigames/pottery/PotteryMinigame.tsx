@@ -20,6 +20,7 @@ import {
   type PotterySave,
 } from './potteryData'
 import { panel } from '../farm/farmStyles'
+import { GiftRow } from '../../economy/GiftRow'
 
 /**
  * Riverside pottery: dig clay out of the bank, wedge the grit out of it,
@@ -200,6 +201,8 @@ export function PotteryMinigame({ onExit }: MinigameProps) {
         <h2 style={panel.title}>Pottery</h2>
         <span style={panel.coins}>🪙 {coins}</span>
       </div>
+
+      <GiftRow from="pottery" />
 
       <div style={styles.tabs}>
         {TABS.map((t) => (

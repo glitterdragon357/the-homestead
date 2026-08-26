@@ -9,6 +9,7 @@ import { initialFruit } from '../minigames/fruit/fruitData'
 import { initialVet } from '../minigames/vet/vetData'
 import { initialDoctor } from '../minigames/doctor/doctorData'
 import { saveKeysOf, shiftTimestamps } from './gameClock'
+import { TRADE_IDS } from '../economy/trades'
 
 interface HomesteadState {
   tiles: HomesteadTile[]
@@ -56,6 +57,12 @@ interface HomesteadState {
 
   /** What one game's purse holds. */
   coinsOf: (game: string) => number
+  /**
+   * Move coins between purses. Returns false and changes nothing if the
+   * sender is short, the amount is not a positive whole number, or the
+   * two ends are the same - so a bad call can never mint or burn money.
+   */
+  gift: (from: string, to: string, amount: number) => boolean
   earn: (game: string, amount: number) => void
   /** Returns false (and changes nothing) when that game's purse is short. */
   spend: (game: string, amount: number) => boolean
@@ -68,8 +75,12 @@ interface HomesteadState {
   restoreBackup: () => boolean
 }
 
-/** Every game that trades. The kitten has no economy. */
-export const EARNING_GAMES = ['farmstead', 'fishing', 'pottery', 'lumber', 'fruit', 'vet', 'doctor'] as const
+/**
+ * Every game that holds money. Derived from the trade list so adding a
+ * trade in one place gives it a purse, a gift target and a starting float
+ * together.
+ */
+export const EARNING_GAMES = TRADE_IDS
 
 /**
  * Seed money, per game. Each has to fund its own first upgrade out of its
@@ -173,6 +184,21 @@ export const useHomesteadStore = create<HomesteadState>()(
         set((state) => ({ progress: { ...state.progress, [id]: value } })),
 
       coinsOf: (game) => get().purses[game] ?? 0,
+
+      gift: (from, to, amount) => {
+        if (from === to) return false
+        if (!Number.isInteger(amount) || amount <= 0) return false
+        const purses = get().purses
+        if ((purses[from] ?? 0) < amount) return false
+        set({
+          purses: {
+            ...purses,
+            [from]: (purses[from] ?? 0) - amount,
+            [to]: (purses[to] ?? 0) + amount,
+          },
+        })
+        return true
+      },
 
       earn: (game, amount) =>
         set((s) => ({ purses: { ...s.purses, [game]: (s.purses[game] ?? 0) + amount } })),

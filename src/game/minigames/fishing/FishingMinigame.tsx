@@ -12,6 +12,7 @@ import {
   pickFish,
   type FishDef,
 } from './fishData'
+import { GiftRow } from '../../economy/GiftRow'
 
 /**
  * Fishing minigame: cast a line, react to the bite within a short window
@@ -217,6 +218,10 @@ export function FishingMinigame({ onExit }: MinigameProps) {
       <p style={styles.subLabel}>
         {rod.name} &middot; 🪙 {coins}
       </p>
+
+      <div style={{ marginBottom: 12 }}>
+        <GiftRow from="fishing" />
+      </div>
 
       <div style={styles.pondWrap}>
         <div style={styles.toastSlot}>{toast && <span style={styles.toast}>{toast}</span>}</div>

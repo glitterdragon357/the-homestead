@@ -23,6 +23,7 @@ import {
   type TestKey,
 } from './doctorData'
 import { panel } from '../farm/farmStyles'
+import { GiftRow } from '../../economy/GiftRow'
 
 /**
  * The village surgery.
@@ -168,6 +169,8 @@ export function DoctorMinigame({ onExit }: MinigameProps) {
         <h2 style={panel.title}>Doctor</h2>
         <span style={panel.coins}>🪙 {coins}</span>
       </div>
+
+      <GiftRow from="doctor" />
 
       <div style={styles.tabs}>
         {TABS.map((t) => (

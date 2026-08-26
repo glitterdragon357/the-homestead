@@ -17,6 +17,7 @@ import {
   type PenSave,
 } from './farmData'
 import { panel } from './farmStyles'
+import { GiftRow } from '../../economy/GiftRow'
 
 /**
  * The whole farm behind a single icon: animals, field, kitchen, selling
@@ -57,6 +58,8 @@ export function FarmsteadMinigame({ onExit }: MinigameProps) {
         <h2 style={panel.title}>Farmstead</h2>
         <span style={panel.coins}>🪙 {coins}</span>
       </div>
+
+      <GiftRow from="farmstead" />
 
       <div style={styles.tabs}>
         {TABS.map((t) => (

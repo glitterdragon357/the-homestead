@@ -25,6 +25,7 @@ import {
   type SpeciesKey,
 } from './lumberData'
 import { panel } from '../farm/farmStyles'
+import { GiftRow } from '../../economy/GiftRow'
 
 /**
  * The woodlot. Fell trees in the stand, haul the logs home, then send
@@ -231,6 +232,8 @@ export function LumberMinigame({ onExit }: MinigameProps) {
         <h2 style={panel.title}>Woodlot</h2>
         <span style={panel.coins}>🪙 {coins}</span>
       </div>
+
+      <GiftRow from="lumber" />
 
       <div style={styles.tabs}>
         {TABS.map((t) => (

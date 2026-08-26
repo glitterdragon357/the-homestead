@@ -20,6 +20,7 @@ import {
   type FruitSave,
 } from './fruitData'
 import { panel } from '../farm/farmStyles'
+import { GiftRow } from '../../economy/GiftRow'
 
 /**
  * The orchard: pick fruit, then bake it.
@@ -244,6 +245,8 @@ export function FruitMinigame({ onExit }: MinigameProps) {
         <h2 style={panel.title}>Orchard</h2>
         <span style={panel.coins}>🪙 {coins}</span>
       </div>
+
+      <GiftRow from="fruit" />
 
       <div style={styles.tabs}>
         {TABS.map((t) => (
