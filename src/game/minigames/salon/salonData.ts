@@ -156,35 +156,121 @@ export interface SalonSave {
   pets: SalonPet[]
   nextArrivalAt: number
   groomed: number
+  /** Names already given, per species, so none comes round twice. */
+  usedNames: Partial<Record<PetKind, string[]>>
 }
 
-const NAMES = ['Biscuit', 'Pepper', 'Marbles', 'Waffle', 'Tuppence', 'Bramble', 'Onion', 'Clover', 'Mittens', 'Rufus']
+/**
+ * A deep enough pool that a species can be worked through for a long time
+ * before any name has to come round again.
+ */
+const NAMES = [
+  'Biscuit', 'Pepper', 'Marbles', 'Waffle', 'Tuppence', 'Bramble', 'Onion', 'Clover',
+  'Mittens', 'Rufus', 'Pickle', 'Nutmeg', 'Saffron', 'Domino', 'Hazel', 'Bandit',
+  'Muffin', 'Coco', 'Truffle', 'Juniper', 'Sprocket', 'Pumpkin', 'Willow', 'Barnaby',
+  'Olive', 'Ziggy', 'Poppy', 'Rocket', 'Nettle', 'Crumpet', 'Basil', 'Maple',
+  'Toffee', 'Wren', 'Comet', 'Plum', 'Sausage', 'Ivy', 'Thistle', 'Bobbin',
+  'Peanut', 'Cinder', 'Fig', 'Moss', 'Turnip', 'Ripley', 'Cobweb', 'Dumpling',
+  'Elmo', 'Fern', 'Gravy', 'Hopscotch', 'Inkwell', 'Jellybean', 'Kipper', 'Lumen',
+  'Marzipan', 'Noodle', 'Oatcake', 'Parsnip',
+]
 
-export function makePet(id: number, now: number): SalonPet {
+/** II, III, IV... for when a species has been through the whole book. */
+function roman(n: number): string {
+  const table: [number, string][] = [
+    [1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'],
+    [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'],
+    [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I'],
+  ]
+  let out = ''
+  let left = n
+  for (const [value, glyph] of table) {
+    while (left >= value) {
+      out += glyph
+      left -= value
+    }
+  }
+  return out
+}
+
+/**
+ * Pick a name nobody else is answering to.
+ *
+ * No two animals in the salon may share a name at the same time, and a
+ * name is never reused within a species - not once the list runs out,
+ * not ever. When a species has been through the whole book it starts on
+ * regnal numbers (Biscuit II, then Biscuit III), which keeps names unique
+ * without bound instead of quietly coming round again after sixty pets.
+ */
+export function pickName(
+  kind: PetKind,
+  inSalon: string[],
+  usedByKind: Partial<Record<PetKind, string[]>>
+): string {
+  const used = usedByKind[kind] ?? []
+  const free = (list: string[]) =>
+    list.filter((n) => !inSalon.includes(n) && !used.includes(n))
+
+  const fresh = free(NAMES)
+  if (fresh.length) return fresh[Math.floor(Math.random() * fresh.length)]
+
+  // Each tier adds another whole book of names, so this always terminates.
+  for (let numeral = 2; numeral < 500; numeral++) {
+    const tier = free(NAMES.map((n) => `${n} ${roman(numeral)}`))
+    if (tier.length) return tier[Math.floor(Math.random() * tier.length)]
+  }
+  // Unreachable in any realistic game, but never hand back a duplicate.
+  return `${NAMES[0]} ${Date.now()}`
+}
+
+/**
+ * Book a new pet in.
+ *
+ * Returns a whole new save rather than just the pet, because choosing a
+ * name and recording that it has been used have to happen together - split
+ * them and two arrivals in the same tick can pick the same name.
+ */
+export function admit(s: SalonSave, now: number): SalonSave {
   const coat = COATS[Math.floor(Math.random() * COATS.length)]
-  return {
-    id,
-    kind: PETS[Math.floor(Math.random() * PETS.length)],
+  const kind = PETS[Math.floor(Math.random() * PETS.length)]
+  const pets = s.pets ?? []
+  const usedNames = s.usedNames ?? {}
+  const name = pickName(kind, pets.map((p) => p.name), usedNames)
+
+  const pet: SalonPet = {
+    id: s.nextId ?? 1,
+    kind,
     coat: coat.key,
-    name: NAMES[Math.floor(Math.random() * NAMES.length)],
+    name,
     arrivedAt: now,
     done: [],
     // They arrive already a bit unsettled, more so if badly matted.
     anxiety: 10 + Math.floor(Math.random() * 20) + (coat.key === 'matted' ? 15 : 0),
   }
+
+  return {
+    ...s,
+    pets: [...pets, pet],
+    nextId: (s.nextId ?? 1) + 1,
+    usedNames: { ...usedNames, [kind]: [...(usedNames[kind] ?? []), name] },
+  }
 }
 
 export function initialSalon(): SalonSave {
   const now = Date.now()
-  return {
-    kitLevel: 0,
-    treatLevel: 0,
-    salonLevel: 0,
-    nextId: 2,
-    pets: [makePet(1, now)],
-    nextArrivalAt: now + SALONS[0].arrivalMs,
-    groomed: 0,
-  }
+  return admit(
+    {
+      kitLevel: 0,
+      treatLevel: 0,
+      salonLevel: 0,
+      nextId: 1,
+      pets: [],
+      nextArrivalAt: now + SALONS[0].arrivalMs,
+      groomed: 0,
+      usedNames: {},
+    },
+    now
+  )
 }
 
 export function kitOf(s: SalonSave | undefined): KitLevel {

@@ -16,7 +16,7 @@ import {
   initialSalon,
   isFinished,
   kitOf,
-  makePet,
+  admit,
   nextArrivalDue,
   payoutFor,
   salonOf,
@@ -93,13 +93,17 @@ export function SalonMinigame({ onExit }: MinigameProps) {
         }
       })
 
-      let nextId = s.nextId ?? 1
-      let arrival = nextArrivalDue(s, Date.now())
+      const arrival = nextArrivalDue(s, Date.now())
+      const withWork = { ...s, pets: next }
       if (Date.now() >= arrival && next.length < salonOf(s).chairs) {
-        next = [...next, makePet(nextId++, Date.now())]
-        arrival = Date.now() + salonOf(s).arrivalMs
+        // admit() names and records in one step, so two arrivals landing in
+        // the same tick can never be handed the same name.
+        return {
+          ...admit(withWork, Date.now()),
+          nextArrivalAt: Date.now() + salonOf(s).arrivalMs,
+        }
       }
-      return { ...s, pets: next, nextId, nextArrivalAt: arrival }
+      return { ...withWork, nextArrivalAt: arrival }
     })
   }, [pets, now, save.nextArrivalAt, salon.chairs, setSave])
 
