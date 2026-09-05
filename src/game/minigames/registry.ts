@@ -14,6 +14,8 @@ import { vetPending, type VetSave } from './vet/vetData'
 import { DoctorMinigame } from './doctor/DoctorMinigame'
 import { doctorPending, type DoctorSave } from './doctor/doctorData'
 import { OceanMinigame } from './ocean/OceanMinigame'
+import { SpaMinigame } from './spa/SpaMinigame'
+import { spaPending, type SpaSave } from './spa/spaData'
 import { SalonMinigame } from './salon/SalonMinigame'
 import { salonPending, type SalonSave } from './salon/salonData'
 
@@ -124,6 +126,14 @@ export const MINIGAME_REGISTRY: Record<string, MinigameDefinition> = {
     description: 'Hook and reel in fish for the crate.',
     icon: '🎣',
     component: FishingMinigame,
+  },
+  spa: {
+    id: 'spa',
+    name: 'Day Spa',
+    description: 'Spa treatments, hair, makeup and outfits - build someone a look.',
+    icon: '\u{1F485}',
+    component: SpaMinigame,
+    pending: (p, now) => spaPending(p.spa as SpaSave, now),
   },
   ocean: {
     id: 'ocean',

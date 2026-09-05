@@ -10,6 +10,7 @@ import { initialVet } from '../minigames/vet/vetData'
 import { initialDoctor } from '../minigames/doctor/doctorData'
 import { initialSalon } from '../minigames/salon/salonData'
 import { initialOcean } from '../minigames/ocean/oceanData'
+import { initialSpa } from '../minigames/spa/spaData'
 import { saveKeysOf, shiftTimestamps } from './gameClock'
 import { TRADE_IDS } from '../economy/trades'
 
@@ -118,11 +119,11 @@ export const useHomesteadStore = create<HomesteadState>()(
       tiles: buildStarterMap(),
       player: { x: 0, y: 0 },
       activeMinigameId: null,
-      progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet(), doctor: initialDoctor(), salon: initialSalon(), ocean: initialOcean() },
+      progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet(), doctor: initialDoctor(), salon: initialSalon(), ocean: initialOcean(), spa: initialSpa() },
       purses: startingPurses(),
       // Everything starts frozen; the first game you open is the first to run.
       pausedAt: Object.fromEntries(
-        Object.keys({ ...initialProgress(), pottery: 0, lumber: 0, fruit: 0, vet: 0, doctor: 0, salon: 0, ocean: 0 }).map((k) => [
+        Object.keys({ ...initialProgress(), pottery: 0, lumber: 0, fruit: 0, vet: 0, doctor: 0, salon: 0, ocean: 0, spa: 0 }).map((k) => [
           k,
           Date.now(),
         ])
@@ -251,7 +252,7 @@ export const useHomesteadStore = create<HomesteadState>()(
 
       resetSave: () =>
         set({
-          progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet(), doctor: initialDoctor(), salon: initialSalon(), ocean: initialOcean() },
+          progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet(), doctor: initialDoctor(), salon: initialSalon(), ocean: initialOcean(), spa: initialSpa() },
           player: { x: 0, y: 0 },
           purses: startingPurses(),
           inventory: {},
@@ -261,7 +262,7 @@ export const useHomesteadStore = create<HomesteadState>()(
     }),
     {
       name: SAVE_KEY,
-      version: 7,
+      version: 8,
       storage: createJSONStorage(() => localStorage),
       // Runs before rehydration, so this captures the previous session's
       // save rather than anything this one has written.
@@ -350,6 +351,10 @@ export const useHomesteadStore = create<HomesteadState>()(
         // additive - it has no purse and touches nothing that already
         // existed, so every other game's save passes through untouched.
         if (progress.ocean === undefined) progress.ocean = initialOcean()
+
+        // v7 -> v8: the Day Spa opens. Additive again - it brings its own
+        // save and its own till, and touches nothing that came before.
+        if (progress.spa === undefined) progress.spa = initialSpa()
 
         return { ...state, progress, purses, pausedAt }
       },
