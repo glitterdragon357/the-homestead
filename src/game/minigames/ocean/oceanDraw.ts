@@ -16,7 +16,10 @@ import {
   ZONES,
   floorHeightAt,
   gloomAt,
+  seaState,
+  waveAt,
   type Landmark,
+  type Ship,
   type Species,
 } from './oceanData'
 
@@ -229,15 +232,17 @@ export function drawSurface(
 ) {
   if (!above && cam.y - SURFACE_Y > 900) return
 
-  const G = above ? 200 : 150
-  const reach = above ? 4200 : Math.min(viewDist, 1500)
+  // Fine mesh close in, coarse further out: the swell needs real shape
+  // where you can see it, and nothing but a suggestion at two thousand
+  // units. One grid for both wasted most of its cells on the horizon.
+  const bands: [number, number, number][] = above
+    ? [
+        [34, 0, 300],
+        [90, 300, 900],
+        [240, 900, 3200],
+      ]
+    : [[130, 0, Math.min(viewDist, 1500)]]
 
-  /*
-   * From above, the sea is laid in as one graded sheet from the horizon
-   * down, and the grid then only adds glints on top. Shading each cell
-   * as its own opaque quad turned the water into a floor of tilted
-   * panels.
-   */
   if (above) {
     const h = Math.max(0, horizonY(cam))
     if (h >= VIEW.height) return
@@ -252,42 +257,223 @@ export function drawSurface(
     ctx.fillStyle = g
     ctx.fillRect(0, h, VIEW.width, VIEW.height - h)
   }
-  const x0 = Math.floor((cam.x - reach) / G) * G
-  const z0 = Math.floor((cam.z - reach) / G) * G
 
   ctx.save()
-  for (let x = x0; x < cam.x + reach; x += G) {
-    for (let z = z0; z < cam.z + reach; z += G) {
-      const d = Math.hypot(x + G / 2 - cam.x, z + G / 2 - cam.z)
-      if (d > reach) continue
-      // The swell has to be sampled per corner. Wobbling each cell as a
-      // block leaves neighbours at different heights, which at a grazing
-      // angle tears the surface into bands.
-      const swell = (px: number, pz: number) =>
-        SURFACE_Y + Math.sin((px + pz) * 0.004 + t * 0.0016) * 7
-      const a = project(cam, x, swell(x, z), z)
-      const b = project(cam, x + G, swell(x + G, z), z)
-      const c = project(cam, x + G, swell(x + G, z + G), z + G)
-      const e = project(cam, x, swell(x, z + G), z + G)
-      if (!a || !b || !c || !e) continue
-      // Alpha comes off the cell centre, not a corner: neighbouring
-      // quads shaded from different corners leave visible seams, which
-      // read as cracked glass rather than water.
-      const k = clarity(d, reach)
-      if (k <= 0.02) continue
-      if (above) {
-        // Light running along the swell, and nothing else.
-        const glint = Math.max(0, Math.sin((x - z) * 0.005 + t * 0.0024))
-        if (glint < 0.45) continue
-        ctx.globalAlpha = (glint - 0.45) * 0.34
-        ctx.fillStyle = '#dff2ff'
-      } else {
-        ctx.globalAlpha = 0.2 * k
-        ctx.fillStyle = '#e8f8ff'
+  for (const [G, near, far] of bands) {
+    const x0 = Math.floor((cam.x - far) / G) * G
+    const z0 = Math.floor((cam.z - far) / G) * G
+    for (let x = x0; x < cam.x + far; x += G) {
+      for (let z = z0; z < cam.z + far; z += G) {
+        const d = Math.hypot(x + G / 2 - cam.x, z + G / 2 - cam.z)
+        if (d > far || d < near) continue
+        const k = clarity(d, far)
+        if (k <= 0.02) continue
+
+        // Corner heights come from the shared wave field, so neighbouring
+        // cells always meet exactly and the sheet never tears.
+        const hA = waveAt(x, z, t)
+        const hB = waveAt(x + G, z, t)
+        const hC = waveAt(x + G, z + G, t)
+        const hE = waveAt(x, z + G, t)
+
+        const a = project(cam, x, SURFACE_Y + hA, z)
+        const b = project(cam, x + G, SURFACE_Y + hB, z)
+        const c = project(cam, x + G, SURFACE_Y + hC, z + G)
+        const e = project(cam, x, SURFACE_Y + hE, z + G)
+        if (!a || !b || !c || !e) continue
+
+        const slopeX = (hB + hC - hA - hE) / (2 * G)
+        const slopeZ = (hE + hC - hA - hB) / (2 * G)
+        // Shading and foam have to be judged against how big the sea is
+        // running here, or a heavy set saturates to flat white and a calm
+        // patch goes featureless.
+        const scale = 1 + 4 * seaState(x, z, t)
+
+        if (above) {
+          /*
+           * Shade by which way the face is tilted rather than by anything
+           * random. Neighbouring cells have near-identical slope, so the
+           * light runs across the swell in coherent bands - which is what
+           * makes it read as waves instead of a mosaic.
+           */
+          const lit = Math.max(0, Math.min(1, 0.5 + (slopeX * 11 + slopeZ * 6) / scale))
+          ctx.globalAlpha = 0.62 * k
+          const r = Math.round(30 + lit * 104)
+          const gg = Math.round(88 + lit * 112)
+          const bb = Math.round(126 + lit * 102)
+          ctx.fillStyle = `rgb(${r},${gg},${bb})`
+          fillQuad(ctx, [a, b, c, e])
+
+          // Foam belongs on the tops of waves, not wherever the shading
+          // happened to peak - otherwise it reads as loose white patches.
+          const crest = (hA + hB + hC + hE) / 4
+          const foamAt = 23 * scale
+          if (crest > foamAt) {
+            ctx.globalAlpha = Math.min(0.75, (crest - foamAt) / (14 * scale)) * k
+            ctx.fillStyle = '#f4fcff'
+            fillQuad(ctx, [a, b, c, e])
+          }
+        } else {
+          /*
+           * From below the swell should read as moving light on a ceiling,
+           * not an even wash. Brightness comes off how steeply the face is
+           * tilted, which puts the light along the crests and troughs.
+           */
+          const steep = Math.abs(slopeX) + Math.abs(slopeZ) * 0.6
+          ctx.globalAlpha = Math.min(0.62, 0.07 + steep * 3.4) * k
+          ctx.fillStyle = '#eefaff'
+          fillQuad(ctx, [a, b, c, e])
+        }
       }
-      fillQuad(ctx, [a, b, c, e])
     }
   }
+  ctx.restore()
+  if (above) ctx.restore()
+}
+
+/* ------------------------------------------------------------------ */
+/* Shipping                                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A vessel on the surface, billboarded like the sea life.
+ *
+ * From below you get the hull and keel as a shadow against the bright
+ * underside of the water, which is the interesting half of it.
+ */
+export function drawShip(
+  ctx: CanvasRenderingContext2D,
+  ship: Ship,
+  p: Projected,
+  dir: number,
+  squash: number,
+  alpha: number,
+  above: boolean,
+  t: number
+) {
+  const L = ship.length
+  ctx.save()
+  ctx.globalAlpha = alpha
+  ctx.translate(p.sx, p.sy)
+  ctx.scale(p.scale * Math.max(0.2, Math.abs(squash)) * dir, p.scale)
+
+  if (!above) {
+    // Seen from underneath: a dark hull, a keel, and the light around it.
+    ctx.fillStyle = 'rgba(18,26,34,0.82)'
+    ctx.beginPath()
+    ctx.moveTo(-L * 0.5, 0)
+    ctx.quadraticCurveTo(-L * 0.36, L * 0.12, 0, L * 0.13)
+    ctx.quadraticCurveTo(L * 0.4, L * 0.12, L * 0.5, 0)
+    ctx.closePath()
+    ctx.fill()
+    if (ship.art !== 'rowboat') {
+      ctx.fillStyle = 'rgba(14,20,28,0.9)'
+      ctx.fillRect(-L * 0.16, L * 0.1, L * 0.32, L * 0.09)
+      ctx.beginPath()
+      ctx.ellipse(-L * 0.42, L * 0.08, L * 0.05, L * 0.05, 0, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.restore()
+    return
+  }
+
+  const hull = '#4a3a2c'
+  const trim = '#d8cfbb'
+  // hull
+  ctx.fillStyle = hull
+  ctx.beginPath()
+  ctx.moveTo(-L * 0.5, -L * 0.09)
+  ctx.lineTo(L * 0.5, -L * 0.09)
+  ctx.quadraticCurveTo(L * 0.38, L * 0.1, 0, L * 0.11)
+  ctx.quadraticCurveTo(-L * 0.38, L * 0.1, -L * 0.5, -L * 0.09)
+  ctx.closePath()
+  ctx.fill()
+  ctx.fillStyle = trim
+  ctx.fillRect(-L * 0.5, -L * 0.11, L, L * 0.035)
+
+  const mast = (ox: number, h: number, sail: number) => {
+    ctx.strokeStyle = '#6b5540'
+    ctx.lineWidth = Math.max(1.5, L * 0.014)
+    ctx.beginPath()
+    ctx.moveTo(ox, -L * 0.1)
+    ctx.lineTo(ox, -L * 0.1 - h)
+    ctx.stroke()
+    if (sail > 0) {
+      ctx.beginPath()
+      ctx.moveTo(ox + L * 0.01, -L * 0.1 - h * 0.95)
+      ctx.quadraticCurveTo(ox + sail * 0.7, -L * 0.1 - h * 0.5, ox + sail * 0.2, -L * 0.12)
+      ctx.lineTo(ox + L * 0.01, -L * 0.12)
+      ctx.closePath()
+      // Canvas is nearly the colour of the sky behind it, so it needs a
+      // shaded belly and an edge or the ship reads as bare masts.
+      ctx.fillStyle = '#efe6d2'
+      ctx.fill()
+      ctx.strokeStyle = '#9a8f79'
+      ctx.lineWidth = Math.max(1, L * 0.008)
+      ctx.stroke()
+      ctx.fillStyle = 'rgba(150,140,120,0.28)'
+      ctx.beginPath()
+      ctx.moveTo(ox + L * 0.01, -L * 0.1 - h * 0.5)
+      ctx.quadraticCurveTo(ox + sail * 0.42, -L * 0.1 - h * 0.34, ox + sail * 0.2, -L * 0.12)
+      ctx.lineTo(ox + L * 0.01, -L * 0.12)
+      ctx.closePath()
+      ctx.fill()
+    }
+  }
+
+  switch (ship.art) {
+    case 'rowboat':
+      ctx.strokeStyle = '#6b5540'
+      ctx.lineWidth = Math.max(1.4, L * 0.02)
+      ctx.beginPath()
+      ctx.moveTo(-L * 0.1, -L * 0.09)
+      ctx.lineTo(-L * 0.34, L * 0.06)
+      ctx.moveTo(L * 0.1, -L * 0.09)
+      ctx.lineTo(L * 0.34, L * 0.06)
+      ctx.stroke()
+      ctx.fillStyle = '#3a4a5a'
+      ctx.beginPath()
+      ctx.ellipse(0, -L * 0.15, L * 0.05, L * 0.07, 0, 0, Math.PI * 2)
+      ctx.fill()
+      break
+    case 'smack':
+      mast(L * 0.05, L * 0.5, L * 0.3)
+      break
+    case 'sloop':
+      mast(0, L * 0.72, L * 0.38)
+      break
+    case 'schooner':
+      mast(-L * 0.16, L * 0.66, L * 0.3)
+      mast(L * 0.18, L * 0.78, L * 0.34)
+      break
+    case 'trawler':
+      ctx.fillStyle = '#8d99a4'
+      ctx.fillRect(-L * 0.08, -L * 0.26, L * 0.26, L * 0.17)
+      ctx.strokeStyle = '#6b5540'
+      ctx.lineWidth = Math.max(1.5, L * 0.012)
+      ctx.beginPath()
+      ctx.moveTo(-L * 0.2, -L * 0.1)
+      ctx.lineTo(-L * 0.32, -L * 0.44)
+      ctx.stroke()
+      break
+    case 'steamer':
+      ctx.fillStyle = '#8d99a4'
+      ctx.fillRect(-L * 0.12, -L * 0.28, L * 0.34, L * 0.19)
+      ctx.fillStyle = '#a8443a'
+      ctx.fillRect(L * 0.02, -L * 0.44, L * 0.08, L * 0.17)
+      ctx.save()
+      ctx.globalAlpha *= 0.45
+      ctx.fillStyle = '#5a5a5a'
+      for (let i = 0; i < 5; i++) {
+        const q = ((t * 0.02 + i * 40) % 200) / 200
+        ctx.beginPath()
+        ctx.arc(L * 0.06 + q * L * 0.3, -L * 0.48 - q * L * 0.3, L * (0.03 + q * 0.06), 0, Math.PI * 2)
+        ctx.fill()
+      }
+      ctx.restore()
+      break
+  }
+
   ctx.restore()
 }
 

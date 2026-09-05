@@ -101,6 +101,94 @@ export function gloomAt(y: number): number {
 }
 
 /* ------------------------------------------------------------------ */
+/* Swell                                                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * How high the water stands at a point, right now.
+ *
+ * Three crossing swells rather than one, so the sea never reads as a
+ * single rolling sine. Everything that touches the surface reads from
+ * here - the surface mesh, the ships riding it, and you when you float -
+ * so they all move together instead of sliding through each other.
+ */
+/**
+ * How big the sea is running, here and now: 0 for a flat patch, 1 for the
+ * heaviest set. Very long wavelengths and a very slow drift, so it reads
+ * as weather moving across the water rather than as noise.
+ */
+export function seaState(x: number, z: number, t: number): number {
+  const a = Math.sin(x * 0.00035 + t * 0.00013)
+  const b = Math.sin(z * 0.00027 - t * 0.00009)
+  const c = Math.sin((x - z) * 0.00019 + t * 0.00006)
+  return Math.max(0, Math.min(1, (a + b + c + 2.2) / 4.4))
+}
+
+/** The swell before the sea state is applied. Peaks at about 37. */
+function swellAt(x: number, z: number, t: number): number {
+  return (
+    Math.sin(x * 0.0042 + t * 0.0011) * 15 +
+    Math.sin(z * 0.0031 - t * 0.0009) * 11 +
+    Math.sin((x + z) * 0.0016 + t * 0.0006) * 8 +
+    // A little chop on top of the swell, so crests are not all identical.
+    Math.sin(x * 0.011 - t * 0.0021) * 3
+  )
+}
+
+/**
+ * Wave height at a point.
+ *
+ * The swell is scaled by the sea state, so the same water runs from a
+ * gentle ripple up to five times that in the heavy sets - the sea is
+ * never one uniform size for long.
+ */
+export function waveAt(x: number, z: number, t: number): number {
+  return swellAt(x, z, t) * (1 + 4 * seaState(x, z, t))
+}
+
+/**
+ * Where the water actually is at a point, crest or trough included.
+ *
+ * Whether you are above or below the sea has to be judged against this
+ * rather than the mean level, or a wave can never break over your head.
+ */
+export function surfaceAt(x: number, z: number, t: number): number {
+  return SURFACE_Y + waveAt(x, z, t)
+}
+
+/* ------------------------------------------------------------------ */
+/* Shipping                                                            */
+/* ------------------------------------------------------------------ */
+
+export interface Ship {
+  key: string
+  label: string
+  art: 'rowboat' | 'smack' | 'sloop' | 'schooner' | 'trawler' | 'steamer'
+  /** Stem to stern, in world units. */
+  length: number
+  x: number
+  z: number
+  /** Bearing it is making, and how fast. */
+  heading: number
+  speed: number
+  bounty: number
+  note: string
+}
+
+export const SHIPS: Ship[] = [
+  { key: 'rowboat', label: 'Rowing Boat', art: 'rowboat', length: 90, x: 420, z: 700, heading: 1.1, speed: 5, bounty: 16, note: 'Someone out alone, a long way from the beach.' },
+  { key: 'smack', label: 'Fishing Smack', art: 'smack', length: 150, x: 1150, z: 1900, heading: 2.4, speed: 9, bounty: 24, note: 'Nets over the side and gulls arguing above it.' },
+  { key: 'sloop', label: 'Sloop', art: 'sloop', length: 190, x: 1900, z: 600, heading: 4.0, speed: 14, bounty: 34, note: 'Heeled right over and making good time.' },
+  { key: 'trawler', label: 'Trawler', art: 'trawler', length: 260, x: 2450, z: 2200, heading: 0.4, speed: 11, bounty: 46, note: 'Working her gear, and nothing else on her mind.' },
+  { key: 'schooner', label: 'Schooner', art: 'schooner', length: 320, x: 3050, z: 1200, heading: 3.3, speed: 16, bounty: 62, note: 'Two masts of canvas. You can hear the rigging.' },
+  { key: 'steamer', label: 'Steamer', art: 'steamer', length: 460, x: 3350, z: 2500, heading: 5.1, speed: 20, bounty: 88, note: 'A rust-streaked hull and a column of smoke.' },
+]
+
+export const SHIP_BY_KEY: Record<string, Ship> = Object.fromEntries(
+  SHIPS.map((s) => [s.key, s])
+)
+
+/* ------------------------------------------------------------------ */
 /* Sea life                                                            */
 /* ------------------------------------------------------------------ */
 
@@ -312,6 +400,8 @@ export interface OceanSave {
   seen: string[]
   /** Landmark keys you have swum into. */
   found: string[]
+  /** Ships you have come up alongside. */
+  ships: string[]
   /** How many of each species you have landed. */
   caught: Record<string, number>
   /** Deepest you have ever been, in metres. */
@@ -320,7 +410,7 @@ export interface OceanSave {
 }
 
 export function initialOcean(): OceanSave {
-  return { pearls: 0, fins: 0, mask: 0, lamp: 0, spear: 0, seen: [], found: [], caught: {}, deepest: 0, dives: 0 }
+  return { pearls: 0, fins: 0, mask: 0, lamp: 0, spear: 0, seen: [], found: [], ships: [], caught: {}, deepest: 0, dives: 0 }
 }
 
 export function gearValue(save: OceanSave, key: GearKey): number {

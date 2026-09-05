@@ -4,6 +4,7 @@ import { useMinigameProgress } from '../../state/useMinigameProgress'
 import {
   GEAR,
   LANDMARKS,
+  SHIPS,
   SPECIES,
   SURFACE_Y,
   VIEW,
@@ -16,9 +17,12 @@ import {
   homeZone,
   identifyRange,
   initialOcean,
+  surfaceAt,
+  waveAt,
   zoneAt,
   type GearKey,
   type OceanSave,
+  type Ship,
 } from './oceanData'
 import {
   makeFish,
@@ -37,6 +41,7 @@ import {
   drawLandmark,
   drawMotes,
   drawSeabed,
+  drawShip,
   drawSky,
   drawSurface,
   forwardOf,
@@ -67,6 +72,8 @@ import {
 
 interface World {
   fish: Fish[]
+  /** Vessels working the surface, on their own slow courses. */
+  ships: Ship[]
   cam: Camera
   motes: Mote[]
   t: number
@@ -87,7 +94,15 @@ interface World {
   deepest: number
 }
 
-/** Where you sit when floating: head and shoulders clear of the water. */
+/**
+ * How far your head rides above the mean level of the sea.
+ *
+ * Tuned by simulation against the real wave field: at this height, and
+ * with the lag below, calm water leaves you dry while the heavy sets put
+ * a wave over your head roughly thirty times in five minutes. Riding
+ * higher made the sea unable to touch you at all, which is what made it
+ * look painted on.
+ */
 const FLOAT_Y = SURFACE_Y - 30
 const PITCH_LIMIT = 1.15
 const TURN_RATE = 1.9
@@ -132,6 +147,7 @@ export function OceanMinigame({ onExit }: MinigameProps) {
     const cam: Camera = { x: 240, y: SURFACE_Y + 90, z: WORLD.depth / 2, yaw: Math.PI / 2, pitch: 0.1 }
     worldRef.current = {
       fish: populate(cam),
+      ships: SHIPS.map((sh) => ({ ...sh })),
       cam,
       motes: makeMotes(cam),
       t: 0,
@@ -345,11 +361,15 @@ export function OceanMinigame({ onExit }: MinigameProps) {
         hudAt = now
         const target = aimAt(w)
         const reach = gearValue(saveRef.current, 'spear')
-        const up = w.cam.y < SURFACE_Y + 6
+        // Head clear of the water, as opposed to still being up top with
+        // a crest passing over you - those are different things.
+        const up = w.cam.y < surfaceAt(w.cam.x, w.cam.z, w.t) + 6
         setHud({
-          floating: up,
-          depth: depthMetres(w.cam.y),
-          zone: up ? 'Floating' : zoneAt(w.cam.y).label,
+          floating: w.floating,
+          // Riding the swell moves you through the mean level, so the
+          // gauge would tick over while you are plainly on the surface.
+          depth: w.floating ? 0 : depthMetres(w.cam.y),
+          zone: w.floating ? (up ? 'Floating' : 'Under a wave') : zoneAt(w.cam.y).label,
           target: target ? target.sp.label : '',
           guarded: !!target?.sp.guarded,
           far: target
@@ -414,16 +434,26 @@ export function OceanMinigame({ onExit }: MinigameProps) {
        * top for as long as you like. Nothing pulls you under by accident;
        * going back down is a button press and nothing else.
        */
+      const water = surfaceAt(cam.x, cam.z, w.t)
       if (cam.y > SURFACE_Y + 25) w.wasDeep = true
-      if (!w.floating && w.wasDeep && cam.y <= SURFACE_Y) w.floating = true
+      if (!w.floating && w.wasDeep && cam.y <= water) w.floating = true
 
       if (w.floating) {
-        const bob = Math.sin(w.t * 0.0022) * 3
-        cam.y += (FLOAT_Y + bob - cam.y) * Math.min(1, dt * 6)
+        /*
+         * Bob on the swell, but sluggishly.
+         *
+         * Tracking the wave exactly meant the water never moved relative
+         * to you, so the sea looked dead flat however big the waves got.
+         * Lagging behind it means crests lift you late and drop you late,
+         * and a big one can close over your head - which is the whole
+         * point of having weather.
+         */
+        cam.y += (FLOAT_Y + waveAt(cam.x, cam.z, w.t) - cam.y) * Math.min(1, dt * 1.4)
         w.driftY = 0
-      } else if (cam.y < FLOAT_Y) {
-        // You cannot leave the water altogether.
-        cam.y = FLOAT_Y
+      } else if (cam.y < water - 46) {
+        // You cannot leave the water altogether - measured against the
+        // wave over you, not the mean, or a trough would trap you.
+        cam.y = water - 46
         w.driftY = Math.max(0, w.driftY)
       }
 
@@ -451,6 +481,30 @@ export function OceanMinigame({ onExit }: MinigameProps) {
             fish.panic = 0
           }
         }
+      }
+
+      // --- shipping -------------------------------------------------
+      for (const sh of w.ships) {
+        sh.x += Math.sin(sh.heading) * sh.speed * dt
+        sh.z += Math.cos(sh.heading) * sh.speed * dt
+        if (sh.x < 0) sh.x += WORLD.width
+        if (sh.x > WORLD.width) sh.x -= WORLD.width
+        if (sh.z < 0) sh.z += WORLD.depth
+        if (sh.z > WORLD.depth) sh.z -= WORLD.depth
+      }
+
+      for (const sh of w.ships) {
+        if (s.ships?.includes(sh.key)) continue
+        // Alongside on the surface, or directly under her hull.
+        const flat = Math.hypot(sh.x - cam.x, sh.z - cam.z)
+        if (flat > 240 || cam.y - SURFACE_Y > 420) continue
+        setSave((p) =>
+          p.ships?.includes(sh.key)
+            ? p
+            : { ...p, ships: [...(p.ships ?? []), sh.key], pearls: (p.pearls ?? 0) + sh.bounty }
+        )
+        showToast(`Logbook: ${sh.label} · +${sh.bounty} pearls`)
+        break
       }
 
       // --- discoveries ----------------------------------------------
@@ -500,6 +554,7 @@ export function OceanMinigame({ onExit }: MinigameProps) {
       type Item =
         | { kind: 'fish'; p: Projected; a: number; f: Fish }
         | { kind: 'mark'; p: Projected; a: number; lm: (typeof LANDMARKS)[number] }
+        | { kind: 'ship'; p: Projected; a: number; sh: Ship }
       const items: Item[] = []
 
       for (const lm of LANDMARKS) {
@@ -518,11 +573,22 @@ export function OceanMinigame({ onExit }: MinigameProps) {
         if (p.sx < -span || p.sx > VIEW.width + span || p.sy < -span || p.sy > VIEW.height + span) continue
         items.push({ kind: 'fish', p, a, f })
       }
+      // Hulls seen from below, hanging at the surface above you.
+      for (const sh of w.ships) {
+        const p = project(cam, sh.x, SURFACE_Y + waveAt(sh.x, sh.z, w.t), sh.z)
+        if (!p) continue
+        const a = clarity(p.depth, viewDist * 1.6)
+        if (a <= 0.02) continue
+        items.push({ kind: 'ship', p, a, sh })
+      }
       items.sort((m, n) => n.p.depth - m.p.depth)
 
       for (const item of items) {
         if (item.kind === 'mark') {
           drawLandmark(ctx!, item.lm, item.p, w.t, item.a)
+        } else if (item.kind === 'ship') {
+          const across = Math.sin(item.sh.heading - cam.yaw)
+          drawShip(ctx!, item.sh, item.p, across >= 0 ? 1 : -1, across, item.a, false, w.t)
         } else {
           const f = item.f
           // How side-on it is to you: broadside draws full width, coming
@@ -562,15 +628,28 @@ export function OceanMinigame({ onExit }: MinigameProps) {
 
       // Coming up for air: the sky and the sea from above fade in over the
       // last stretch, so surfacing is a rise rather than a jump cut.
-      // Fully above water by the time you are floating, or the underwater
-      // view bleeds through and washes the sea out.
-      const mix = Math.max(0, Math.min(1, (SURFACE_Y + 14 - cam.y) / 34))
+      // Judged against the water actually above you, so a passing crest
+      // ducks you under and the view goes green for a moment.
+      const water = surfaceAt(cam.x, cam.z, w.t)
+      const mix = Math.max(0, Math.min(1, (water + 8 - cam.y) / 30))
       if (mix > 0) {
         const layer = skyRef.current!
         const lctx = layer.getContext('2d')!
         lctx.clearRect(0, 0, VIEW.width, VIEW.height)
         drawSky(lctx, cam, w.t)
         drawSurface(lctx, cam, viewDist, w.t, true)
+        const seen: { p: Projected; sh: Ship }[] = []
+        for (const sh of w.ships) {
+          const p = project(cam, sh.x, SURFACE_Y + waveAt(sh.x, sh.z, w.t), sh.z)
+          if (!p) continue
+          seen.push({ p, sh })
+        }
+        seen.sort((m, n) => n.p.depth - m.p.depth)
+        for (const { p, sh } of seen) {
+          const across = Math.sin(sh.heading - cam.yaw)
+          const fade = Math.max(0, Math.min(1, 1 - p.depth / 4200))
+          drawShip(lctx, sh, p, across >= 0 ? 1 : -1, across, fade, true, w.t)
+        }
         ctx!.save()
         ctx!.globalAlpha = mix
         ctx!.drawImage(layer, 0, 0)
@@ -740,6 +819,7 @@ export function OceanMinigame({ onExit }: MinigameProps) {
             <div style={S.tally}>
               <Tally label="Species" value={`${save.seen.length} / ${SPECIES.length}`} />
               <Tally label="Places" value={`${save.found.length} / ${LANDMARKS.length}`} />
+              <Tally label="Ships" value={`${(save.ships ?? []).length} / ${SHIPS.length}`} />
               <Tally label="Deepest" value={`${Math.max(save.deepest ?? 0, hud.depth)} m`} />
               <Tally label="Dives" value={String(save.dives ?? 0)} />
             </div>
@@ -771,6 +851,23 @@ export function OceanMinigame({ onExit }: MinigameProps) {
                       </div>
                     )
                   })}
+                </div>
+              )
+            })}
+
+            <div style={S.sectionLabel}>Shipping</div>
+            {SHIPS.map((sh) => {
+              const met = (save.ships ?? []).includes(sh.key)
+              return (
+                <div key={sh.key} style={S.logRow}>
+                  <span style={{ ...S.swatch, background: met ? '#c8b48a' : '#3d4753' }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={S.logName}>{met ? sh.label : 'A sail on the horizon'}</div>
+                    <div style={S.logNote}>
+                      {met ? sh.note : 'Come up alongside her, or pass under her hull.'}
+                    </div>
+                  </div>
+                  <span style={S.logCount}>{met ? `+${sh.bounty}` : ''}</span>
                 </div>
               )
             })}
