@@ -9,6 +9,7 @@ import { initialFruit } from '../minigames/fruit/fruitData'
 import { initialVet } from '../minigames/vet/vetData'
 import { initialDoctor } from '../minigames/doctor/doctorData'
 import { initialSalon } from '../minigames/salon/salonData'
+import { initialOcean } from '../minigames/ocean/oceanData'
 import { saveKeysOf, shiftTimestamps } from './gameClock'
 import { TRADE_IDS } from '../economy/trades'
 
@@ -117,11 +118,11 @@ export const useHomesteadStore = create<HomesteadState>()(
       tiles: buildStarterMap(),
       player: { x: 0, y: 0 },
       activeMinigameId: null,
-      progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet(), doctor: initialDoctor(), salon: initialSalon() },
+      progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet(), doctor: initialDoctor(), salon: initialSalon(), ocean: initialOcean() },
       purses: startingPurses(),
       // Everything starts frozen; the first game you open is the first to run.
       pausedAt: Object.fromEntries(
-        Object.keys({ ...initialProgress(), pottery: 0, lumber: 0, fruit: 0, vet: 0, doctor: 0, salon: 0 }).map((k) => [
+        Object.keys({ ...initialProgress(), pottery: 0, lumber: 0, fruit: 0, vet: 0, doctor: 0, salon: 0, ocean: 0 }).map((k) => [
           k,
           Date.now(),
         ])
@@ -250,7 +251,7 @@ export const useHomesteadStore = create<HomesteadState>()(
 
       resetSave: () =>
         set({
-          progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet(), doctor: initialDoctor(), salon: initialSalon() },
+          progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet(), doctor: initialDoctor(), salon: initialSalon(), ocean: initialOcean() },
           player: { x: 0, y: 0 },
           purses: startingPurses(),
           inventory: {},
@@ -260,7 +261,7 @@ export const useHomesteadStore = create<HomesteadState>()(
     }),
     {
       name: SAVE_KEY,
-      version: 6,
+      version: 7,
       storage: createJSONStorage(() => localStorage),
       // Runs before rehydration, so this captures the previous session's
       // save rather than anything this one has written.
@@ -344,6 +345,11 @@ export const useHomesteadStore = create<HomesteadState>()(
         const pausedAt: Record<string, number> =
           (state.pausedAt as Record<string, number>) ??
           Object.fromEntries(Object.keys(progress).map((k) => [k, Date.now()]))
+
+        // v6 -> v7: Ocean Explorers arrives with its own logbook. Purely
+        // additive - it has no purse and touches nothing that already
+        // existed, so every other game's save passes through untouched.
+        if (progress.ocean === undefined) progress.ocean = initialOcean()
 
         return { ...state, progress, purses, pausedAt }
       },

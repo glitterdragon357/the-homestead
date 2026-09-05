@@ -13,6 +13,7 @@ import { VetMinigame } from './vet/VetMinigame'
 import { vetPending, type VetSave } from './vet/vetData'
 import { DoctorMinigame } from './doctor/DoctorMinigame'
 import { doctorPending, type DoctorSave } from './doctor/doctorData'
+import { OceanMinigame } from './ocean/OceanMinigame'
 import { SalonMinigame } from './salon/SalonMinigame'
 import { salonPending, type SalonSave } from './salon/salonData'
 
@@ -123,6 +124,13 @@ export const MINIGAME_REGISTRY: Record<string, MinigameDefinition> = {
     description: 'Hook and reel in fish for the crate.',
     icon: '🎣',
     component: FishingMinigame,
+  },
+  ocean: {
+    id: 'ocean',
+    name: 'Ocean Explorers',
+    description: 'Dive the shelf: hunt fish, or just go and see what is down there.',
+    icon: '\u{1F93F}',
+    component: OceanMinigame,
   },
   kitten: {
     id: 'kitten',

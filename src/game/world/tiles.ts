@@ -72,6 +72,25 @@ export function buildStarterMap(): HomesteadTile[] {
     }
   }
 
+  // Open sea along the far shore. Deliberately its own water, nowhere
+  // near the pond - diving and pond fishing are unrelated games.
+  for (const [x, y] of [
+    [0, 6],
+    [1, 6],
+    [0, 7],
+    [1, 7],
+  ]) {
+    const t = tiles.find((t) => t.x === x && t.y === y)
+    if (t) {
+      t.type = 'water'
+      t.walkable = true
+      t.label = 'Ocean'
+      t.minigameId = 'ocean'
+    }
+  }
+  const shore = tiles.find((t) => t.x === 0 && t.y === 6)
+  if (shore) shore.icon = '\u{1F93F}'
+
   for (const p of PLACEMENTS) {
     const tile = tiles.find((t) => t.x === p.x && t.y === p.y)
     if (!tile) continue
