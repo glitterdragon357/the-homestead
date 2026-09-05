@@ -4,6 +4,9 @@ import { useMinigameProgress } from '../../state/useMinigameProgress'
 import {
   GEAR,
   LANDMARKS,
+  PX_PER_M,
+  ROLLER_M,
+  ROLL_DAMAGE,
   SHIPS,
   SPECIES,
   SURFACE_Y,
@@ -17,7 +20,9 @@ import {
   homeZone,
   identifyRange,
   initialOcean,
+  mealValue,
   surfaceAt,
+  waveAmpAt,
   waveAt,
   zoneAt,
   type GearKey,
@@ -84,6 +89,10 @@ interface World {
   hover: { on: boolean; x: number; y: number }
   /** Up on the surface, and staying there until you choose to dive. */
   floating: boolean
+  /** Being driven under by a breaking wave until this moment. */
+  rollUntil: number
+  /** No second wave may roll you before this. */
+  nextRollAt: number
   /** Have you been properly under since the last dive? Stops the surface
    *  grabbing you again the instant you push off it. */
   wasDeep: boolean
@@ -95,15 +104,13 @@ interface World {
 }
 
 /**
- * How far your head rides above the mean level of the sea.
+ * How far your eyes ride above the mean level of the sea.
  *
- * Tuned by simulation against the real wave field: at this height, and
- * with the lag below, calm water leaves you dry while the heavy sets put
- * a wave over your head roughly thirty times in five minutes. Riding
- * higher made the sea unable to touch you at all, which is what made it
- * look painted on.
+ * Three quarters of a metre - a swimmer's head, not a platform. This was
+ * the real reason the sea never looked big: floating seven metres up,
+ * even a house-sized wave is something you look down on.
  */
-const FLOAT_Y = SURFACE_Y - 30
+const FLOAT_Y = SURFACE_Y - 3
 const PITCH_LIMIT = 1.15
 const TURN_RATE = 1.9
 const PITCH_RATE = 1.5
@@ -125,6 +132,8 @@ export function OceanMinigame({ onExit }: MinigameProps) {
   const sheetRef = useRef(sheet)
   sheetRef.current = sheet
 
+  /** Guards the roll against firing twice in one crest. */
+  const rolledRef = useRef(false)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<number | undefined>(undefined)
   const [hud, setHud] = useState({
@@ -155,6 +164,8 @@ export function OceanMinigame({ onExit }: MinigameProps) {
       stick: { on: false, ox: 0, oy: 0, x: 0, y: 0 },
       hover: { on: false, x: 0, y: 0 },
       floating: false,
+      rollUntil: 0,
+      nextRollAt: 0,
       wasDeep: true,
       driftX: 0,
       driftY: 0,
@@ -216,12 +227,16 @@ export function OceanMinigame({ onExit }: MinigameProps) {
   const dive = useCallback(() => {
     const w = worldRef.current
     if (!w?.floating) return
+    if ((saveRef.current.health ?? 100) <= 0) {
+      showToast('Too battered to go down. Eat something first - Gear.')
+      return
+    }
     w.floating = false
     w.wasDeep = false
     // Tip your head down and push off, so the dive actually takes.
     w.cam.pitch = Math.max(w.cam.pitch, 0.5)
     w.driftY = 150
-  }, [])
+  }, [showToast])
 
   const spear = useCallback(
     (sx: number, sy: number) => {
@@ -440,16 +455,30 @@ export function OceanMinigame({ onExit }: MinigameProps) {
 
       if (w.floating) {
         /*
-         * Bob on the swell, but sluggishly.
-         *
-         * Tracking the wave exactly meant the water never moved relative
-         * to you, so the sea looked dead flat however big the waves got.
-         * Lagging behind it means crests lift you late and drop you late,
-         * and a big one can close over your head - which is the whole
-         * point of having weather.
+         * A swimmer rides ordinary swell rather than being dunked by it,
+         * however big it looks - so the float tracks the wave closely and
+         * only a genuine roller puts you under.
          */
-        cam.y += (FLOAT_Y + waveAt(cam.x, cam.z, w.t) - cam.y) * Math.min(1, dt * 1.4)
-        w.driftY = 0
+        const amp = waveAmpAt(cam.x, cam.z, w.t)
+        const metres = (amp * 2) / PX_PER_M
+        const onTheCrest = waveAt(cam.x, cam.z, w.t) > amp * 0.72
+        if (metres >= ROLLER_M && onTheCrest && w.t > w.nextRollAt && !rolledRef.current) {
+          rolledRef.current = true
+          w.nextRollAt = w.t + 7000
+          w.rollUntil = w.t + 1300
+          const hit = Math.round(metres)
+          setSave((p) => ({ ...p, health: Math.max(0, (p.health ?? 100) - ROLL_DAMAGE) }))
+          showToast(`A ${hit} metre wave rolls you under · -${ROLL_DAMAGE} health`)
+          window.setTimeout(() => (rolledRef.current = false), 200)
+        }
+
+        if (w.t < w.rollUntil) {
+          // Driven under and tumbled; the surface lets go of you.
+          w.driftY += 300 * dt
+        } else {
+          cam.y += (FLOAT_Y + waveAt(cam.x, cam.z, w.t) - cam.y) * Math.min(1, dt * 7)
+          w.driftY = 0
+        }
       } else if (cam.y < water - 46) {
         // You cannot leave the water altogether - measured against the
         // wave over you, not the mean, or a trough would trap you.
@@ -701,6 +730,25 @@ export function OceanMinigame({ onExit }: MinigameProps) {
   /* Chrome                                                            */
   /* ---------------------------------------------------------------- */
 
+  /** Eat one of your catch. The larder is whatever you have speared. */
+  function eat(key: string) {
+    const sp = SPECIES.find((x) => x.key === key)
+    if (!sp) return
+    const have = save.caught?.[key] ?? 0
+    if (have <= 0) return
+    if ((save.health ?? 100) >= 100) {
+      showToast('Not hungry - you are in one piece.')
+      return
+    }
+    const gain = mealValue(sp)
+    setSave((s) => ({
+      ...s,
+      caught: { ...s.caught, [key]: (s.caught?.[key] ?? 0) - 1 },
+      health: Math.min(100, (s.health ?? 100) + gain),
+    }))
+    showToast(`Ate the ${sp.label.toLowerCase()} · +${gain} health`)
+  }
+
   function buy(key: GearKey) {
     const list = GEAR[key].list
     const owned = saveRef.current[key] ?? 0
@@ -713,6 +761,8 @@ export function OceanMinigame({ onExit }: MinigameProps) {
     setSave((s) => ({ ...s, pearls: s.pearls - next.cost, [key]: owned + 1 }))
     showToast(`Fitted: ${next.label}`)
   }
+
+  const health = save.health ?? 100
 
   return (
     <div style={S.wrap}>
@@ -773,13 +823,35 @@ export function OceanMinigame({ onExit }: MinigameProps) {
             <span style={S.zone}>{hud.zone}</span>
             <span style={S.depth}>{hud.depth} m</span>
           </div>
-          <span style={S.hint}>
-            {hud.floating
-              ? 'floating · press Dive to go back under'
-              : 'drag to swim · click a fish to spear it'}
-          </span>
+
+          {/* Health lives here, on the glass, not tucked away in a menu -
+              it is the thing you need to see while the sea is hitting you. */}
+          <div style={S.healthWrap}>
+            <span style={S.healthLabel}>Health</span>
+            <div style={S.healthTrack}>
+              <div
+                style={{
+                  ...S.healthFill,
+                  width: `${Math.max(0, Math.min(100, save.health ?? 100))}%`,
+                  background: health > 55 ? '#7cd88f' : health > 25 ? '#e0b84a' : '#e2584f',
+                }}
+              />
+            </div>
+            <span style={{ ...S.healthNum, color: health > 25 ? '#eaf4fa' : '#ff9b93' }}>
+              {Math.round(health)}
+            </span>
+          </div>
+
           <span style={S.pearls}>◍ {save.pearls ?? 0}</span>
         </div>
+
+        <div style={S.hintLine}>
+          {hud.floating ? 'floating · press Dive to go back under' : 'drag to swim · click a fish to spear it'}
+        </div>
+
+        {health <= 0 && (
+          <div style={S.battered}>Too battered to dive — eat something from Gear</div>
+        )}
 
         <div style={S.bottomBar}>
           {hud.floating && (
@@ -893,6 +965,37 @@ export function OceanMinigame({ onExit }: MinigameProps) {
 
         {sheet === 'gear' && (
           <Sheet title="Gear" onClose={() => setSheet(null)}>
+            <div style={S.sectionLabel}>Galley</div>
+            <p style={S.sheetHint}>
+              Waves take it out of you. Eat what you have speared to put it back — the bigger
+              the fish, the better the meal.
+            </p>
+            <div style={S.mealRow}>
+              <span style={{ flex: 1, fontSize: 13 }}>
+                Health {Math.round(save.health ?? 100)} / 100
+              </span>
+            </div>
+            {SPECIES.filter((sp) => (save.caught?.[sp.key] ?? 0) > 0).length === 0 && (
+              <p style={S.sheetHint}>
+                Nothing in the larder. Spear a fish and it keeps until you need it.
+              </p>
+            )}
+            {SPECIES.filter((sp) => (save.caught?.[sp.key] ?? 0) > 0).map((sp) => (
+              <div key={sp.key} style={S.mealRow}>
+                <span style={{ ...S.swatch, background: sp.body }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={S.logName}>
+                    {sp.label} <span style={S.logCount}>×{save.caught?.[sp.key] ?? 0}</span>
+                  </div>
+                  <div style={S.logNote}>worth {mealValue(sp)} health</div>
+                </div>
+                <button style={S.eatBtn} onClick={() => eat(sp.key)}>
+                  Eat
+                </button>
+              </div>
+            ))}
+
+            <div style={S.sectionLabel}>Kit</div>
             <p style={S.sheetHint}>
               Pearls stay in this game — nothing here is shared with the homestead.
             </p>
@@ -999,8 +1102,62 @@ const S: Record<string, React.CSSProperties> = {
   readout: { display: 'flex', flexDirection: 'column', lineHeight: 1.15 },
   zone: { fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', opacity: 0.8 },
   depth: { fontSize: 19, fontWeight: 700 },
-  hint: { fontSize: 11, opacity: 0.6, letterSpacing: 0.3 },
+  hintLine: {
+    position: 'absolute',
+    top: 46,
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    fontSize: 11,
+    color: '#eaf4fa',
+    opacity: 0.62,
+    letterSpacing: 0.3,
+    pointerEvents: 'none',
+  },
+  battered: {
+    position: 'absolute',
+    top: 66,
+    left: '50%',
+    transform: 'translateX(-50%)',
+    background: 'rgba(180,60,50,0.9)',
+    color: '#fff',
+    fontSize: 12.5,
+    fontWeight: 600,
+    padding: '4px 12px',
+    borderRadius: 12,
+    pointerEvents: 'none',
+  },
   pearls: { fontSize: 16, fontWeight: 700, color: '#ffe6a8' },
+  healthWrap: { display: 'flex', alignItems: 'center', gap: 7, flex: '0 1 240px' },
+  healthLabel: { fontSize: 10.5, letterSpacing: 0.6, textTransform: 'uppercase', opacity: 0.85 },
+  healthTrack: {
+    flex: 1,
+    height: 8,
+    borderRadius: 5,
+    background: 'rgba(255,255,255,0.24)',
+    overflow: 'hidden',
+  },
+  healthFill: { height: '100%', borderRadius: 5, transition: 'width 200ms ease' },
+  healthNum: { fontSize: 14, fontWeight: 700, minWidth: 26, textAlign: 'right' },
+  mealRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: '7px 9px',
+    background: 'rgba(255,255,255,0.05)',
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  eatBtn: {
+    padding: '7px 14px',
+    border: 'none',
+    borderRadius: 9,
+    background: '#7cd88f',
+    color: '#12301c',
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
 
   bottomBar: {
     position: 'absolute',

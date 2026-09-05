@@ -113,9 +113,9 @@ export function gloomAt(y: number): number {
  * so they all move together instead of sliding through each other.
  */
 /**
- * How big the sea is running, here and now: 0 for a flat patch, 1 for the
- * heaviest set. Very long wavelengths and a very slow drift, so it reads
- * as weather moving across the water rather than as noise.
+ * How big the sea is running, here and now: 0 for a flat calm, 1 for a
+ * full gale. Very long wavelengths and a very slow drift, so it reads as
+ * weather crossing the water rather than as noise.
  */
 export function seaState(x: number, z: number, t: number): number {
   const a = Math.sin(x * 0.00035 + t * 0.00013)
@@ -124,26 +124,44 @@ export function seaState(x: number, z: number, t: number): number {
   return Math.max(0, Math.min(1, (a + b + c + 2.2) / 4.4))
 }
 
-/** The swell before the sea state is applied. Peaks at about 37. */
-function swellAt(x: number, z: number, t: number): number {
-  return (
-    Math.sin(x * 0.0042 + t * 0.0011) * 15 +
-    Math.sin(z * 0.0031 - t * 0.0009) * 11 +
-    Math.sin((x + z) * 0.0016 + t * 0.0006) * 8 +
-    // A little chop on top of the swell, so crests are not all identical.
-    Math.sin(x * 0.011 - t * 0.0021) * 3
-  )
+/**
+ * The shape of the swell, normalised to roughly -1..1.
+ *
+ * The wavelengths matter more than the height. They are set to real
+ * ocean numbers - crests 100 to 190 metres apart - because a wave with a
+ * kilometre between crests is a hillside however tall you make it, and
+ * reads as a flat sea. These are close enough together to tower.
+ */
+function swellShape(x: number, z: number, t: number): number {
+  const raw =
+    Math.sin(x * 0.0105 + t * 0.0016) * 1.0 +
+    Math.sin(z * 0.0084 - t * 0.0013) * 0.7 +
+    Math.sin((x + z) * 0.0062 + t * 0.0009) * 0.5 +
+    // chop riding on the swell
+    Math.sin(x * 0.045 - t * 0.0034) * 0.18
+  return raw / 2.38
 }
 
+/** Metres of water between trough and crest, at real ocean scale. */
+export const CALM_WAVE_M = 0.6
+export const STORM_WAVE_M = 19
+
 /**
- * Wave height at a point.
- *
- * The swell is scaled by the sea state, so the same water runs from a
- * gentle ripple up to five times that in the heavy sets - the sea is
- * never one uniform size for long.
+ * Half the trough-to-crest height here, in world units - how far the
+ * water rises above the mean. Ranges from a ripple to a wave taller than
+ * a house, because the sea should not be one size.
  */
+export function waveAmpAt(x: number, z: number, t: number): number {
+  const state = seaState(x, z, t)
+  const metres = CALM_WAVE_M + (STORM_WAVE_M - CALM_WAVE_M) * Math.pow(state, 1.7)
+  return (metres / 2) * PX_PER_M
+}
+
+/** Any wave at least this big can roll a swimmer under. */
+export const ROLLER_M = 12
+
 export function waveAt(x: number, z: number, t: number): number {
-  return swellAt(x, z, t) * (1 + 4 * seaState(x, z, t))
+  return swellShape(x, z, t) * waveAmpAt(x, z, t)
 }
 
 /**
@@ -404,13 +422,15 @@ export interface OceanSave {
   ships: string[]
   /** How many of each species you have landed. */
   caught: Record<string, number>
+  /** 0 to 100. Waves knock it down; eating what you catch builds it back. */
+  health: number
   /** Deepest you have ever been, in metres. */
   deepest: number
   dives: number
 }
 
 export function initialOcean(): OceanSave {
-  return { pearls: 0, fins: 0, mask: 0, lamp: 0, spear: 0, seen: [], found: [], ships: [], caught: {}, deepest: 0, dives: 0 }
+  return { pearls: 0, fins: 0, mask: 0, lamp: 0, spear: 0, seen: [], found: [], ships: [], caught: {}, health: 100, deepest: 0, dives: 0 }
 }
 
 export function gearValue(save: OceanSave, key: GearKey): number {
@@ -435,6 +455,17 @@ export function fleeRange(sp: Species, diverSpeed: number, maxSpeed: number): nu
   const haste = Math.min(1, diverSpeed / Math.max(1, maxSpeed))
   return sp.wary * (34 + haste * 150)
 }
+
+/**
+ * What a fish is worth eating, in health. Bigger fish are a bigger meal,
+ * so the same catch that pays best also feeds you best.
+ */
+export function mealValue(sp: Species): number {
+  return Math.round(Math.min(46, 11 + sp.pearls * 0.55))
+}
+
+/** Health taken by a wave breaking over you. */
+export const ROLL_DAMAGE = 14
 
 /** Total pearls the logbook represents, for the summary line. */
 export function logbookValue(save: OceanSave): number {

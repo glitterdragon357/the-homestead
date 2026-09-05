@@ -235,11 +235,19 @@ export function drawSurface(
   // Fine mesh close in, coarse further out: the swell needs real shape
   // where you can see it, and nothing but a suggestion at two thousand
   // units. One grid for both wasted most of its cells on the horizon.
+  /*
+   * Cell size grows with distance. Seen from a swimmer's eye the water
+   * is viewed almost edge-on, so a cell a hundred units away covers a
+   * sliver of screen while one close by fills a third of it - a single
+   * grid either shatters the foreground or costs a fortune at the
+   * horizon. These bands keep both ends about the same size on the glass.
+   */
   const bands: [number, number, number][] = above
     ? [
-        [34, 0, 300],
-        [90, 300, 900],
-        [240, 900, 3200],
+        [16, 0, 90],
+        [40, 90, 260],
+        [100, 260, 800],
+        [260, 800, 3200],
       ]
     : [[130, 0, Math.min(viewDist, 1500)]]
 
