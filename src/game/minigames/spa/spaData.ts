@@ -64,16 +64,16 @@ export interface Occasion {
 }
 
 export const OCCASIONS: Occasion[] = [
-  { key: 'beach', label: 'a beach day', formality: 0, line: 'I want to look like I have nowhere to be.', fee: 44 },
-  { key: 'festival', label: 'a festival', formality: 0, line: 'Three days in a field. Make it count.', fee: 52 },
-  { key: 'coffee', label: 'a coffee date', formality: 1, line: 'Nothing that looks like I tried too hard.', fee: 58 },
-  { key: 'firstdate', label: 'a first date', formality: 1, line: 'I want to look like myself, but better.', fee: 66 },
-  { key: 'portrait', label: 'a family portrait', formality: 2, line: 'This one goes on the wall for thirty years.', fee: 78 },
-  { key: 'interview', label: 'a job interview', formality: 2, line: 'They need to take me seriously.', fee: 86 },
-  { key: 'shoot', label: 'a photo shoot', formality: 2, line: 'The camera should not be able to look away.', fee: 96 },
-  { key: 'graduation', label: 'a graduation', formality: 2, line: 'My whole family will be there with cameras.', fee: 92 },
-  { key: 'wedding', label: 'a wedding', formality: 3, line: "It's not my wedding, so don't let me upstage her.", fee: 118 },
-  { key: 'gala', label: 'a gala', formality: 3, line: 'I want the whole room to turn around.', fee: 140 },
+  { key: 'beach', label: 'a beach day', formality: 0, line: 'I want to look like I have nowhere to be.', fee: 30 },
+  { key: 'festival', label: 'a festival', formality: 0, line: 'Three days in a field. Make it count.', fee: 36 },
+  { key: 'coffee', label: 'a coffee date', formality: 1, line: 'Nothing that looks like I tried too hard.', fee: 40 },
+  { key: 'firstdate', label: 'a first date', formality: 1, line: 'I want to look like myself, but better.', fee: 46 },
+  { key: 'portrait', label: 'a family portrait', formality: 2, line: 'This one goes on the wall for thirty years.', fee: 54 },
+  { key: 'interview', label: 'a job interview', formality: 2, line: 'They need to take me seriously.', fee: 60 },
+  { key: 'shoot', label: 'a photo shoot', formality: 2, line: 'The camera should not be able to look away.', fee: 66 },
+  { key: 'graduation', label: 'a graduation', formality: 2, line: 'My whole family will be there with cameras.', fee: 64 },
+  { key: 'wedding', label: 'a wedding', formality: 3, line: "It's not my wedding, so don't let me upstage her.", fee: 82 },
+  { key: 'gala', label: 'a gala', formality: 3, line: 'I want the whole room to turn around.', fee: 98 },
 ]
 
 export const OCCASION_BY_KEY: Record<string, Occasion> = Object.fromEntries(
@@ -132,16 +132,16 @@ export const HAIR_STYLES: HairStyle[] = [
   { key: 'ponytail', label: 'Ponytail', vibe: 'natural', formality: 1, cost: 0 },
   { key: 'bob', label: 'Sharp bob', vibe: 'classic', formality: 2, cost: 0 },
   { key: 'bun', label: 'Neat bun', vibe: 'classic', formality: 3, cost: 0 },
-  { key: 'waves', label: 'Soft waves', vibe: 'natural', formality: 2, cost: 130 },
-  { key: 'curls', label: 'Big curls', vibe: 'bold', formality: 2, cost: 160 },
-  { key: 'braids', label: 'Braids', vibe: 'playful', formality: 1, cost: 190 },
-  { key: 'crop', label: 'Cropped', vibe: 'bold', formality: 2, cost: 210 },
-  { key: 'afro', label: 'Afro', vibe: 'bold', formality: 2, cost: 190 },
-  { key: 'topknot', label: 'Messy topknot', vibe: 'playful', formality: 0, cost: 120 },
-  { key: 'buns', label: 'Twin buns', vibe: 'playful', formality: 2, cost: 170 },
-  { key: 'chignon', label: 'Low chignon', vibe: 'natural', formality: 3, cost: 200 },
-  { key: 'garland', label: 'Braided crown', vibe: 'playful', formality: 3, cost: 230 },
-  { key: 'updo', label: 'Sculpted updo', vibe: 'bold', formality: 3, cost: 280 },
+  { key: 'waves', label: 'Soft waves', vibe: 'natural', formality: 2, cost: 70 },
+  { key: 'curls', label: 'Big curls', vibe: 'bold', formality: 2, cost: 90 },
+  { key: 'braids', label: 'Braids', vibe: 'playful', formality: 1, cost: 100 },
+  { key: 'crop', label: 'Cropped', vibe: 'bold', formality: 2, cost: 120 },
+  { key: 'afro', label: 'Afro', vibe: 'bold', formality: 2, cost: 100 },
+  { key: 'topknot', label: 'Messy topknot', vibe: 'playful', formality: 0, cost: 70 },
+  { key: 'buns', label: 'Twin buns', vibe: 'playful', formality: 2, cost: 90 },
+  { key: 'chignon', label: 'Low chignon', vibe: 'natural', formality: 3, cost: 110 },
+  { key: 'garland', label: 'Braided crown', vibe: 'playful', formality: 3, cost: 130 },
+  { key: 'updo', label: 'Sculpted updo', vibe: 'bold', formality: 3, cost: 150 },
 ]
 
 export interface HairColour {
@@ -159,15 +159,15 @@ export const HAIR_COLOURS: HairColour[] = [
   { key: 'brown', label: 'Dark brown', hex: '#4a3527', shade: '#33241a', family: 'brown', vibe: 'natural', cost: 0 },
   { key: 'chestnut', label: 'Chestnut', hex: '#6f4426', shade: '#52301a', family: 'brown', vibe: 'natural', cost: 0 },
   { key: 'blonde', label: 'Honey blonde', hex: '#c99a4e', shade: '#a67a36', family: 'yellow', vibe: 'classic', cost: 0 },
-  { key: 'auburn', label: 'Auburn', hex: '#8f3a20', shade: '#6d2914', family: 'red', vibe: 'bold', cost: 110 },
-  { key: 'platinum', label: 'Platinum', hex: '#ddd2bd', shade: '#bdb098', family: 'white', vibe: 'bold', cost: 150 },
-  { key: 'silver', label: 'Silver', hex: '#b6bcc4', shade: '#949aa3', family: 'grey', vibe: 'bold', cost: 170 },
-  { key: 'rose', label: 'Rose pink', hex: '#d97f9c', shade: '#b8607d', family: 'pink', vibe: 'playful', cost: 200 },
-  { key: 'copper', label: 'Copper', hex: '#b85a26', shade: '#8f421a', family: 'orange', vibe: 'natural', cost: 120 },
-  { key: 'moss', label: 'Moss green', hex: '#4a7a3a', shade: '#375c2a', family: 'green', vibe: 'playful', cost: 230 },
-  { key: 'lilac', label: 'Lilac', hex: '#a98cc9', shade: '#8a6fa8', family: 'purple', vibe: 'playful', cost: 220 },
-  { key: 'teal', label: 'Deep teal', hex: '#2f8a86', shade: '#226b68', family: 'blue', vibe: 'playful', cost: 240 },
-  { key: 'scarlet', label: 'Scarlet', hex: '#c02f2f', shade: '#9a2020', family: 'red', vibe: 'playful', cost: 250 },
+  { key: 'auburn', label: 'Auburn', hex: '#8f3a20', shade: '#6d2914', family: 'red', vibe: 'bold', cost: 60 },
+  { key: 'platinum', label: 'Platinum', hex: '#ddd2bd', shade: '#bdb098', family: 'white', vibe: 'bold', cost: 80 },
+  { key: 'silver', label: 'Silver', hex: '#b6bcc4', shade: '#949aa3', family: 'grey', vibe: 'bold', cost: 90 },
+  { key: 'rose', label: 'Rose pink', hex: '#d97f9c', shade: '#b8607d', family: 'pink', vibe: 'playful', cost: 110 },
+  { key: 'copper', label: 'Copper', hex: '#b85a26', shade: '#8f421a', family: 'orange', vibe: 'natural', cost: 70 },
+  { key: 'moss', label: 'Moss green', hex: '#4a7a3a', shade: '#375c2a', family: 'green', vibe: 'playful', cost: 130 },
+  { key: 'lilac', label: 'Lilac', hex: '#a98cc9', shade: '#8a6fa8', family: 'purple', vibe: 'playful', cost: 120 },
+  { key: 'teal', label: 'Deep teal', hex: '#2f8a86', shade: '#226b68', family: 'blue', vibe: 'playful', cost: 130 },
+  { key: 'scarlet', label: 'Scarlet', hex: '#c02f2f', shade: '#9a2020', family: 'red', vibe: 'playful', cost: 140 },
 ]
 
 /* ------------------------------------------------------------------ */
@@ -187,19 +187,19 @@ export const LIPS: MakeupOption[] = [
   { key: 'bare', label: 'Balm', hex: '#c98b7f', vibe: 'natural', family: 'brown', cost: 0 },
   { key: 'rose', label: 'Rose', hex: '#c9647a', vibe: 'classic', family: 'pink', cost: 0 },
   { key: 'red', label: 'Red', hex: '#b8262f', vibe: 'bold', family: 'red', cost: 0 },
-  { key: 'berry', label: 'Berry', hex: '#8a2f52', vibe: 'bold', family: 'purple', cost: 90 },
-  { key: 'coral', label: 'Coral', hex: '#e0705a', vibe: 'playful', family: 'orange', cost: 90 },
-  { key: 'plum', label: 'Deep plum', hex: '#5e2038', vibe: 'bold', family: 'purple', cost: 140 },
+  { key: 'berry', label: 'Berry', hex: '#8a2f52', vibe: 'bold', family: 'purple', cost: 50 },
+  { key: 'coral', label: 'Coral', hex: '#e0705a', vibe: 'playful', family: 'orange', cost: 50 },
+  { key: 'plum', label: 'Deep plum', hex: '#5e2038', vibe: 'bold', family: 'purple', cost: 80 },
 ]
 
 export const SHADOWS: MakeupOption[] = [
   { key: 'none', label: 'None', hex: 'none', vibe: 'natural', family: 'brown', cost: 0 },
   { key: 'taupe', label: 'Taupe', hex: '#a08978', vibe: 'natural', family: 'brown', cost: 0 },
   { key: 'bronze', label: 'Bronze', hex: '#b07a3a', vibe: 'classic', family: 'gold', cost: 0 },
-  { key: 'smoke', label: 'Smoky', hex: '#4a4550', vibe: 'bold', family: 'grey', cost: 110 },
-  { key: 'emerald', label: 'Emerald', hex: '#2f8a5e', vibe: 'playful', family: 'green', cost: 130 },
-  { key: 'violet', label: 'Violet', hex: '#7d5aa8', vibe: 'playful', family: 'purple', cost: 130 },
-  { key: 'glitter', label: 'Gold glitter', hex: '#e0bb4f', vibe: 'playful', family: 'gold', cost: 170 },
+  { key: 'smoke', label: 'Smoky', hex: '#4a4550', vibe: 'bold', family: 'grey', cost: 60 },
+  { key: 'emerald', label: 'Emerald', hex: '#2f8a5e', vibe: 'playful', family: 'green', cost: 70 },
+  { key: 'violet', label: 'Violet', hex: '#7d5aa8', vibe: 'playful', family: 'purple', cost: 70 },
+  { key: 'glitter', label: 'Gold glitter', hex: '#e0bb4f', vibe: 'playful', family: 'gold', cost: 90 },
 ]
 
 /* ------------------------------------------------------------------ */
@@ -233,54 +233,54 @@ export const WARDROBE: Garment[] = [
   { key: 'jumper', label: 'Big soft jumper', slot: 'outfit', cut: 'separates', formality: 0, vibe: 'natural', family: 'brown', hex: '#a8896b', accent: '#5e5348', cost: 0, art: 'separates' },
 
   // --- bought ---
-  { key: 'linen', label: 'Linen set', slot: 'outfit', cut: 'separates', formality: 1, vibe: 'natural', family: 'white', hex: '#e2dac6', accent: '#c4b89c', cost: 120, art: 'separates' },
-  { key: 'sunhat-dress', label: 'Floral wrap dress', slot: 'outfit', cut: 'dress', formality: 1, vibe: 'playful', family: 'pink', hex: '#d9718f', accent: '#f2b8c8', cost: 150, art: 'wrap' },
-  { key: 'suit', label: 'Tailored suit', slot: 'outfit', cut: 'separates', formality: 3, vibe: 'classic', family: 'grey', hex: '#464a52', accent: '#8d939c', cost: 220, art: 'suit' },
-  { key: 'green-midi', label: 'Emerald midi', slot: 'outfit', cut: 'dress', formality: 2, vibe: 'bold', family: 'green', hex: '#2f7a56', accent: '#4fa87a', cost: 210, art: 'shift' },
-  { key: 'jumpsuit', label: 'Wide jumpsuit', slot: 'outfit', cut: 'separates', formality: 2, vibe: 'bold', family: 'red', hex: '#a83a3a', accent: '#c96a5e', cost: 240, art: 'jumpsuit' },
-  { key: 'festival', label: 'Fringed festival kit', slot: 'outfit', cut: 'separates', formality: 0, vibe: 'playful', family: 'purple', hex: '#8a5aa8', accent: '#e0c04a', cost: 190, art: 'separates' },
-  { key: 'gown-black', label: 'Black column gown', slot: 'outfit', cut: 'dress', formality: 3, vibe: 'classic', family: 'black', hex: '#22242b', accent: '#3d4049', cost: 320, art: 'gown' },
-  { key: 'gown-red', label: 'Scarlet gown', slot: 'outfit', cut: 'dress', formality: 3, vibe: 'bold', family: 'red', hex: '#a8203a', accent: '#d14a5e', cost: 380, art: 'gown' },
-  { key: 'gown-gold', label: 'Gold sequin gown', slot: 'outfit', cut: 'dress', formality: 3, vibe: 'bold', family: 'gold', hex: '#c9a13a', accent: '#e8cf7a', cost: 460, art: 'gown' },
-  { key: 'gown-lilac', label: 'Lilac tulle gown', slot: 'outfit', cut: 'dress', formality: 3, vibe: 'playful', family: 'purple', hex: '#a98cc9', accent: '#d6c4e8', cost: 420, art: 'gown' },
+  { key: 'linen', label: 'Linen set', slot: 'outfit', cut: 'separates', formality: 1, vibe: 'natural', family: 'white', hex: '#e2dac6', accent: '#c4b89c', cost: 70, art: 'separates' },
+  { key: 'sunhat-dress', label: 'Floral wrap dress', slot: 'outfit', cut: 'dress', formality: 1, vibe: 'playful', family: 'pink', hex: '#d9718f', accent: '#f2b8c8', cost: 80, art: 'wrap' },
+  { key: 'suit', label: 'Tailored suit', slot: 'outfit', cut: 'separates', formality: 3, vibe: 'classic', family: 'grey', hex: '#464a52', accent: '#8d939c', cost: 120, art: 'suit' },
+  { key: 'green-midi', label: 'Emerald midi', slot: 'outfit', cut: 'dress', formality: 2, vibe: 'bold', family: 'green', hex: '#2f7a56', accent: '#4fa87a', cost: 120, art: 'shift' },
+  { key: 'jumpsuit', label: 'Wide jumpsuit', slot: 'outfit', cut: 'separates', formality: 2, vibe: 'bold', family: 'red', hex: '#a83a3a', accent: '#c96a5e', cost: 130, art: 'jumpsuit' },
+  { key: 'festival', label: 'Fringed festival kit', slot: 'outfit', cut: 'separates', formality: 0, vibe: 'playful', family: 'purple', hex: '#8a5aa8', accent: '#e0c04a', cost: 100, art: 'separates' },
+  { key: 'gown-black', label: 'Black column gown', slot: 'outfit', cut: 'dress', formality: 3, vibe: 'classic', family: 'black', hex: '#22242b', accent: '#3d4049', cost: 180, art: 'gown' },
+  { key: 'gown-red', label: 'Scarlet gown', slot: 'outfit', cut: 'dress', formality: 3, vibe: 'bold', family: 'red', hex: '#a8203a', accent: '#d14a5e', cost: 210, art: 'gown' },
+  { key: 'gown-gold', label: 'Gold sequin gown', slot: 'outfit', cut: 'dress', formality: 3, vibe: 'bold', family: 'gold', hex: '#c9a13a', accent: '#e8cf7a', cost: 250, art: 'gown' },
+  { key: 'gown-lilac', label: 'Lilac tulle gown', slot: 'outfit', cut: 'dress', formality: 3, vibe: 'playful', family: 'purple', hex: '#a98cc9', accent: '#d6c4e8', cost: 230, art: 'gown' },
 
   { key: 'breton', label: 'Breton stripes', slot: 'outfit', cut: 'separates', formality: 0, vibe: 'classic', family: 'white', hex: '#f2ece0', accent: '#3f4f6e', cost: 0, art: 'separates' },
-  { key: 'swim-set', label: 'Tangerine swim set', slot: 'outfit', cut: 'separates', formality: 0, vibe: 'bold', family: 'orange', hex: '#e07a2f', accent: '#f2b06a', cost: 140, art: 'separates' },
-  { key: 'boiler', label: 'Emerald boiler suit', slot: 'outfit', cut: 'separates', formality: 1, vibe: 'bold', family: 'green', hex: '#2f7a4a', accent: '#4fa870', cost: 170, art: 'jumpsuit' },
-  { key: 'tea-dress', label: 'Cherry tea dress', slot: 'outfit', cut: 'dress', formality: 1, vibe: 'classic', family: 'red', hex: '#b8323a', accent: '#e0848a', cost: 160, art: 'aline' },
-  { key: 'rust-set', label: 'Rust knit set', slot: 'outfit', cut: 'separates', formality: 2, vibe: 'natural', family: 'orange', hex: '#b8622f', accent: '#d99a6a', cost: 180, art: 'separates' },
-  { key: 'buttercup', label: 'Buttercup shirt dress', slot: 'outfit', cut: 'dress', formality: 2, vibe: 'playful', family: 'yellow', hex: '#e0c04a', accent: '#b8973a', cost: 165, art: 'shift' },
-  { key: 'sage-gown', label: 'Sage silk gown', slot: 'outfit', cut: 'dress', formality: 3, vibe: 'natural', family: 'green', hex: '#7a9a72', accent: '#a8c2a0', cost: 340, art: 'gown' },
+  { key: 'swim-set', label: 'Tangerine swim set', slot: 'outfit', cut: 'separates', formality: 0, vibe: 'bold', family: 'orange', hex: '#e07a2f', accent: '#f2b06a', cost: 80, art: 'separates' },
+  { key: 'boiler', label: 'Emerald boiler suit', slot: 'outfit', cut: 'separates', formality: 1, vibe: 'bold', family: 'green', hex: '#2f7a4a', accent: '#4fa870', cost: 90, art: 'jumpsuit' },
+  { key: 'tea-dress', label: 'Cherry tea dress', slot: 'outfit', cut: 'dress', formality: 1, vibe: 'classic', family: 'red', hex: '#b8323a', accent: '#e0848a', cost: 90, art: 'aline' },
+  { key: 'rust-set', label: 'Rust knit set', slot: 'outfit', cut: 'separates', formality: 2, vibe: 'natural', family: 'orange', hex: '#b8622f', accent: '#d99a6a', cost: 100, art: 'separates' },
+  { key: 'buttercup', label: 'Buttercup shirt dress', slot: 'outfit', cut: 'dress', formality: 2, vibe: 'playful', family: 'yellow', hex: '#e0c04a', accent: '#b8973a', cost: 90, art: 'shift' },
+  { key: 'sage-gown', label: 'Sage silk gown', slot: 'outfit', cut: 'dress', formality: 3, vibe: 'natural', family: 'green', hex: '#7a9a72', accent: '#a8c2a0', cost: 190, art: 'gown' },
 
   // --- shoes ---
   { key: 'sandals', label: 'Sandals', slot: 'shoes', cut: 'shoes', formality: 0, vibe: 'natural', family: 'brown', hex: '#a8763f', accent: '#8a6134', cost: 0, art: 'sandals' },
   { key: 'trainers', label: 'Trainers', slot: 'shoes', cut: 'shoes', formality: 0, vibe: 'playful', family: 'white', hex: '#f2ece0', accent: '#c2cbd4', cost: 0, art: 'trainers' },
   { key: 'flats', label: 'Flats', slot: 'shoes', cut: 'shoes', formality: 2, vibe: 'classic', family: 'black', hex: '#2b2620', accent: '#4a423a', cost: 0, art: 'flats' },
-  { key: 'boots', label: 'Ankle boots', slot: 'shoes', cut: 'shoes', formality: 1, vibe: 'bold', family: 'black', hex: '#33302c', accent: '#54504a', cost: 130, art: 'boots' },
+  { key: 'boots', label: 'Ankle boots', slot: 'shoes', cut: 'shoes', formality: 1, vibe: 'bold', family: 'black', hex: '#33302c', accent: '#54504a', cost: 70, art: 'boots' },
   { key: 'espadrilles', label: 'Espadrilles', slot: 'shoes', cut: 'shoes', formality: 1, vibe: 'natural', family: 'yellow', hex: '#d9be7a', accent: '#a8896b', cost: 0, art: 'flats' },
-  { key: 'loafers', label: 'Loafers', slot: 'shoes', cut: 'shoes', formality: 2, vibe: 'natural', family: 'brown', hex: '#6b4f36', accent: '#8a6b4a', cost: 140, art: 'flats' },
-  { key: 'mules', label: 'Mules', slot: 'shoes', cut: 'shoes', formality: 1, vibe: 'classic', family: 'white', hex: '#e8e2d6', accent: '#c2b8a4', cost: 120, art: 'flats' },
-  { key: 'platforms', label: 'Platforms', slot: 'shoes', cut: 'shoes', formality: 2, vibe: 'playful', family: 'orange', hex: '#e07a2f', accent: '#b85a1a', cost: 190, art: 'boots' },
-  { key: 'strappy', label: 'Strappy gold', slot: 'shoes', cut: 'shoes', formality: 3, vibe: 'playful', family: 'gold', hex: '#d9b84a', accent: '#f2e0a0', cost: 230, art: 'heels' },
-  { key: 'heels', label: 'Heels', slot: 'shoes', cut: 'shoes', formality: 3, vibe: 'classic', family: 'black', hex: '#2b2620', accent: '#4a423a', cost: 150, art: 'heels' },
-  { key: 'gold-heels', label: 'Gold heels', slot: 'shoes', cut: 'shoes', formality: 3, vibe: 'bold', family: 'gold', hex: '#c9a13a', accent: '#e8cf7a', cost: 260, art: 'heels' },
+  { key: 'loafers', label: 'Loafers', slot: 'shoes', cut: 'shoes', formality: 2, vibe: 'natural', family: 'brown', hex: '#6b4f36', accent: '#8a6b4a', cost: 80, art: 'flats' },
+  { key: 'mules', label: 'Mules', slot: 'shoes', cut: 'shoes', formality: 1, vibe: 'classic', family: 'white', hex: '#e8e2d6', accent: '#c2b8a4', cost: 70, art: 'flats' },
+  { key: 'platforms', label: 'Platforms', slot: 'shoes', cut: 'shoes', formality: 2, vibe: 'playful', family: 'orange', hex: '#e07a2f', accent: '#b85a1a', cost: 100, art: 'boots' },
+  { key: 'strappy', label: 'Strappy gold', slot: 'shoes', cut: 'shoes', formality: 3, vibe: 'playful', family: 'gold', hex: '#d9b84a', accent: '#f2e0a0', cost: 130, art: 'heels' },
+  { key: 'heels', label: 'Heels', slot: 'shoes', cut: 'shoes', formality: 3, vibe: 'classic', family: 'black', hex: '#2b2620', accent: '#4a423a', cost: 80, art: 'heels' },
+  { key: 'gold-heels', label: 'Gold heels', slot: 'shoes', cut: 'shoes', formality: 3, vibe: 'bold', family: 'gold', hex: '#c9a13a', accent: '#e8cf7a', cost: 140, art: 'heels' },
 
   // --- the finishing touch ---
   { key: 'none', label: 'Nothing', slot: 'extra', cut: 'extra', formality: 1, vibe: 'natural', family: 'brown', hex: 'none', accent: 'none', cost: 0, art: 'none' },
   { key: 'studs', label: 'Stud earrings', slot: 'extra', cut: 'extra', formality: 2, vibe: 'classic', family: 'gold', hex: '#d9b84a', accent: '#f2e0a0', cost: 0, art: 'studs' },
   { key: 'hoops', label: 'Big hoops', slot: 'extra', cut: 'extra', formality: 1, vibe: 'bold', family: 'gold', hex: '#d9b84a', accent: '#f2e0a0', cost: 0, art: 'hoops' },
-  { key: 'glasses', label: 'Round glasses', slot: 'extra', cut: 'extra', formality: 2, vibe: 'classic', family: 'brown', hex: '#6b4f36', accent: '#a8896b', cost: 110, art: 'glasses' },
-  { key: 'flowers', label: 'Flower crown', slot: 'extra', cut: 'extra', formality: 0, vibe: 'playful', family: 'pink', hex: '#e0849c', accent: '#f2c4d0', cost: 140, art: 'flowers' },
-  { key: 'sunhat', label: 'Straw sunhat', slot: 'extra', cut: 'extra', formality: 0, vibe: 'natural', family: 'yellow', hex: '#d9be7a', accent: '#b89a56', cost: 130, art: 'sunhat' },
+  { key: 'glasses', label: 'Round glasses', slot: 'extra', cut: 'extra', formality: 2, vibe: 'classic', family: 'brown', hex: '#6b4f36', accent: '#a8896b', cost: 60, art: 'glasses' },
+  { key: 'flowers', label: 'Flower crown', slot: 'extra', cut: 'extra', formality: 0, vibe: 'playful', family: 'pink', hex: '#e0849c', accent: '#f2c4d0', cost: 80, art: 'flowers' },
+  { key: 'sunhat', label: 'Straw sunhat', slot: 'extra', cut: 'extra', formality: 0, vibe: 'natural', family: 'yellow', hex: '#d9be7a', accent: '#b89a56', cost: 70, art: 'sunhat' },
   { key: 'bandana', label: 'Red bandana', slot: 'extra', cut: 'extra', formality: 0, vibe: 'bold', family: 'red', hex: '#c0392f', accent: '#e0705f', cost: 0, art: 'bandana' },
-  { key: 'beads', label: 'Bead strings', slot: 'extra', cut: 'extra', formality: 1, vibe: 'playful', family: 'orange', hex: '#e0843a', accent: '#f2b06a', cost: 100, art: 'beads' },
-  { key: 'scarf', label: 'Silk scarf', slot: 'extra', cut: 'extra', formality: 1, vibe: 'classic', family: 'green', hex: '#3a7a5a', accent: '#7ab89a', cost: 120, art: 'scarf' },
-  { key: 'brooch', label: 'Jade brooch', slot: 'extra', cut: 'extra', formality: 2, vibe: 'natural', family: 'green', hex: '#4a8a6a', accent: '#8fc2a8', cost: 130, art: 'brooch' },
-  { key: 'cuff', label: 'Gold cuff', slot: 'extra', cut: 'extra', formality: 2, vibe: 'bold', family: 'gold', hex: '#d9b84a', accent: '#f2e0a0', cost: 150, art: 'cuff' },
-  { key: 'shawl', label: 'Silk shawl', slot: 'extra', cut: 'extra', formality: 3, vibe: 'natural', family: 'white', hex: '#efe7d6', accent: '#cfc4ac', cost: 210, art: 'shawl' },
-  { key: 'ribbon', label: 'Hair ribbon', slot: 'extra', cut: 'extra', formality: 3, vibe: 'playful', family: 'pink', hex: '#e0849c', accent: '#f2c4d0', cost: 190, art: 'ribbon' },
-  { key: 'pearls', label: 'Pearls', slot: 'extra', cut: 'extra', formality: 3, vibe: 'classic', family: 'white', hex: '#f2ece0', accent: '#d6cdba', cost: 200, art: 'pearls' },
-  { key: 'choker', label: 'Velvet choker', slot: 'extra', cut: 'extra', formality: 3, vibe: 'bold', family: 'purple', hex: '#5e2038', accent: '#8a2f52', cost: 180, art: 'choker' },
+  { key: 'beads', label: 'Bead strings', slot: 'extra', cut: 'extra', formality: 1, vibe: 'playful', family: 'orange', hex: '#e0843a', accent: '#f2b06a', cost: 60, art: 'beads' },
+  { key: 'scarf', label: 'Silk scarf', slot: 'extra', cut: 'extra', formality: 1, vibe: 'classic', family: 'green', hex: '#3a7a5a', accent: '#7ab89a', cost: 70, art: 'scarf' },
+  { key: 'brooch', label: 'Jade brooch', slot: 'extra', cut: 'extra', formality: 2, vibe: 'natural', family: 'green', hex: '#4a8a6a', accent: '#8fc2a8', cost: 70, art: 'brooch' },
+  { key: 'cuff', label: 'Gold cuff', slot: 'extra', cut: 'extra', formality: 2, vibe: 'bold', family: 'gold', hex: '#d9b84a', accent: '#f2e0a0', cost: 80, art: 'cuff' },
+  { key: 'shawl', label: 'Silk shawl', slot: 'extra', cut: 'extra', formality: 3, vibe: 'natural', family: 'white', hex: '#efe7d6', accent: '#cfc4ac', cost: 120, art: 'shawl' },
+  { key: 'ribbon', label: 'Hair ribbon', slot: 'extra', cut: 'extra', formality: 3, vibe: 'playful', family: 'pink', hex: '#e0849c', accent: '#f2c4d0', cost: 100, art: 'ribbon' },
+  { key: 'pearls', label: 'Pearls', slot: 'extra', cut: 'extra', formality: 3, vibe: 'classic', family: 'white', hex: '#f2ece0', accent: '#d6cdba', cost: 110, art: 'pearls' },
+  { key: 'choker', label: 'Velvet choker', slot: 'extra', cut: 'extra', formality: 3, vibe: 'bold', family: 'purple', hex: '#5e2038', accent: '#8a2f52', cost: 100, art: 'choker' },
 ]
 
 export const GARMENT_BY_KEY: Record<string, Garment> = Object.fromEntries(
@@ -552,7 +552,7 @@ export function judge(client: Client): Verdict {
 
   const score = marks.reduce((n, m) => n + m.score, 0) / marks.length
   const fee = occasion.fee
-  const tip = Math.round(fee * 0.8 * Math.max(0, score - 0.4))
+  const tip = Math.round(fee * 0.6 * Math.max(0, score - 0.4))
 
   return {
     marks,
