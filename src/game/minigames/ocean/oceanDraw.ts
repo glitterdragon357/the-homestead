@@ -63,6 +63,19 @@ export function project(cam: Camera, x: number, y: number, z: number): Projected
   return { sx: VIEW.width / 2 + rx * scale, sy: VIEW.height / 2 + ry * scale, scale, depth: rd }
 }
 
+/**
+ * Where the plane of the water vanishes on screen. Below the waterline
+ * the sea fills the view above this line; above it, the sky does.
+ */
+export function horizonY(cam: Camera): number {
+  return VIEW.height / 2 - FOCAL * Math.tan(cam.pitch)
+}
+
+/** Head out of the water? */
+export function isAbove(cam: Camera): boolean {
+  return cam.y < SURFACE_Y
+}
+
 /** The unit vector you are facing, for swimming and for culling. */
 export function forwardOf(cam: Camera): { x: number; y: number; z: number } {
   const cp = Math.cos(cam.pitch)
@@ -152,13 +165,93 @@ export function drawBackdrop(ctx: CanvasRenderingContext2D, cam: Camera) {
   ctx.fillRect(0, 0, VIEW.width, VIEW.height)
 }
 
-/** The underside of the surface, seen from below. */
-export function drawSurface(ctx: CanvasRenderingContext2D, cam: Camera, viewDist: number, t: number) {
-  if (cam.y < SURFACE_Y - 30) return
-  if (cam.y - SURFACE_Y > 900) return
+/**
+ * What is up there. Only ever drawn with your head clear of the water,
+ * and only above the horizon - everything below that line is sea.
+ */
+export function drawSky(ctx: CanvasRenderingContext2D, cam: Camera, t: number) {
+  const h = horizonY(cam)
+  if (h <= 0) return
 
-  const G = 150
-  const reach = Math.min(viewDist, 1500)
+  const grad = ctx.createLinearGradient(0, Math.min(0, h - 520), 0, h)
+  grad.addColorStop(0, '#3f86bf')
+  grad.addColorStop(0.62, '#9fd0e8')
+  grad.addColorStop(1, '#e2f2f7')
+  ctx.fillStyle = grad
+  ctx.fillRect(0, 0, VIEW.width, Math.min(VIEW.height, h))
+
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(0, 0, VIEW.width, Math.min(VIEW.height, h))
+  ctx.clip()
+
+  // The sun sits in the world rather than on the glass, so it swings past
+  // as you turn instead of following you around.
+  const sunAngle = 0.9
+  const rel = ((cam.yaw - sunAngle + Math.PI) % (Math.PI * 2)) - Math.PI
+  const sx = VIEW.width / 2 - Math.tan(Math.max(-1.3, Math.min(1.3, rel))) * FOCAL
+  const sy = h - 210 - Math.sin(cam.pitch) * 200
+  ctx.globalAlpha = 0.9
+  ctx.fillStyle = '#fff6d9'
+  ctx.beginPath()
+  ctx.arc(sx, sy, 26, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.globalAlpha = 0.22
+  ctx.beginPath()
+  ctx.arc(sx, sy, 74, 0, Math.PI * 2)
+  ctx.fill()
+
+  // A few slow clouds, placed in world bearing for the same reason.
+  ctx.globalAlpha = 0.75
+  ctx.fillStyle = '#ffffff'
+  for (let i = 0; i < 7; i++) {
+    const bearing = i * 0.9 + t * 0.000012
+    const r = ((bearing - cam.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI
+    if (Math.abs(r) > 1.1) continue
+    const cx = VIEW.width / 2 - Math.tan(r) * FOCAL
+    const cy = h - 120 - ((i * 37) % 90) - Math.sin(cam.pitch) * 200
+    for (const [ox, oy, rr] of [[-30, 6, 20], [0, 0, 27], [32, 8, 18]]) {
+      ctx.beginPath()
+      ctx.ellipse(cx + ox, cy + oy, rr * 1.5, rr * 0.75, 0, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+  ctx.restore()
+}
+
+/** The surface, from whichever side of it you happen to be on. */
+export function drawSurface(
+  ctx: CanvasRenderingContext2D,
+  cam: Camera,
+  viewDist: number,
+  t: number,
+  above: boolean
+) {
+  if (!above && cam.y - SURFACE_Y > 900) return
+
+  const G = above ? 200 : 150
+  const reach = above ? 4200 : Math.min(viewDist, 1500)
+
+  /*
+   * From above, the sea is laid in as one graded sheet from the horizon
+   * down, and the grid then only adds glints on top. Shading each cell
+   * as its own opaque quad turned the water into a floor of tilted
+   * panels.
+   */
+  if (above) {
+    const h = Math.max(0, horizonY(cam))
+    if (h >= VIEW.height) return
+    const g = ctx.createLinearGradient(0, h, 0, VIEW.height)
+    g.addColorStop(0, '#2c6488')
+    g.addColorStop(0.3, '#2b7ba8')
+    g.addColorStop(1, '#4aa6c9')
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(0, h, VIEW.width, VIEW.height - h)
+    ctx.clip()
+    ctx.fillStyle = g
+    ctx.fillRect(0, h, VIEW.width, VIEW.height - h)
+  }
   const x0 = Math.floor((cam.x - reach) / G) * G
   const z0 = Math.floor((cam.z - reach) / G) * G
 
@@ -182,8 +275,16 @@ export function drawSurface(ctx: CanvasRenderingContext2D, cam: Camera, viewDist
       // read as cracked glass rather than water.
       const k = clarity(d, reach)
       if (k <= 0.02) continue
-      ctx.globalAlpha = 0.2 * k
-      ctx.fillStyle = '#e8f8ff'
+      if (above) {
+        // Light running along the swell, and nothing else.
+        const glint = Math.max(0, Math.sin((x - z) * 0.005 + t * 0.0024))
+        if (glint < 0.45) continue
+        ctx.globalAlpha = (glint - 0.45) * 0.34
+        ctx.fillStyle = '#dff2ff'
+      } else {
+        ctx.globalAlpha = 0.2 * k
+        ctx.fillStyle = '#e8f8ff'
+      }
       fillQuad(ctx, [a, b, c, e])
     }
   }

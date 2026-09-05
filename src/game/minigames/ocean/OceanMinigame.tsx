@@ -37,6 +37,7 @@ import {
   drawLandmark,
   drawMotes,
   drawSeabed,
+  drawSky,
   drawSurface,
   forwardOf,
   makeMotes,
@@ -74,6 +75,11 @@ interface World {
   stick: { on: boolean; ox: number; oy: number; x: number; y: number }
   /** Where the pointer is resting, for highlighting what it is over. */
   hover: { on: boolean; x: number; y: number }
+  /** Up on the surface, and staying there until you choose to dive. */
+  floating: boolean
+  /** Have you been properly under since the last dive? Stops the surface
+   *  grabbing you again the instant you push off it. */
+  wasDeep: boolean
   /** Momentum, so starting and stopping have some weight to them. */
   driftX: number
   driftY: number
@@ -81,6 +87,8 @@ interface World {
   deepest: number
 }
 
+/** Where you sit when floating: head and shoulders clear of the water. */
+const FLOAT_Y = SURFACE_Y - 30
 const PITCH_LIMIT = 1.15
 const TURN_RATE = 1.9
 const PITCH_RATE = 1.5
@@ -91,6 +99,8 @@ export function OceanMinigame({ onExit }: MinigameProps) {
   saveRef.current = save
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  /** The above-water view, painted aside so it can fade in as you rise. */
+  const skyRef = useRef<HTMLCanvasElement | null>(null)
   const worldRef = useRef<World | null>(null)
 
   /** Where a press started, so a click can be told apart from a drag. */
@@ -102,7 +112,14 @@ export function OceanMinigame({ onExit }: MinigameProps) {
 
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<number | undefined>(undefined)
-  const [hud, setHud] = useState({ depth: 0, zone: ZONES[0].label, target: '', guarded: false, far: false })
+  const [hud, setHud] = useState({
+    depth: 0,
+    zone: ZONES[0].label,
+    target: '',
+    guarded: false,
+    far: false,
+    floating: false,
+  })
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
@@ -121,6 +138,8 @@ export function OceanMinigame({ onExit }: MinigameProps) {
       keys: new Set(),
       stick: { on: false, ox: 0, oy: 0, x: 0, y: 0 },
       hover: { on: false, x: 0, y: 0 },
+      floating: false,
+      wasDeep: true,
       driftX: 0,
       driftY: 0,
       driftZ: 0,
@@ -177,6 +196,17 @@ export function OceanMinigame({ onExit }: MinigameProps) {
     [pickAt]
   )
 
+  /** Leave the surface. The only way back under. */
+  const dive = useCallback(() => {
+    const w = worldRef.current
+    if (!w?.floating) return
+    w.floating = false
+    w.wasDeep = false
+    // Tip your head down and push off, so the dive actually takes.
+    w.cam.pitch = Math.max(w.cam.pitch, 0.5)
+    w.driftY = 150
+  }, [])
+
   const spear = useCallback(
     (sx: number, sy: number) => {
     const w = worldRef.current
@@ -223,7 +253,9 @@ export function OceanMinigame({ onExit }: MinigameProps) {
       }
       if (e.code === 'Space') {
         e.preventDefault()
-        if (!sheetRef.current) spear(VIEW.width / 2, VIEW.height / 2)
+        if (sheetRef.current) return
+        if (w.floating) dive()
+        else spear(VIEW.width / 2, VIEW.height / 2)
         return
       }
       if (e.key.startsWith('Arrow')) e.preventDefault()
@@ -232,16 +264,37 @@ export function OceanMinigame({ onExit }: MinigameProps) {
     const up = (e: KeyboardEvent) => {
       worldRef.current?.keys.delete(e.key.length === 1 ? e.key.toLowerCase() : e.key)
     }
-    const blur = () => worldRef.current?.keys.clear()
+    const blur = () => {
+      const w = worldRef.current
+      if (!w) return
+      w.keys.clear()
+      w.stick.on = false
+    }
+    /*
+     * Let go anywhere and you stop swimming.
+     *
+     * The stage's own pointerup is not enough: open the game by tapping
+     * its tile and the release can land somewhere else entirely, leaving
+     * the stick held down and you swimming forward on your own until you
+     * hit the surface. Watching the window catches every release.
+     */
+    const release = () => {
+      const w = worldRef.current
+      if (w) w.stick.on = false
+    }
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
     window.addEventListener('blur', blur)
+    window.addEventListener('pointerup', release)
+    window.addEventListener('pointercancel', release)
     return () => {
       window.removeEventListener('keydown', down)
       window.removeEventListener('keyup', up)
       window.removeEventListener('blur', blur)
+      window.removeEventListener('pointerup', release)
+      window.removeEventListener('pointercancel', release)
     }
-  }, [onExit, spear])
+  }, [dive, onExit, spear])
 
   const toCanvas = useCallback((clientX: number, clientY: number) => {
     const el = canvasRef.current
@@ -262,6 +315,13 @@ export function OceanMinigame({ onExit }: MinigameProps) {
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
+
+    if (!skyRef.current) {
+      const layer = document.createElement('canvas')
+      layer.width = VIEW.width
+      layer.height = VIEW.height
+      skyRef.current = layer
+    }
 
     let raf = 0
     let last = performance.now()
@@ -285,9 +345,11 @@ export function OceanMinigame({ onExit }: MinigameProps) {
         hudAt = now
         const target = aimAt(w)
         const reach = gearValue(saveRef.current, 'spear')
+        const up = w.cam.y < SURFACE_Y + 6
         setHud({
+          floating: up,
           depth: depthMetres(w.cam.y),
-          zone: zoneAt(w.cam.y).label,
+          zone: up ? 'Floating' : zoneAt(w.cam.y).label,
           target: target ? target.sp.label : '',
           guarded: !!target?.sp.guarded,
           far: target
@@ -345,7 +407,25 @@ export function OceanMinigame({ onExit }: MinigameProps) {
       cam.z = Math.min(WORLD.depth - 30, Math.max(30, cam.z))
       const bed = floorHeightAt(cam.x) - 20
       if (cam.y > bed) cam.y = bed
-      if (cam.y < SURFACE_Y - 6) cam.y = SURFACE_Y - 6
+      /*
+       * The surface holds you up.
+       *
+       * Break through and you stay there - bobbing, free to swim about on
+       * top for as long as you like. Nothing pulls you under by accident;
+       * going back down is a button press and nothing else.
+       */
+      if (cam.y > SURFACE_Y + 25) w.wasDeep = true
+      if (!w.floating && w.wasDeep && cam.y <= SURFACE_Y) w.floating = true
+
+      if (w.floating) {
+        const bob = Math.sin(w.t * 0.0022) * 3
+        cam.y += (FLOAT_Y + bob - cam.y) * Math.min(1, dt * 6)
+        w.driftY = 0
+      } else if (cam.y < FLOAT_Y) {
+        // You cannot leave the water altogether.
+        cam.y = FLOAT_Y
+        w.driftY = Math.max(0, w.driftY)
+      }
 
       const camSpeed = Math.hypot(cam.x - prev.x, cam.y - prev.y, cam.z - prev.z) / Math.max(dt, 1e-4)
 
@@ -413,7 +493,7 @@ export function OceanMinigame({ onExit }: MinigameProps) {
       const viewDist = gearValue(s, 'mask') * (1 - gloomAt(cam.y) * 0.3)
 
       drawBackdrop(ctx!, cam)
-      drawSurface(ctx!, cam, viewDist, w.t)
+      drawSurface(ctx!, cam, viewDist, w.t, false)
       drawSeabed(ctx!, cam, viewDist, w.t)
 
       // Everything solid, painted far to near so near things overlap.
@@ -480,7 +560,24 @@ export function OceanMinigame({ onExit }: MinigameProps) {
         )
       }
 
-      drawCrosshair(ctx!, w)
+      // Coming up for air: the sky and the sea from above fade in over the
+      // last stretch, so surfacing is a rise rather than a jump cut.
+      // Fully above water by the time you are floating, or the underwater
+      // view bleeds through and washes the sea out.
+      const mix = Math.max(0, Math.min(1, (SURFACE_Y + 14 - cam.y) / 34))
+      if (mix > 0) {
+        const layer = skyRef.current!
+        const lctx = layer.getContext('2d')!
+        lctx.clearRect(0, 0, VIEW.width, VIEW.height)
+        drawSky(lctx, cam, w.t)
+        drawSurface(lctx, cam, viewDist, w.t, true)
+        ctx!.save()
+        ctx!.globalAlpha = mix
+        ctx!.drawImage(layer, 0, 0)
+        ctx!.restore()
+      }
+
+      if (mix < 0.9) drawCrosshair(ctx!, w)
     }
 
     function drawCrosshair(ctx: CanvasRenderingContext2D, w: World) {
@@ -580,7 +677,9 @@ export function OceanMinigame({ onExit }: MinigameProps) {
         }}
         onPointerLeave={() => {
           const w = worldRef.current
-          if (w) w.hover.on = false
+          if (!w) return
+          w.hover.on = false
+          w.stick.on = false
         }}
         onPointerCancel={() => {
           const w = worldRef.current
@@ -595,11 +694,20 @@ export function OceanMinigame({ onExit }: MinigameProps) {
             <span style={S.zone}>{hud.zone}</span>
             <span style={S.depth}>{hud.depth} m</span>
           </div>
-          <span style={S.hint}>drag to swim · click a fish to spear it</span>
+          <span style={S.hint}>
+            {hud.floating
+              ? 'floating · press Dive to go back under'
+              : 'drag to swim · click a fish to spear it'}
+          </span>
           <span style={S.pearls}>◍ {save.pearls ?? 0}</span>
         </div>
 
         <div style={S.bottomBar}>
+          {hud.floating && (
+            <button style={S.diveBtn} onClick={dive}>
+              Dive
+            </button>
+          )}
           <button style={S.ghost} onClick={() => setSheet(sheet === 'log' ? null : 'log')}>
             Logbook
           </button>
@@ -821,6 +929,16 @@ const S: Record<string, React.CSSProperties> = {
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
+  },
+  diveBtn: {
+    padding: '10px 20px',
+    border: 'none',
+    borderRadius: 20,
+    background: '#ffd76a',
+    color: '#2b2415',
+    fontSize: 14,
+    fontWeight: 700,
+    cursor: 'pointer',
   },
   ghost: {
     padding: '10px 13px',
