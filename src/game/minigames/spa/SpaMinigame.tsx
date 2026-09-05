@@ -42,19 +42,18 @@ import {
  * is on a clock at all.
  */
 
-type Tab = 'spa' | 'hair' | 'face' | 'wardrobe' | 'shop'
+type Tab = 'spa' | 'hair' | 'face' | 'wardrobe'
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'spa', label: 'Spa' },
   { key: 'hair', label: 'Hair' },
   { key: 'face', label: 'Face' },
   { key: 'wardrobe', label: 'Wardrobe' },
-  { key: 'shop', label: 'Buy' },
 ]
 
 export function SpaMinigame({ onExit }: MinigameProps) {
   const [save, setSave] = useMinigameProgress<SpaSave>('spa', initialSpa)
-  const { coins, earn, spend } = usePurse('spa')
+  const { coins, earn } = usePurse('spa')
   const [tab, setTab] = useState<Tab>('spa')
   const [toast, setToast] = useState<string | null>(null)
   const [showVerdict, setShowVerdict] = useState(false)
@@ -67,35 +66,46 @@ export function SpaMinigame({ onExit }: MinigameProps) {
     toastTimer.current = window.setTimeout(() => setToast(null), 2600)
   }, [])
 
-  // Only ticks while something is actually in progress.
-  const busy = save.client?.busy ?? null
+  // Keep the countdowns moving while there is something to count.
+  const busyUntil = save.client?.busy?.doneAt ?? null
+  const waiting = !save.client
   useEffect(() => {
-    if (!busy) return
+    if (!busyUntil && !waiting) return
     const id = window.setInterval(() => repaint((n) => n + 1), 250)
     return () => window.clearInterval(id)
-  }, [busy])
+  }, [busyUntil, waiting])
 
   useEffect(() => () => window.clearTimeout(toastTimer.current), [])
 
-  // Someone new through the door.
+  /**
+   * Someone new through the door.
+   *
+   * The arrival is done by the timer itself rather than by asking for a
+   * repaint and hoping this effect runs again: a repaint does not change
+   * any of these dependencies, so it never did, and the chair could stay
+   * empty indefinitely.
+   */
   useEffect(() => {
     if (save.client) return
-    const now = Date.now()
     if (!save.nextArrivalAt) {
-      setSave((s) => ({ ...s, nextArrivalAt: now + ARRIVAL_MS }))
+      setSave((s) => (s.client || s.nextArrivalAt ? s : { ...s, nextArrivalAt: Date.now() + ARRIVAL_MS }))
       return
-    }
-    if (now < save.nextArrivalAt) {
-      const id = window.setTimeout(() => repaint((n) => n + 1), save.nextArrivalAt - now + 50)
-      return () => window.clearTimeout(id)
     }
     // Naming and recording the name happen in one write, so two renders
     // can never hand out the same name twice.
-    setSave((s) => {
-      if (s.client) return s
-      const arrival = newClient(s.usedNames ?? [])
-      return { ...s, client: arrival, usedNames: [...(s.usedNames ?? []), arrival.name] }
-    })
+    const admit = () =>
+      setSave((s) => {
+        if (s.client) return s
+        const arrival = newClient(s.usedNames ?? [])
+        return { ...s, client: arrival, usedNames: [...(s.usedNames ?? []), arrival.name] }
+      })
+    const left = save.nextArrivalAt - Date.now()
+    if (left <= 0) {
+      admit()
+      return
+    }
+    const id = window.setTimeout(admit, left + 40)
+    return () => window.clearTimeout(id)
   }, [save.client, save.nextArrivalAt, setSave])
 
   const client = save.client
@@ -116,28 +126,40 @@ export function SpaMinigame({ onExit }: MinigameProps) {
     setClient((c) => ({ ...c, busy: { key, doneAt: Date.now() + ms } }))
   }
 
-  // Bank a finished treatment the moment its timer runs out.
+  /**
+   * Bank a finished treatment when its own timer runs out.
+   *
+   * This used to fire only when something else happened to rewrite the
+   * client, so a treatment left to finish on its own was never marked
+   * done - and clicking it again just started it over. The timeout does
+   * the writing now, and the write refuses to record the same treatment
+   * twice.
+   */
   useEffect(() => {
     const c = save.client
     if (!c?.busy) return
-    if (Date.now() < c.busy.doneAt) return
-    const key = c.busy.key
-    setSave((s) =>
-      s.client
-        ? { ...s, client: { ...s.client, done: [...s.client.done, key], busy: null } }
-        : s
-    )
-  }, [save.client, setSave, save.client?.busy?.doneAt])
-
-  function buy(key: string, cost: number, label: string) {
-    if (save.unlocked.includes(key)) return
-    if (!spend(cost)) {
-      showToast('Not enough in the till yet.')
+    const bank = () =>
+      setSave((s) => {
+        const cur = s.client
+        if (!cur?.busy || Date.now() < cur.busy.doneAt) return s
+        const key = cur.busy.key
+        return {
+          ...s,
+          client: {
+            ...cur,
+            done: cur.done.includes(key) ? cur.done : [...cur.done, key],
+            busy: null,
+          },
+        }
+      })
+    const left = c.busy.doneAt - Date.now()
+    if (left <= 0) {
+      bank()
       return
     }
-    setSave((s) => ({ ...s, unlocked: [...s.unlocked, key] }))
-    showToast(`Bought: ${label}`)
-  }
+    const id = window.setTimeout(bank, left + 40)
+    return () => window.clearTimeout(id)
+  }, [save.client, setSave])
 
   function finish() {
     if (!client) return
@@ -293,13 +315,7 @@ export function SpaMinigame({ onExit }: MinigameProps) {
                       hint={`${FORMALITY_LABEL[h.formality]} · ${VIBES[h.vibe].label.toLowerCase()}`}
                       colour={HAIR_COLOURS.find((c) => c.key === client.look.dye)?.hex}
                       chosen={client.look.hair === h.key}
-                      locked={!save.unlocked.includes(`hair:${h.key}`)}
-                      cost={h.cost}
-                      onClick={() =>
-                        save.unlocked.includes(`hair:${h.key}`)
-                          ? setLook({ hair: h.key })
-                          : buy(`hair:${h.key}`, h.cost, h.label)
-                      }
+                      onClick={() => setLook({ hair: h.key })}
                     />
                   ))}
                 </Grid>
@@ -312,13 +328,7 @@ export function SpaMinigame({ onExit }: MinigameProps) {
                       hint={VIBES[c.vibe].label.toLowerCase()}
                       colour={c.hex}
                       chosen={client.look.dye === c.key}
-                      locked={!save.unlocked.includes(`dye:${c.key}`)}
-                      cost={c.cost}
-                      onClick={() =>
-                        save.unlocked.includes(`dye:${c.key}`)
-                          ? setLook({ dye: c.key })
-                          : buy(`dye:${c.key}`, c.cost, c.label)
-                      }
+                      onClick={() => setLook({ dye: c.key })}
                     />
                   ))}
                 </Grid>
@@ -336,13 +346,7 @@ export function SpaMinigame({ onExit }: MinigameProps) {
                       hint={VIBES[l.vibe].label.toLowerCase()}
                       colour={l.hex}
                       chosen={client.look.lip === l.key}
-                      locked={!save.unlocked.includes(`lip:${l.key}`)}
-                      cost={l.cost}
-                      onClick={() =>
-                        save.unlocked.includes(`lip:${l.key}`)
-                          ? setLook({ lip: l.key })
-                          : buy(`lip:${l.key}`, l.cost, l.label)
-                      }
+                      onClick={() => setLook({ lip: l.key })}
                     />
                   ))}
                 </Grid>
@@ -355,13 +359,7 @@ export function SpaMinigame({ onExit }: MinigameProps) {
                       hint={VIBES[e.vibe].label.toLowerCase()}
                       colour={e.hex === 'none' ? '#e8e2d6' : e.hex}
                       chosen={client.look.eye === e.key}
-                      locked={!save.unlocked.includes(`eye:${e.key}`)}
-                      cost={e.cost}
-                      onClick={() =>
-                        save.unlocked.includes(`eye:${e.key}`)
-                          ? setLook({ eye: e.key })
-                          : buy(`eye:${e.key}`, e.cost, e.label)
-                      }
+                      onClick={() => setLook({ eye: e.key })}
                     />
                   ))}
                 </Grid>
@@ -382,47 +380,13 @@ export function SpaMinigame({ onExit }: MinigameProps) {
                         hint={`${FORMALITY_LABEL[g.formality]} · ${VIBES[g.vibe].label.toLowerCase()}`}
                         colour={g.hex === 'none' ? '#e8e2d6' : g.hex}
                         chosen={client.look[slot === 'outfit' ? 'outfit' : slot === 'shoes' ? 'shoes' : 'extra'] === g.key}
-                        locked={!save.unlocked.includes(g.key)}
-                        cost={g.cost}
-                        onClick={() =>
-                          save.unlocked.includes(g.key)
-                            ? setLook({ [slot]: g.key } as Partial<Look>)
-                            : buy(g.key, g.cost, g.label)
-                        }
+                        onClick={() => setLook({ [slot]: g.key } as Partial<Look>)}
                       />
                     ))}
                   </Grid>
                 </div>
               ))}
 
-            {tab === 'shop' && (
-              <>
-                <p style={S.hint}>
-                  Anything locked can be bought straight from its own tab too. The till is this
-                  parlour's own — it is not shared with the rest of the homestead.
-                </p>
-                {[
-                  ...WARDROBE.map((g) => ({ key: g.key, label: g.label, cost: g.cost })),
-                  ...HAIR_STYLES.map((h) => ({ key: `hair:${h.key}`, label: h.label, cost: h.cost })),
-                  ...HAIR_COLOURS.map((c) => ({ key: `dye:${c.key}`, label: c.label, cost: c.cost })),
-                  ...LIPS.map((l) => ({ key: `lip:${l.key}`, label: l.label, cost: l.cost })),
-                  ...SHADOWS.map((e) => ({ key: `eye:${e.key}`, label: e.label, cost: e.cost })),
-                ]
-                  .filter((i) => i.cost > 0 && !save.unlocked.includes(i.key))
-                  .sort((a, b) => a.cost - b.cost)
-                  .map((i) => (
-                    <div key={i.key} style={S.buyRow}>
-                      <span style={{ flex: 1 }}>{i.label}</span>
-                      <button
-                        style={{ ...S.buyBtn, opacity: coins >= i.cost ? 1 : 0.45 }}
-                        onClick={() => buy(i.key, i.cost, i.label)}
-                      >
-                        🪙 {i.cost}
-                      </button>
-                    </div>
-                  ))}
-              </>
-            )}
           </div>
         </div>
       </div>
@@ -537,16 +501,12 @@ function Swatch({
   hint,
   colour,
   chosen,
-  locked,
-  cost,
   onClick,
 }: {
   label: string
   hint: string
   colour?: string
   chosen: boolean
-  locked: boolean
-  cost: number
   onClick: () => void
 }) {
   return (
@@ -555,12 +515,11 @@ function Swatch({
       style={{
         ...S.swatch,
         outline: chosen ? '2.5px solid #3a2e1f' : '1px solid #d6c7a4',
-        opacity: locked ? 0.62 : 1,
       }}
     >
       <span style={{ ...S.dab, background: colour ?? '#e8e2d6' }} />
       <span style={S.swatchName}>{label}</span>
-      <span style={S.swatchHint}>{locked ? `🪙 ${cost}` : hint}</span>
+      <span style={S.swatchHint}>{hint}</span>
     </button>
   )
 }
@@ -667,27 +626,6 @@ const S: Record<string, React.CSSProperties> = {
   swatchName: { fontSize: 10.5, fontWeight: 600, color: '#3a2e1f', textAlign: 'center', lineHeight: 1.15 },
   swatchHint: { fontSize: 9, color: '#8a7a63', textAlign: 'center' },
 
-  buyRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    padding: '6px 8px',
-    background: '#f2e6c9',
-    borderRadius: 8,
-    marginBottom: 4,
-    fontSize: 12.5,
-    color: '#3a2e1f',
-  },
-  buyBtn: {
-    border: 'none',
-    borderRadius: 8,
-    background: '#3a2e1f',
-    color: '#fdf6e3',
-    padding: '5px 10px',
-    fontSize: 11.5,
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
 
   verdict: { background: '#f2e6c9', borderRadius: 10, padding: 11 },
   mark: { marginBottom: 7 },
