@@ -153,12 +153,12 @@ export const STORM_WAVE_M = 19
  */
 export function waveAmpAt(x: number, z: number, t: number): number {
   const state = seaState(x, z, t)
-  const metres = CALM_WAVE_M + (STORM_WAVE_M - CALM_WAVE_M) * Math.pow(state, 1.7)
+  const metres = CALM_WAVE_M + (STORM_WAVE_M - CALM_WAVE_M) * Math.pow(state, 1.15)
   return (metres / 2) * PX_PER_M
 }
 
 /** Any wave at least this big can roll a swimmer under. */
-export const ROLLER_M = 12
+export const ROLLER_M = 8
 
 export function waveAt(x: number, z: number, t: number): number {
   return swellShape(x, z, t) * waveAmpAt(x, z, t)
@@ -464,8 +464,14 @@ export function mealValue(sp: Species): number {
   return Math.round(Math.min(46, 11 + sp.pearls * 0.55))
 }
 
-/** Health taken by a wave breaking over you. */
-export const ROLL_DAMAGE = 14
+/**
+ * What a wave costs you, by its size. A big sea should be wearing rather
+ * than instantly fatal, so the small rollers only nick you and it takes
+ * a real monster to take a serious bite.
+ */
+export function rollDamage(metres: number): number {
+  return Math.max(4, Math.min(16, Math.round(metres * 0.7)))
+}
 
 /** Total pearls the logbook represents, for the summary line. */
 export function logbookValue(save: OceanSave): number {

@@ -6,7 +6,7 @@ import {
   LANDMARKS,
   PX_PER_M,
   ROLLER_M,
-  ROLL_DAMAGE,
+  rollDamage,
   SHIPS,
   SPECIES,
   SURFACE_Y,
@@ -461,14 +461,15 @@ export function OceanMinigame({ onExit }: MinigameProps) {
          */
         const amp = waveAmpAt(cam.x, cam.z, w.t)
         const metres = (amp * 2) / PX_PER_M
-        const onTheCrest = waveAt(cam.x, cam.z, w.t) > amp * 0.72
-        if (metres >= ROLLER_M && onTheCrest && w.t > w.nextRollAt && !rolledRef.current) {
+        const onTheCrestNow = waveAt(cam.x, cam.z, w.t) > amp * 0.62
+        if (metres >= ROLLER_M && onTheCrestNow && w.t > w.nextRollAt && !rolledRef.current) {
           rolledRef.current = true
-          w.nextRollAt = w.t + 7000
-          w.rollUntil = w.t + 1300
+          w.nextRollAt = w.t + 3500
+          w.rollUntil = w.t + 1200
           const hit = Math.round(metres)
-          setSave((p) => ({ ...p, health: Math.max(0, (p.health ?? 100) - ROLL_DAMAGE) }))
-          showToast(`A ${hit} metre wave rolls you under · -${ROLL_DAMAGE} health`)
+          const hurt = rollDamage(metres)
+          setSave((p) => ({ ...p, health: Math.max(0, (p.health ?? 100) - hurt) }))
+          showToast(`A ${hit} metre wave rolls you under · -${hurt} health`)
           window.setTimeout(() => (rolledRef.current = false), 200)
         }
 
