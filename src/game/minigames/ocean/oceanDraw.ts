@@ -23,47 +23,25 @@ import {
   type Species,
 } from './oceanData'
 
-export interface Camera {
-  x: number
-  y: number
-  z: number
-  /** Heading in the horizontal plane. 0 looks along +z. */
-  yaw: number
-  /** Positive looks down. */
-  pitch: number
-}
+import {
+  FOCAL,
+  clarity as fade,
+  fillQuad as fillProjected,
+  forwardOf as facing,
+  hash as noise,
+  horizonY as vanishing,
+  mix as blend,
+  project as projectPoint,
+  type Camera,
+  type Projected,
+} from '../../engine/firstPerson'
 
-export interface Projected {
-  sx: number
-  sy: number
-  /** Pixels per world unit at this distance. */
-  scale: number
-  /** Distance along the view axis. */
-  depth: number
-}
+export type { Camera, Projected }
 
-/** Focal length, giving roughly an 85 degree horizontal field of view. */
-const FOCAL = 520
-const NEAR = 12
+const VIEWPORT = { width: VIEW.width, height: VIEW.height }
 
 export function project(cam: Camera, x: number, y: number, z: number): Projected | null {
-  const dx = x - cam.x
-  const dy = y - cam.y
-  const dz = z - cam.z
-
-  const cy = Math.cos(cam.yaw)
-  const sy = Math.sin(cam.yaw)
-  const rx = dx * cy - dz * sy
-  const rz = dx * sy + dz * cy
-
-  const cp = Math.cos(cam.pitch)
-  const sp = Math.sin(cam.pitch)
-  const ry = dy * cp - rz * sp
-  const rd = dy * sp + rz * cp
-
-  if (rd < NEAR) return null
-  const scale = FOCAL / rd
-  return { sx: VIEW.width / 2 + rx * scale, sy: VIEW.height / 2 + ry * scale, scale, depth: rd }
+  return projectPoint(cam, x, y, z, VIEWPORT)
 }
 
 /**
@@ -71,7 +49,7 @@ export function project(cam: Camera, x: number, y: number, z: number): Projected
  * the sea fills the view above this line; above it, the sky does.
  */
 export function horizonY(cam: Camera): number {
-  return VIEW.height / 2 - FOCAL * Math.tan(cam.pitch)
+  return vanishing(cam, VIEWPORT)
 }
 
 /** Head out of the water? */
@@ -79,53 +57,20 @@ export function isAbove(cam: Camera): boolean {
   return cam.y < SURFACE_Y
 }
 
-/** The unit vector you are facing, for swimming and for culling. */
-export function forwardOf(cam: Camera): { x: number; y: number; z: number } {
-  const cp = Math.cos(cam.pitch)
-  return { x: Math.sin(cam.yaw) * cp, y: Math.sin(cam.pitch), z: Math.cos(cam.yaw) * cp }
+export function forwardOf(cam: Camera) {
+  return facing(cam)
 }
 
-/** How much of a thing survives the murk at this distance. 0 means gone. */
 export function clarity(depth: number, viewDist: number): number {
-  if (depth >= viewDist) return 0
-  const t = depth / viewDist
-  return Math.max(0, 1 - t * t * t)
+  return fade(depth, viewDist)
 }
 
 function hash(n: number): number {
-  const s = Math.sin(n * 127.1) * 43758.5453
-  return s - Math.floor(s)
-}
-
-/**
- * Push a projected quad out from its own centre by a pixel.
- *
- * Neighbouring cells share exact corners, so their fills meet on a seam
- * that antialiasing leaves as a visible hairline. Growing each one very
- * slightly makes them overlap instead, without moving any geometry.
- */
-function expand(pts: Projected[], px: number): { sx: number; sy: number }[] {
-  let cx = 0
-  let cy = 0
-  for (const p of pts) {
-    cx += p.sx / pts.length
-    cy += p.sy / pts.length
-  }
-  return pts.map((p) => {
-    const dx = p.sx - cx
-    const dy = p.sy - cy
-    const d = Math.hypot(dx, dy) || 1
-    return { sx: p.sx + (dx / d) * px, sy: p.sy + (dy / d) * px }
-  })
+  return noise(n)
 }
 
 function fillQuad(ctx: CanvasRenderingContext2D, pts: Projected[]) {
-  const q = expand(pts, 1.1)
-  ctx.beginPath()
-  ctx.moveTo(q[0].sx, q[0].sy)
-  for (let i = 1; i < q.length; i++) ctx.lineTo(q[i].sx, q[i].sy)
-  ctx.closePath()
-  ctx.fill()
+  fillProjected(ctx, pts)
 }
 
 /* ------------------------------------------------------------------ */
@@ -147,10 +92,7 @@ export function waterColour(worldY: number): string {
 }
 
 function mix(a: string, b: string, t: number): string {
-  const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16))
-  const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16))
-  const out = pa.map((v, i) => Math.round(v + (pb[i] - v) * t))
-  return `rgb(${out[0]},${out[1]},${out[2]})`
+  return blend(a, b, t)
 }
 
 /**

@@ -14,6 +14,8 @@ import { vetPending, type VetSave } from './vet/vetData'
 import { DoctorMinigame } from './doctor/DoctorMinigame'
 import { doctorPending, type DoctorSave } from './doctor/doctorData'
 import { OceanMinigame } from './ocean/OceanMinigame'
+import { HorsesMinigame } from './horses/HorsesMinigame'
+import { horsesPending, type HorseSave } from './horses/horseData'
 import { SpaMinigame } from './spa/SpaMinigame'
 import { spaPending, type SpaSave } from './spa/spaData'
 import { SalonMinigame } from './salon/SalonMinigame'
@@ -134,6 +136,14 @@ export const MINIGAME_REGISTRY: Record<string, MinigameDefinition> = {
     icon: '\u{1F485}',
     component: SpaMinigame,
     pending: (p, now) => spaPending(p.spa as SpaSave, now),
+  },
+  horses: {
+    id: 'horses',
+    name: 'Wild Horses',
+    description: 'Gentle horses in open country, ride them, and take up hunting.',
+    icon: '\u{1F40E}',
+    component: HorsesMinigame,
+    pending: (p) => horsesPending(p.horses as HorseSave),
   },
   ocean: {
     id: 'ocean',
