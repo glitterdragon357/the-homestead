@@ -56,18 +56,20 @@ export interface Breed {
   toughness: number
   /** Nose to tail, in world units. */
   length: number
+  /** What a grown one of her fetches. */
+  worth: number
   note: string
 }
 
 export const BREEDS: Breed[] = [
-  { key: 'fjord', label: 'Fjord', wary: 0.22, speed: 470, stamina: 16, toughness: 0.5, length: 27, note: 'Short, thick-necked and almost impossible to rattle.' },
-  { key: 'mustang', label: 'Mustang', wary: 0.55, speed: 560, stamina: 13, toughness: 1.0, length: 29, note: 'Born wild and in no hurry to stop being wild.' },
-  { key: 'paint', label: 'Paint', wary: 0.44, speed: 540, stamina: 13, toughness: 0.8, length: 29, note: 'Patched like spilt milk, and steadier than she looks.' },
-  { key: 'appaloosa', label: 'Appaloosa', wary: 0.5, speed: 570, stamina: 14, toughness: 0.9, length: 30, note: 'Spotted over the rump, and watches you the whole time.' },
-  { key: 'andalusian', label: 'Andalusian', wary: 0.38, speed: 610, stamina: 15, toughness: 0.75, length: 31, note: 'Moves as though somebody is watching. Somebody usually is.' },
-  { key: 'arabian', label: 'Arabian', wary: 0.72, speed: 680, stamina: 19, toughness: 1.25, length: 28, note: 'Dish-faced, high-tailed, and gone before you have decided.' },
-  { key: 'akhal', label: 'Akhal-Teke', wary: 0.8, speed: 720, stamina: 18, toughness: 1.4, length: 30, note: 'A coat like poured metal. The hardest of the lot to hold.' },
-  { key: 'shire', label: 'Shire', wary: 0.18, speed: 380, stamina: 22, toughness: 0.6, length: 34, note: 'Enormous, feathered at the heel, and entirely unbothered.' },
+  { key: 'fjord', label: 'Fjord', wary: 0.22, speed: 470, stamina: 16, toughness: 0.5, length: 27, worth: 59, note: 'Short, thick-necked and almost impossible to rattle.' },
+  { key: 'mustang', label: 'Mustang', wary: 0.55, speed: 560, stamina: 13, toughness: 1.0, length: 29, worth: 85, note: 'Born wild and in no hurry to stop being wild.' },
+  { key: 'paint', label: 'Paint', wary: 0.44, speed: 540, stamina: 13, toughness: 0.8, length: 29, worth: 78, note: 'Patched like spilt milk, and steadier than she looks.' },
+  { key: 'appaloosa', label: 'Appaloosa', wary: 0.5, speed: 570, stamina: 14, toughness: 0.9, length: 30, worth: 91, note: 'Spotted over the rump, and watches you the whole time.' },
+  { key: 'andalusian', label: 'Andalusian', wary: 0.38, speed: 610, stamina: 15, toughness: 0.75, length: 31, worth: 124, note: 'Moves as though somebody is watching. Somebody usually is.' },
+  { key: 'arabian', label: 'Arabian', wary: 0.72, speed: 680, stamina: 19, toughness: 1.25, length: 28, worth: 163, note: 'Dish-faced, high-tailed, and gone before you have decided.' },
+  { key: 'akhal', label: 'Akhal-Teke', wary: 0.8, speed: 720, stamina: 18, toughness: 1.4, length: 30, worth: 208, note: 'A coat like poured metal. The hardest of the lot to hold.' },
+  { key: 'shire', label: 'Shire', wary: 0.18, speed: 380, stamina: 22, toughness: 0.6, length: 34, worth: 72, note: 'Enormous, feathered at the heel, and entirely unbothered.' },
 ]
 
 export const BREED_BY_KEY: Record<string, Breed> = Object.fromEntries(
@@ -81,20 +83,22 @@ export interface Coat {
   mane: string
   /** Dapples, patches or spots drawn over the body. */
   pattern?: 'patches' | 'spots' | 'dapples'
+  /** Uncommon colouring is worth more to a buyer. */
+  rarity?: number
 }
 
 export const COATS: Coat[] = [
   { key: 'bay', label: 'Bay', body: '#8a5326', mane: '#2b1f16' },
   { key: 'chestnut', label: 'Chestnut', body: '#a8552b', mane: '#8a4020' },
   { key: 'black', label: 'Black', body: '#2f2823', mane: '#1a1512' },
-  { key: 'grey', label: 'Grey', body: '#9a9aa0', mane: '#6f6f76', pattern: 'dapples' },
-  { key: 'palomino', label: 'Palomino', body: '#c9964a', mane: '#efe6cd' },
-  { key: 'buckskin', label: 'Buckskin', body: '#bd9257', mane: '#2b1f16' },
-  { key: 'roan', label: 'Strawberry roan', body: '#b07f72', mane: '#7a5248', pattern: 'dapples' },
-  { key: 'dun', label: 'Dun', body: '#c2a878', mane: '#5a4632' },
-  { key: 'piebald', label: 'Piebald', body: '#2f2823', mane: '#efe6cd', pattern: 'patches' },
-  { key: 'appaloosa', label: 'Blanket', body: '#7a6a5e', mane: '#3a3129', pattern: 'spots' },
-  { key: 'cream', label: 'Cremello', body: '#e2d3b4', mane: '#cbb894' },
+  { key: 'grey', label: 'Grey', body: '#9a9aa0', mane: '#6f6f76', pattern: 'dapples' , rarity: 1.1 },
+  { key: 'palomino', label: 'Palomino', body: '#c9964a', mane: '#efe6cd' , rarity: 1.3 },
+  { key: 'buckskin', label: 'Buckskin', body: '#bd9257', mane: '#2b1f16' , rarity: 1.15 },
+  { key: 'roan', label: 'Strawberry roan', body: '#b07f72', mane: '#7a5248', pattern: 'dapples' , rarity: 1.2 },
+  { key: 'dun', label: 'Dun', body: '#c2a878', mane: '#5a4632' , rarity: 1.15 },
+  { key: 'piebald', label: 'Piebald', body: '#2f2823', mane: '#efe6cd', pattern: 'patches' , rarity: 1.3 },
+  { key: 'appaloosa', label: 'Blanket', body: '#7a6a5e', mane: '#3a3129', pattern: 'spots' , rarity: 1.35 },
+  { key: 'cream', label: 'Cremello', body: '#e2d3b4', mane: '#cbb894' , rarity: 1.4 },
 ]
 
 export const COAT_BY_KEY: Record<string, Coat> = Object.fromEntries(
@@ -154,6 +158,25 @@ export function careOf(horse: StabledHorse, now: number): Care {
   const water = Math.max(0, Math.min(1, ((horse.wateredUntil ?? 0) - now) / WATER_MS))
   return { hungry: feed <= 0, thirsty: water <= 0, feed, water }
 }
+
+/**
+ * What a horse would fetch.
+ *
+ * Catching and selling wild horses is the trade out here - it has to be,
+ * because hunting is bought and there was otherwise no way on earth to
+ * earn the price of the bow. Youngsters are worth a fraction of a grown
+ * horse, so raising one on is worth real money as well as sentiment.
+ */
+export function horseValue(horse: StabledHorse, now: number): number {
+  const breed = BREED_BY_KEY[horse.breed]
+  const coat = COAT_BY_KEY[horse.coat]
+  const age = ageOf(horse, now)
+  const grown = age === 'grown' ? 1 : age === 'yearling' ? 0.68 : 0.44
+  return Math.round((breed?.worth ?? 100) * (coat?.rarity ?? 1) * grown)
+}
+
+/** Paid the first time you catch each breed, whether you keep her or not. */
+export const BREED_BOUNTY = 60
 
 /** Is anything in the stable waiting on you? */
 export function needsTending(stable: StabledHorse[], now: number): number {

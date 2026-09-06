@@ -30,10 +30,12 @@ import {
   SLIP_RATE,
   VIEW,
   WORLD,
+  BREED_BOUNTY,
   ageOf,
   breakEffort,
   careOf,
   growthLeft,
+  horseValue,
   isYoung,
   catchChance,
   lassoGrip,
@@ -230,6 +232,29 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
     return () => window.clearInterval(id)
   }, [setSave])
 
+  /**
+   * Sell one on. Two presses, because a horse you raised is not
+   * something to lose to a stray tap.
+   */
+  const [selling, setSelling] = useState<string | null>(null)
+  function sell(h: StabledHorse) {
+    if (selling !== h.name) {
+      setSelling(h.name)
+      window.setTimeout(() => setSelling((n) => (n === h.name ? null : n)), 3000)
+      return
+    }
+    const price = horseValue(h, Date.now())
+    earn(price)
+    setSelling(null)
+    setSave((prev) => ({ ...prev, stable: (prev.stable ?? []).filter((x) => x.name !== h.name) }))
+    const w = worldRef.current
+    if (w) {
+      if (w.mount?.horse.name === h.name) w.mount = null
+      if (w.led?.horse.name === h.name) w.led = null
+    }
+    showToast(`${h.name} sold on for ${price} 🪙`)
+  }
+
   /** Fill the manger or the bucket for one youngster. */
   function tend(name: string, what: 'feed' | 'water') {
     const at = Date.now()
@@ -383,6 +408,8 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
     w.ledX = h.x
     w.ledZ = h.z
 
+    const firstOfHer = !(saveRef.current.breedsSeen ?? []).includes(h.breed.key)
+    if (firstOfHer) earn(BREED_BOUNTY)
     setSave((s) => ({
       ...s,
       stable: [...(s.stable ?? []), horse],
@@ -391,12 +418,18 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
         ? s.breedsSeen
         : [...(s.breedsSeen ?? []), h.breed.key],
     }))
+    if (firstOfHer) {
+      window.setTimeout(
+        () => showToast(`First ${h.breed.label} you have caught · ${BREED_BOUNTY} 🪙`),
+        1800
+      )
+    }
     showToast(
       h.foal
         ? `A foal. She will need raising. You call her ${name}.`
         : `Broken to the rope. You call her ${name}.`
     )
-  }, [setSave, showToast])
+  }, [earn, setSave, showToast])
 
   const mount = useCallback(() => {
     const w = worldRef.current
@@ -1125,6 +1158,17 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
                               {age === 'grown' ? 'Call' : 'Bring out'}
                             </button>
                           </div>
+                          <button
+                            style={{
+                              ...S.sell,
+                              ...(selling === h.name ? S.sellSure : null),
+                            }}
+                            onClick={() => sell(h)}
+                          >
+                            {selling === h.name
+                              ? `Sure? ${horseValue(h, now)} 🪙`
+                              : `Sell · ${horseValue(h, now)} 🪙`}
+                          </button>
                         </>
                       }
                     >
@@ -1163,8 +1207,10 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
         {sheet === 'gear' && (
           <Sheet title="Gear" onClose={() => setSheet(null)}>
             <p style={S.hint}>
-              Coin earned out here stays out here. A bow is what opens up hunting — until you own
-              one you are only here to watch.
+              Catching horses is the trade: sell one on from the stable, and every breed you
+              catch for the first time pays a bounty on top. A bow opens up hunting as a second
+              string — until you own one you are only here to watch. Coin earned out here stays
+              out here.
             </p>
             {(Object.keys(GEAR) as GearKey[]).map((key) => {
               const { list, label } = GEAR[key]
@@ -1451,6 +1497,19 @@ const S: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     cursor: 'pointer',
   },
+  sell: {
+    width: '100%',
+    marginTop: 4,
+    padding: '5px 8px',
+    border: '1px solid rgba(255,255,255,0.22)',
+    borderRadius: 7,
+    background: 'transparent',
+    color: '#c2b08a',
+    fontSize: 11,
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  sellSure: { background: '#a8563a', color: '#fff', border: '1px solid #c2704f' },
   waiting: {
     background: 'rgba(200,80,60,0.22)',
     border: '1px solid rgba(226,88,79,0.5)',
