@@ -6,9 +6,16 @@ import { GiftRow } from '../../economy/GiftRow'
 import { billboard, forwardOf, type Camera } from '../../engine/firstPerson'
 import { clarity } from '../../engine/firstPerson'
 import { drawHorse, drawLand, drawQuarry, drawSky, project } from './horseDraw'
+import { HorsePortrait, Stall } from './HorseArt'
 import {
+  AGE_LABEL,
   BLOWN_PACE,
   BURST_SECONDS,
+  FOAL_FIGHT,
+  FOAL_SCALE,
+  FOAL_SPEED,
+  FOAL_WIND,
+  STAGE_MS,
   WIND_RECOVER,
   windDrain,
   BREEDS,
@@ -21,7 +28,9 @@ import {
   SLIP_RATE,
   VIEW,
   WORLD,
+  ageOf,
   breakEffort,
+  growthLeft,
   catchChance,
   lassoGrip,
   lassoReach,
@@ -56,6 +65,8 @@ import {
 interface Wild {
   breed: Breed
   coat: Coat
+  /** Young ones run with the herd: slower, softer, and easier to hold. */
+  foal: boolean
   x: number
   z: number
   heading: number
@@ -134,11 +145,12 @@ function spotNear(cam: Camera, near: number, far: number) {
   return { x: cam.x + near, z: cam.z + near }
 }
 
-function makeWild(cam: Camera, near: number, far: number): Wild {
+function makeWild(cam: Camera, near: number, far: number, foal = Math.random() < 0.3): Wild {
   const at = spotNear(cam, near, far)
   return {
     breed: pick(BREEDS),
     coat: pick(COATS),
+    foal,
     x: at.x,
     z: at.z,
     heading: Math.random() * Math.PI * 2,
@@ -178,6 +190,14 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
   const sheetRef = useRef(sheet)
   sheetRef.current = sheet
 
+  /** Ticks while the stable is open, so a foal visibly comes on. */
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (sheet !== 'stable') return
+    const id = window.setInterval(() => setNow(Date.now()), 500)
+    return () => window.clearInterval(id)
+  }, [sheet])
+
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<number | undefined>(undefined)
   const [hud, setHud] = useState({
@@ -196,6 +216,7 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
       blown: number
       /** null unless she is on the end of your rope. */
       roped: number | null
+      foal: boolean
     },
     canMount: false,
     aim: '',
@@ -299,6 +320,8 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
       coat: h.coat.key,
       tamedAt: Date.now(),
       ridden: 0,
+      // Two stages to come on, and only while you are out here with her.
+      ...(h.foal ? { grownAt: Date.now() + STAGE_MS * 2 } : {}),
     }
     w.wild = w.wild.filter((x) => x !== h)
     w.wild.push(makeWild(w.cam, 1600, 3400))
@@ -314,12 +337,20 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
         ? s.breedsSeen
         : [...(s.breedsSeen ?? []), h.breed.key],
     }))
-    showToast(`Broken to the rope. You call her ${name}.`)
+    showToast(
+      h.foal
+        ? `A foal. She will need raising. You call her ${name}.`
+        : `Broken to the rope. You call her ${name}.`
+    )
   }, [setSave, showToast])
 
   const mount = useCallback(() => {
     const w = worldRef.current
     if (!w?.led) return
+    if (ageOf(w.led.horse, Date.now()) !== 'grown') {
+      showToast(`${w.led.horse.name} is too young to carry you yet.`)
+      return
+    }
     const d = Math.hypot(w.ledX - w.cam.x, w.ledZ - w.cam.z)
     if (d > 110) return
     w.mount = w.led
@@ -516,6 +547,7 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
                 odds: catchChance(Math.hypot(near.x - w.cam.x, near.z - w.cam.z), lassoReach(s)),
                 blown: 1 - near.wind,
                 roped: near.roped,
+                foal: near.foal,
               }
             : null,
           canMount: !!w.led && Math.hypot(w.ledX - w.cam.x, w.ledZ - w.cam.z) <= 110,
@@ -598,7 +630,8 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
            * back, and enough slack and she is away with your rope.
            */
           const holding = w.stick.on || w.keys.has(' ') || w.keys.has('Shift')
-          h.roped += (holding ? grip / breakEffort(h.breed) : -SLIP_RATE * 0.3) * dt
+          const fight = breakEffort(h.breed) * (h.foal ? FOAL_FIGHT : 1)
+          h.roped += (holding ? grip / fight : -SLIP_RATE * 0.3) * dt
           h.speed = h.breed.speed * 0.25 * (1 - h.roped)
           h.heading += Math.sin(w.t * 0.02 + h.seed) * 2.4 * dt
           if (h.roped < -0.15) {
@@ -610,8 +643,8 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
         } else if (h.fleeing > 0) {
           // A burst, not an exit. She runs, then turns to look at you.
           h.fleeing -= dt
-          h.wind = Math.max(0, h.wind - windDrain(h.breed) * dt)
-          h.speed = h.breed.speed * (h.wind > 0 ? 1 : BLOWN_PACE)
+          h.wind = Math.max(0, h.wind - (windDrain(h.breed) / (h.foal ? FOAL_WIND : 1)) * dt)
+          h.speed = h.breed.speed * (h.foal ? FOAL_SPEED : 1) * (h.wind > 0 ? 1 : BLOWN_PACE)
           const away = Math.atan2(h.x - cam.x, h.z - cam.z)
           h.heading += ((away - h.heading + Math.PI * 3) % (Math.PI * 2) - Math.PI) * Math.min(1, dt * 2.2)
         } else {
@@ -724,10 +757,33 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
         if (!item.p) continue
         if (item.kind === 'wild') {
           const { dir, squash } = billboard(item.h.heading, cam.yaw)
-          drawHorse(ctx!, item.h.breed, item.h.coat, item.p, dir, squash, item.a, w.t, item.h.seed, item.h.speed / 400)
+          drawHorse(
+            ctx!,
+            item.h.foal ? { ...item.h.breed, length: item.h.breed.length * FOAL_SCALE } : item.h.breed,
+            item.h.coat,
+            item.p,
+            dir,
+            squash,
+            item.a,
+            w.t,
+            item.h.seed,
+            item.h.speed / 400
+          )
         } else if (item.kind === 'led') {
           const { dir, squash } = billboard(cam.yaw + Math.PI / 2, cam.yaw)
-          drawHorse(ctx!, item.m.breed, item.m.coat, item.p, dir, squash, item.a, w.t, item.m.seed, 0.2)
+          const young = ageOf(item.m.horse, Date.now()) !== 'grown'
+          drawHorse(
+            ctx!,
+            young ? { ...item.m.breed, length: item.m.breed.length * FOAL_SCALE } : item.m.breed,
+            item.m.coat,
+            item.p,
+            dir,
+            squash,
+            item.a,
+            w.t,
+            item.m.seed,
+            0.2
+          )
         } else {
           const { dir, squash } = billboard(item.b.heading, cam.yaw)
           drawQuarry(ctx!, item.b.q, item.p, dir, squash, item.a, w.t, item.b.seed, item.b.speed / 400)
@@ -868,6 +924,7 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
           <div style={S.trustBox}>
             <div style={S.trustHead}>
               {near.coat} {near.breed}
+              {near.foal && <span style={S.away}> · foal</span>}
               <span style={S.away}>
                 {near.roped !== null ? ' — roped' : ` — ${near.away} out`}
               </span>
@@ -942,34 +999,57 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
 
         {sheet === 'stable' && (
           <Sheet title="Stable" onClose={() => setSheet(null)}>
+            <div style={S.beam} />
             <p style={S.hint}>
-              Every horse you have gentled. Call one and she will come to you wherever you are.
+              Every horse you have caught, in her own stall. Call one and she will come to you
+              wherever you are. Youngsters need bringing on before they can carry anyone — and
+              they only grow in the time you spend out here.
             </p>
-            {(save.stable ?? []).length === 0 && (
-              <p style={S.hint}>
-                Nothing here yet. Find a herd, and take the last hundred yards slowly.
-              </p>
-            )}
-            {(save.stable ?? []).map((h) => {
-              const breed = BREEDS.find((b) => b.key === h.breed)
-              const coat = COATS.find((c) => c.key === h.coat)
-              return (
-                <div key={h.name} style={S.row}>
-                  <span style={{ ...S.swatch, background: coat?.body ?? '#666' }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={S.rowName}>{h.name}</div>
-                    <div style={S.rowNote}>
-                      {coat?.label} {breed?.label} · ridden {h.ridden ?? 0}×
-                    </div>
-                  </div>
-                  <button style={S.small} onClick={() => callHorse(h)}>
-                    Call
-                  </button>
-                </div>
-              )
-            })}
 
-            <div style={S.section}>Breeds gentled</div>
+            {(save.stable ?? []).length === 0 ? (
+              <div style={S.emptyStable}>
+                <Stall label="Empty" sub="waiting for a horse">
+                  <span style={S.emptyNote}>—</span>
+                </Stall>
+                <p style={S.hint}>
+                  Nothing in here yet. Find a herd, run one down and get a rope on her.
+                </p>
+              </div>
+            ) : (
+              <div style={S.stalls}>
+                {(save.stable ?? []).map((h) => {
+                  const age = ageOf(h, now)
+                  const breed = BREEDS.find((b) => b.key === h.breed)
+                  const coat = COATS.find((c) => c.key === h.coat)
+                  const left = growthLeft(h, now)
+                  return (
+                    <Stall
+                      key={h.name}
+                      label={h.name}
+                      sub={`${coat?.label ?? ''} ${breed?.label ?? ''}`}
+                      action={
+                        <div style={S.stallFoot}>
+                          <span style={S.ageTag}>
+                            {AGE_LABEL[age]}
+                            {left > 0 && ` · ${Math.ceil(left / 1000)}s`}
+                          </span>
+                          <button
+                            style={{ ...S.small, opacity: age === 'grown' ? 1 : 0.55 }}
+                            onClick={() => callHorse(h)}
+                          >
+                            {age === 'grown' ? 'Call' : 'Bring out'}
+                          </button>
+                        </div>
+                      }
+                    >
+                      <HorsePortrait breed={h.breed} coat={h.coat} age={age} size={126} />
+                    </Stall>
+                  )
+                })}
+              </div>
+            )}
+
+            <div style={S.section}>Breeds caught</div>
             <div style={S.rowNote}>
               {(save.breedsSeen ?? []).length} of {BREEDS.length} —{' '}
               {BREEDS.filter((b) => (save.breedsSeen ?? []).includes(b.key))
@@ -1226,4 +1306,25 @@ const S: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
   },
   cost: { fontSize: 11, opacity: 0.75 },
+  beam: {
+    height: 10,
+    borderRadius: 3,
+    background: 'linear-gradient(#6b563c, #3a2c1e)',
+    margin: '6px 0 2px',
+  },
+  stalls: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+    gap: 8,
+  },
+  emptyStable: { maxWidth: 200 },
+  emptyNote: { color: '#8a7a5f', fontSize: 26 },
+  stallFoot: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
+  ageTag: {
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    color: '#c2b08a',
+    fontWeight: 700,
+  },
 }

@@ -102,6 +102,44 @@ export const COAT_BY_KEY: Record<string, Coat> = Object.fromEntries(
 )
 
 /* ------------------------------------------------------------------ */
+/* Young ones                                                          */
+/* ------------------------------------------------------------------ */
+
+export type Age = 'foal' | 'yearling' | 'grown'
+
+/**
+ * How long a young horse takes to come on, per stage.
+ *
+ * Stored as an absolute moment in the save rather than a countdown, so
+ * it survives a reload - and because the homestead freezes a game's
+ * clock while you are elsewhere, a foal only grows in the time you
+ * actually spend out here with her.
+ */
+export const STAGE_MS = 100_000
+
+export function ageOf(horse: StabledHorse, now: number): Age {
+  const grown = horse.grownAt ?? 0
+  if (!grown || now >= grown) return 'grown'
+  return now >= grown - STAGE_MS ? 'yearling' : 'foal'
+}
+
+export function growthLeft(horse: StabledHorse, now: number): number {
+  return Math.max(0, (horse.grownAt ?? 0) - now)
+}
+
+export const AGE_LABEL: Record<Age, string> = {
+  foal: 'Foal',
+  yearling: 'Yearling',
+  grown: 'Grown',
+}
+
+/** A foal is smaller, slower, and has far less wind than her dam. */
+export const FOAL_SCALE = 0.62
+export const FOAL_SPEED = 0.66
+export const FOAL_WIND = 0.45
+export const FOAL_FIGHT = 0.5
+
+/* ------------------------------------------------------------------ */
 /* Catching one                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -284,9 +322,14 @@ export interface StabledHorse {
   name: string
   breed: string
   coat: string
-  /** When you gentled her. */
+  /** When you got a rope on her. */
   tamedAt: number
   ridden: number
+  /**
+   * The moment she is fully grown. Absent or past means she already is.
+   * Only young ones carry it.
+   */
+  grownAt?: number
 }
 
 export interface HorseSave {
