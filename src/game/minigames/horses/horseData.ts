@@ -127,6 +127,43 @@ export function growthLeft(horse: StabledHorse, now: number): number {
   return Math.max(0, (horse.grownAt ?? 0) - now)
 }
 
+/**
+ * How long a feed and a bucket last, in time spent out here.
+ *
+ * Water goes first, as it does. A youngster that runs out of either
+ * stops coming on until you see to her - she does not come to harm, she
+ * simply does not grow, which is punishment enough for forgetting.
+ */
+export const FEED_MS = 70_000
+export const WATER_MS = 50_000
+
+export function isYoung(horse: StabledHorse, now: number): boolean {
+  return ageOf(horse, now) !== 'grown'
+}
+
+export interface Care {
+  hungry: boolean
+  thirsty: boolean
+  /** 0 to 1, for the bucket levels in the stall. */
+  feed: number
+  water: number
+}
+
+export function careOf(horse: StabledHorse, now: number): Care {
+  const feed = Math.max(0, Math.min(1, ((horse.fedUntil ?? 0) - now) / FEED_MS))
+  const water = Math.max(0, Math.min(1, ((horse.wateredUntil ?? 0) - now) / WATER_MS))
+  return { hungry: feed <= 0, thirsty: water <= 0, feed, water }
+}
+
+/** Is anything in the stable waiting on you? */
+export function needsTending(stable: StabledHorse[], now: number): number {
+  return stable.filter((h) => {
+    if (!isYoung(h, now)) return false
+    const c = careOf(h, now)
+    return c.hungry || c.thirsty
+  }).length
+}
+
 export const AGE_LABEL: Record<Age, string> = {
   foal: 'Foal',
   yearling: 'Yearling',
@@ -327,9 +364,14 @@ export interface StabledHorse {
   ridden: number
   /**
    * The moment she is fully grown. Absent or past means she already is.
-   * Only young ones carry it.
+   * Only young ones carry it, and it is pushed back whenever she is left
+   * without feed or water.
    */
   grownAt?: number
+  /** When the last feed runs out. Young ones only. */
+  fedUntil?: number
+  /** When the bucket runs dry. */
+  wateredUntil?: number
 }
 
 export interface HorseSave {
@@ -417,7 +459,10 @@ export function pickName(used: string[]): string {
   return `${NAMES[0]} ${Date.now()}`
 }
 
-export function horsesPending(s: HorseSave | undefined) {
+export function horsesPending(s: HorseSave | undefined, now: number) {
   if (!s) return null
+  const waiting = needsTending(s.stable ?? [], now)
+  // A youngster wanting her bucket is worth interrupting you for.
+  if (waiting > 0) return { count: waiting, urgent: true }
   return (s.stable?.length ?? 0) === 0 ? { count: 1 } : null
 }

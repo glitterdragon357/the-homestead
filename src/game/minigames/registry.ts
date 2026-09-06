@@ -143,7 +143,7 @@ export const MINIGAME_REGISTRY: Record<string, MinigameDefinition> = {
     description: 'Gentle horses in open country, ride them, and take up hunting.',
     icon: '\u{1F40E}',
     component: HorsesMinigame,
-    pending: (p) => horsesPending(p.horses as HorseSave),
+    pending: (p, now) => horsesPending(p.horses as HorseSave, now),
   },
   ocean: {
     id: 'ocean',

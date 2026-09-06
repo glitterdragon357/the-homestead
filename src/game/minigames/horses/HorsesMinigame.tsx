@@ -15,7 +15,9 @@ import {
   FOAL_SCALE,
   FOAL_SPEED,
   FOAL_WIND,
+  FEED_MS,
   STAGE_MS,
+  WATER_MS,
   WIND_RECOVER,
   windDrain,
   BREEDS,
@@ -30,7 +32,9 @@ import {
   WORLD,
   ageOf,
   breakEffort,
+  careOf,
   growthLeft,
+  isYoung,
   catchChance,
   lassoGrip,
   lassoReach,
@@ -40,6 +44,7 @@ import {
   groundAt,
   initialHorses,
   pickName,
+  needsTending,
   sightRange,
   type Breed,
   type Coat,
@@ -198,6 +203,49 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
     return () => window.clearInterval(id)
   }, [sheet])
 
+  /*
+   * A youngster with an empty manger or a dry bucket stops growing.
+   *
+   * Rather than take anything away from her, the moment she is left
+   * wanting is added back onto how long she has left - so neglect costs
+   * you time and nothing worse. The save is only written when somebody
+   * is actually going without.
+   */
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const at = Date.now()
+      setSave((prev) => {
+        const stable = prev.stable ?? []
+        let changed = false
+        const next = stable.map((h) => {
+          if (!isYoung(h, at)) return h
+          const care = careOf(h, at)
+          if (!care.hungry && !care.thirsty) return h
+          changed = true
+          return { ...h, grownAt: (h.grownAt ?? at) + 1000 }
+        })
+        return changed ? { ...prev, stable: next } : prev
+      })
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [setSave])
+
+  /** Fill the manger or the bucket for one youngster. */
+  function tend(name: string, what: 'feed' | 'water') {
+    const at = Date.now()
+    setSave((prev) => ({
+      ...prev,
+      stable: (prev.stable ?? []).map((h) =>
+        h.name === name
+          ? what === 'feed'
+            ? { ...h, fedUntil: at + FEED_MS }
+            : { ...h, wateredUntil: at + WATER_MS }
+          : h
+      ),
+    }))
+    showToast(what === 'feed' ? `Fed ${name}.` : `Watered ${name}.`)
+  }
+
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<number | undefined>(undefined)
   const [hud, setHud] = useState({
@@ -321,7 +369,13 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
       tamedAt: Date.now(),
       ridden: 0,
       // Two stages to come on, and only while you are out here with her.
-      ...(h.foal ? { grownAt: Date.now() + STAGE_MS * 2 } : {}),
+      ...(h.foal
+        ? {
+            grownAt: Date.now() + STAGE_MS * 2,
+            fedUntil: Date.now() + FEED_MS,
+            wateredUntil: Date.now() + WATER_MS,
+          }
+        : {}),
     }
     w.wild = w.wild.filter((x) => x !== h)
     w.wild.push(makeWild(w.cam, 1600, 3400))
@@ -848,6 +902,7 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
 
   const pace = Math.abs(hud.speed)
   const near = hud.near
+  const waiting = needsTending(save.stable ?? [], now)
 
   return (
     <div style={S.wrap}>
@@ -1000,6 +1055,12 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
         {sheet === 'stable' && (
           <Sheet title="Stable" onClose={() => setSheet(null)}>
             <div style={S.beam} />
+            {waiting > 0 && (
+              <div style={S.waiting}>
+                {waiting === 1 ? 'One youngster is' : `${waiting} youngsters are`} waiting on
+                feed or water — nothing grows until you see to them.
+              </div>
+            )}
             <p style={S.hint}>
               Every horse you have caught, in her own stall. Call one and she will come to you
               wherever you are. Youngsters need bringing on before they can carry anyone — and
@@ -1022,24 +1083,49 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
                   const breed = BREEDS.find((b) => b.key === h.breed)
                   const coat = COATS.find((c) => c.key === h.coat)
                   const left = growthLeft(h, now)
+                  const care = careOf(h, now)
+                  const stalled = age !== 'grown' && (care.hungry || care.thirsty)
                   return (
                     <Stall
                       key={h.name}
                       label={h.name}
                       sub={`${coat?.label ?? ''} ${breed?.label ?? ''}`}
                       action={
-                        <div style={S.stallFoot}>
-                          <span style={S.ageTag}>
-                            {AGE_LABEL[age]}
-                            {left > 0 && ` · ${Math.ceil(left / 1000)}s`}
-                          </span>
-                          <button
-                            style={{ ...S.small, opacity: age === 'grown' ? 1 : 0.55 }}
-                            onClick={() => callHorse(h)}
-                          >
-                            {age === 'grown' ? 'Call' : 'Bring out'}
-                          </button>
-                        </div>
+                        <>
+                          {age !== 'grown' && (
+                            <div style={S.care}>
+                              <CareRow
+                                label="Feed"
+                                level={care.feed}
+                                empty={care.hungry}
+                                onFill={() => tend(h.name, 'feed')}
+                              />
+                              <CareRow
+                                label="Water"
+                                level={care.water}
+                                empty={care.thirsty}
+                                onFill={() => tend(h.name, 'water')}
+                              />
+                            </div>
+                          )}
+                          <div style={S.stallFoot}>
+                            <span
+                              style={{
+                                ...S.ageTag,
+                                color: stalled ? '#ff9b93' : '#c2b08a',
+                              }}
+                            >
+                              {AGE_LABEL[age]}
+                              {left > 0 && (stalled ? ' · waiting on you' : ` · ${Math.ceil(left / 1000)}s`)}
+                            </span>
+                            <button
+                              style={{ ...S.small, opacity: age === 'grown' ? 1 : 0.55 }}
+                              onClick={() => callHorse(h)}
+                            >
+                              {age === 'grown' ? 'Call' : 'Bring out'}
+                            </button>
+                          </div>
+                        </>
                       }
                     >
                       <HorsePortrait breed={h.breed} coat={h.coat} age={age} size={126} />
@@ -1110,6 +1196,36 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
           </Sheet>
         )}
       </div>
+    </div>
+  )
+}
+
+function CareRow({
+  label,
+  level,
+  empty,
+  onFill,
+}: {
+  label: string
+  level: number
+  empty: boolean
+  onFill: () => void
+}) {
+  return (
+    <div style={S.careRow}>
+      <span style={S.careLabel}>{label}</span>
+      <div style={S.careTrack}>
+        <div
+          style={{
+            ...S.careFill,
+            width: `${Math.round(level * 100)}%`,
+            background: empty ? '#e2584f' : level < 0.3 ? '#e0b84a' : '#7cd88f',
+          }}
+        />
+      </div>
+      <button style={S.careBtn} onClick={onFill}>
+        {label === 'Feed' ? 'Fill' : 'Fill'}
+      </button>
     </div>
   )
 }
@@ -1320,6 +1436,30 @@ const S: Record<string, React.CSSProperties> = {
   emptyStable: { maxWidth: 200 },
   emptyNote: { color: '#8a7a5f', fontSize: 26 },
   stallFoot: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
+  care: { display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 4 },
+  careRow: { display: 'flex', alignItems: 'center', gap: 5 },
+  careLabel: { fontSize: 9.5, width: 30, color: '#c2b08a', textTransform: 'uppercase', letterSpacing: 0.4 },
+  careTrack: { flex: 1, height: 6, borderRadius: 4, background: 'rgba(0,0,0,0.35)', overflow: 'hidden' },
+  careFill: { height: '100%', borderRadius: 4, transition: 'width 200ms linear' },
+  careBtn: {
+    padding: '2px 8px',
+    border: 'none',
+    borderRadius: 6,
+    background: '#c9a850',
+    color: '#2b2415',
+    fontSize: 10,
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
+  waiting: {
+    background: 'rgba(200,80,60,0.22)',
+    border: '1px solid rgba(226,88,79,0.5)',
+    color: '#ffd7d2',
+    fontSize: 12,
+    borderRadius: 8,
+    padding: '6px 10px',
+    margin: '6px 0 2px',
+  },
   ageTag: {
     fontSize: 10,
     textTransform: 'uppercase',
