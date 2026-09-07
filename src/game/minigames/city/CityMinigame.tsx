@@ -1,36 +1,47 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MinigameProps } from '../registry'
 import { useMinigameProgress } from '../../state/useMinigameProgress'
-import { usePurse } from '../../state/usePurse'
-import { GiftRow } from '../../economy/GiftRow'
 import { clarity, forwardOf, type Camera } from '../../engine/firstPerson'
-import { drawBuilding, drawFixture, drawGround, drawSky, project } from './cityDraw'
+import {
+  drawBuilding,
+  drawCar,
+  drawFixture,
+  drawGround,
+  drawPerson,
+  drawPlaygroundFences,
+  drawSky,
+  project,
+} from './cityDraw'
 import { InteriorScene } from './CityArt'
 import {
+  CAR_COLOURS,
   CEILING,
-  FIXTURE_COIN,
+  COATS,
+  DOOR_REACH,
   FIXTURE_DOING,
   FIXTURE_LABEL,
-  GEAR,
   GROUND,
   INTERIORS,
   INTERIOR_BY_KEY,
-  DOOR_REACH,
+  PAVEMENT_INSET,
   REACH,
+  SIGHT,
+  STREET,
   VIEW,
   WORLD,
   buildingsAround,
-  canEnter,
-  fixturesAround,
-  gearValue,
-  heightOf,
+  groundHeightAt,
   initialCity,
   insideBuilding,
-  sightRange,
+  isPavement,
+  laneCentre,
+  fixturesAround,
+  heightOf,
   type Building,
+  type Car,
   type CitySave,
   type Fixture,
-  type GearKey,
+  type Person,
 } from './cityData'
 
 /**
@@ -47,10 +58,73 @@ import {
 interface World {
   cam: Camera
   speed: number
+  /** On your feet, or up in the air. */
+  flying: boolean
+  cars: Car[]
+  people: Person[]
   t: number
   keys: Set<string>
   stick: { on: boolean; ox: number; oy: number; x: number; y: number }
   highest: number
+  walked: number
+}
+
+const EYE = 17
+const WALK_SPEED = 190
+const FLY_SPEED = 620
+
+function rand(a: number, b: number) {
+  return a + Math.random() * (b - a)
+}
+
+/** Put a car on the nearest road, pointing along it. */
+function makeCar(cam: Camera): Car {
+  const alongX = Math.random() < 0.5
+  const r = rand(600, 2400)
+  const a = Math.random() * Math.PI * 2
+  const x = cam.x + Math.cos(a) * r
+  const z = cam.z + Math.sin(a) * r
+  const lane = 22
+  const dir = Math.random() < 0.5 ? 1 : -1
+  const big = Math.random()
+  return {
+    x: alongX ? x : laneCentre(x) + dir * lane,
+    z: alongX ? laneCentre(z) + dir * lane : z,
+    heading: alongX ? (dir > 0 ? Math.PI / 2 : -Math.PI / 2) : dir > 0 ? 0 : Math.PI,
+    speed: rand(120, 240),
+    colour: CAR_COLOURS[Math.floor(Math.random() * CAR_COLOURS.length)],
+    size: big > 0.86 ? 62 : big > 0.7 ? 46 : 36,
+    height: big > 0.86 ? 34 : 24,
+  }
+}
+
+/** Put somebody on a pavement. */
+function makePerson(cam: Camera): Person {
+  for (let i = 0; i < 20; i++) {
+    const a = Math.random() * Math.PI * 2
+    const r = rand(200, 1500)
+    const x = cam.x + Math.cos(a) * r
+    const z = cam.z + Math.sin(a) * r
+    if (!isPavement(x, z)) continue
+    return {
+      x,
+      z,
+      heading: Math.floor(Math.random() * 4) * (Math.PI / 2),
+      speed: rand(22, 42),
+      coat: COATS[Math.floor(Math.random() * COATS.length)],
+      legs: Math.floor(Math.random() * 4),
+      scale: Math.random() < 0.22 ? 0.72 : 1,
+    }
+  }
+  return {
+    x: cam.x + 200,
+    z: laneCentre(cam.z) - STREET * 0.5 + PAVEMENT_INSET,
+    heading: 0,
+    speed: 30,
+    coat: COATS[0],
+    legs: 0,
+    scale: 1,
+  }
 }
 
 const TURN_RATE = 1.7
@@ -59,7 +133,6 @@ const PITCH_LIMIT = 1.15
 
 export function CityMinigame({ onExit }: MinigameProps) {
   const [save, setSave] = useMinigameProgress<CitySave>('city', initialCity)
-  const { coins, earn, spend } = usePurse('city')
   const saveRef = useRef(save)
   saveRef.current = save
 
@@ -76,9 +149,9 @@ export function CityMinigame({ onExit }: MinigameProps) {
   const toastTimer = useRef<number | undefined>(undefined)
   const [hud, setHud] = useState({
     height: 0,
-    speed: 0,
+    flying: false,
     fixture: null as null | { key: string; kind: Fixture['kind']; used: boolean },
-    door: null as null | { key: string; interior: string; locked: boolean },
+    door: null as null | { key: string; interior: string; onFoot: boolean },
   })
 
   const showToast = useCallback((msg: string) => {
@@ -91,26 +164,39 @@ export function CityMinigame({ onExit }: MinigameProps) {
     worldRef.current = {
       cam: {
         x: WORLD.width / 2,
-        y: GROUND - 300,
+        y: GROUND - EYE,
         z: WORLD.depth / 2,
         yaw: Math.PI / 4,
         pitch: 0.12,
       },
       speed: 0,
+      flying: false,
+      cars: [],
+      people: [],
       t: 0,
       keys: new Set(),
       stick: { on: false, ox: 0, oy: 0, x: 0, y: 0 },
       highest: save.highest ?? 0,
+      walked: 0,
     }
+    const w = worldRef.current
+    w.cam.y = groundHeightAt(w.cam.x, w.cam.z) - EYE
+    w.cars = Array.from({ length: 26 }, () => makeCar(w.cam))
+    w.people = Array.from({ length: 34 }, () => makePerson(w.cam))
   }
 
   useEffect(() => {
-    setSave((s) => ({ ...s, flights: (s.flights ?? 0) + 1 }))
+    setSave((s) => ({ ...s, outings: (s.outings ?? 0) + 1 }))
     return () => {
       const w = worldRef.current
       if (w) {
         const top = w.highest
-        setSave((s) => ({ ...s, highest: Math.max(s.highest ?? 0, top) }))
+        const far = Math.round(w.walked / 10)
+        setSave((s) => ({
+          ...s,
+          highest: Math.max(s.highest ?? 0, top),
+          walked: (s.walked ?? 0) + far,
+        }))
       }
       window.clearTimeout(toastTimer.current)
     }
@@ -157,48 +243,39 @@ export function CityMinigame({ onExit }: MinigameProps) {
       showToast(`You have already had a go on ${FIXTURE_LABEL[f.kind]}.`)
       return
     }
-    const pay = FIXTURE_COIN[f.kind]
-    earn(pay)
     setSave((s) => ({
       ...s,
       used: [...(s.used ?? []), f.key],
       kinds: s.kinds?.includes(f.kind) ? s.kinds : [...(s.kinds ?? []), f.kind],
     }))
-    showToast(`${FIXTURE_DOING[f.kind]} · ${pay} 🪙`)
-  }, [earn, nearestFixture, setSave, showToast])
+    showToast(FIXTURE_DOING[f.kind])
+  }, [nearestFixture, setSave, showToast])
 
   const goInside = useCallback(() => {
     const w = worldRef.current
     if (!w) return
     const b = nearestDoor(w)
     if (!b?.interior) return
-    const place = INTERIOR_BY_KEY[b.interior]
-    if (!canEnter(saveRef.current, place)) {
-      showToast(`${place.label} wants a pass you have not got.`)
+    if (w.flying) {
+      showToast('Land first. You cannot open a door from the air.')
       return
     }
-    const first = !(saveRef.current.visited ?? []).includes(place.key)
-    if (first) earn(place.coins)
+    const place = INTERIOR_BY_KEY[b.interior]
     setSave((s) => ({
       ...s,
       visited: s.visited?.includes(place.key) ? s.visited : [...(s.visited ?? []), place.key],
     }))
     setInside(place.key)
-    if (first) showToast(`First time inside ${place.label} · ${place.coins} 🪙`)
-  }, [earn, nearestDoor, setSave, showToast])
+  }, [nearestDoor, setSave, showToast])
 
   function doThing(placeKey: string, doingKey: string) {
     const place = INTERIOR_BY_KEY[placeKey]
     const doing = place?.doings.find((d) => d.key === doingKey)
     if (!doing) return
     const id = `${placeKey}:${doingKey}`
-    if ((save.done ?? []).includes(id)) {
-      showToast('You have done that already.')
-      return
-    }
-    earn(doing.coins)
+    if ((save.done ?? []).includes(id)) return
     setSave((s) => ({ ...s, done: [...(s.done ?? []), id] }))
-    showToast(`${doing.note} · ${doing.coins} 🪙`)
+    showToast(doing.note)
   }
 
   /* ---------------------------------------------------------------- */
@@ -295,23 +372,16 @@ export function CityMinigame({ onExit }: MinigameProps) {
         const place = b?.interior ? INTERIOR_BY_KEY[b.interior] : null
         setHud({
           height: heightOf(w.cam.y),
-          speed: w.speed,
+          flying: w.flying,
           fixture: f
             ? { key: f.key, kind: f.kind, used: (saveRef.current.used ?? []).includes(f.key) }
             : null,
-          door: place
-            ? {
-                key: b!.key,
-                interior: place.key,
-                locked: !canEnter(saveRef.current, place),
-              }
-            : null,
+          door: place ? { key: b!.key, interior: place.key, onFoot: !w.flying } : null,
         })
       }
     }
 
     function step(w: World, dt: number) {
-      const s = saveRef.current
       const cam = w.cam
       const k = w.keys
 
@@ -337,53 +407,90 @@ export function CityMinigame({ onExit }: MinigameProps) {
       cam.yaw += turn * TURN_RATE * dt
       cam.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, cam.pitch + pitch * PITCH_RATE * dt))
 
-      // You fly where you are looking, so up is a direction like any other.
-      const top = gearValue(s, 'wings')
-      w.speed += (Math.max(-0.6, Math.min(1, pace)) * top - w.speed) * Math.min(1, dt * 2.6)
+      const top = w.flying ? FLY_SPEED : WALK_SPEED
+      w.speed += (Math.max(-0.6, Math.min(1, pace)) * top - w.speed) * Math.min(1, dt * 3.4)
+
       const f = forwardOf(cam)
       const wasX = cam.x
       const wasZ = cam.z
-      cam.x += f.x * w.speed * dt
-      cam.y += f.y * w.speed * dt
-      cam.z += f.z * w.speed * dt
+
+      if (w.flying) {
+        // In the air you go wherever you are pointing.
+        cam.x += f.x * w.speed * dt
+        cam.y += f.y * w.speed * dt
+        cam.z += f.z * w.speed * dt
+        cam.y = Math.max(CEILING, cam.y)
+      } else {
+        /*
+         * On your feet you only travel along the ground, however much you
+         * are looking at the sky - and your eyes stay a head's height
+         * above whatever you are standing on, so stepping up a kerb is
+         * something you feel.
+         */
+        const flat = Math.hypot(f.x, f.z) || 1
+        cam.x += (f.x / flat) * w.speed * dt
+        cam.z += (f.z / flat) * w.speed * dt
+      }
 
       cam.x = Math.min(WORLD.width - 40, Math.max(40, cam.x))
       cam.z = Math.min(WORLD.depth - 40, Math.max(40, cam.z))
-      cam.y = Math.max(CEILING, Math.min(GROUND - 18, cam.y))
 
-      /*
-       * The city is solid. If you have ended up inside a wall, back out
-       * along whichever axis you are least far through - that slides you
-       * along the face rather than stopping you dead against it.
-       */
+      // The city is solid whichever way you are travelling.
       for (const b of buildingsAround(cam.x, cam.z, 400)) {
         if (!insideBuilding(b, cam.x, cam.y, cam.z)) continue
         const overX = b.hw + 14 - Math.abs(cam.x - b.x)
         const overZ = b.hd + 14 - Math.abs(cam.z - b.z)
         const overY = cam.y - (GROUND - b.height)
         if (overY < 0) continue
-        if (overY < Math.min(overX, overZ) * 0.6) {
+        if (w.flying && overY < Math.min(overX, overZ) * 0.6) {
           cam.y = GROUND - b.height - 6
         } else if (overX < overZ) {
           cam.x = b.x + Math.sign(cam.x - b.x || 1) * (b.hw + 15)
         } else {
           cam.z = b.z + Math.sign(cam.z - b.z || 1) * (b.hd + 15)
         }
-        void wasX
-        void wasZ
+      }
+
+      const stepped = Math.hypot(cam.x - wasX, cam.z - wasZ)
+      if (!w.flying) {
+        cam.y = groundHeightAt(cam.x, cam.z) - EYE
+        w.walked += stepped
+      } else {
+        cam.y = Math.min(groundHeightAt(cam.x, cam.z) - EYE, cam.y)
       }
 
       const up = heightOf(cam.y)
       if (up > w.highest) w.highest = up
+
+      // --- traffic ---------------------------------------------------
+      for (const car of w.cars) {
+        car.x += Math.sin(car.heading) * car.speed * dt
+        car.z += Math.cos(car.heading) * car.speed * dt
+        if (Math.hypot(car.x - cam.x, car.z - cam.z) > 2800) Object.assign(car, makeCar(cam))
+      }
+
+      // --- passers-by ------------------------------------------------
+      for (const p of w.people) {
+        const nx = p.x + Math.sin(p.heading) * p.speed * dt
+        const nz = p.z + Math.cos(p.heading) * p.speed * dt
+        if (isPavement(nx, nz)) {
+          p.x = nx
+          p.z = nz
+        } else {
+          // Reached a corner: turn and carry on along the next pavement.
+          p.heading += Math.PI / 2
+        }
+        if (Math.hypot(p.x - cam.x, p.z - cam.z) > 1900) Object.assign(p, makePerson(cam))
+      }
     }
 
     function render(w: World) {
-      const s = saveRef.current
       const cam = w.cam
-      const sight = sightRange(s)
+      const sight = SIGHT
 
       drawSky(ctx!, cam, w.t)
       drawGround(ctx!, cam, sight)
+      drawPlaygroundFences(ctx!, cam, sight)
 
       // Buildings, far ones first so near ones cover them.
       const near = buildingsAround(cam.x, cam.z, sight)
@@ -392,6 +499,14 @@ export function CityMinigame({ onExit }: MinigameProps) {
           Math.hypot(b.x - cam.x, b.z - cam.z) - Math.hypot(a.x - cam.x, a.z - cam.z)
       )
       for (const b of near) drawBuilding(ctx!, b, cam, sight, true)
+
+      // Traffic, sorted with the buildings so nothing sits on the wrong
+      // side of a wall.
+      const cars = [...w.cars].sort(
+        (a, b) =>
+          Math.hypot(b.x - cam.x, b.z - cam.z) - Math.hypot(a.x - cam.x, a.z - cam.z)
+      )
+      for (const car of cars) drawCar(ctx!, car, cam, sight)
 
       // Street furniture over the top of it.
       const fixtures = fixturesAround(cam.x, cam.z, Math.min(sight, 2600))
@@ -405,6 +520,18 @@ export function CityMinigame({ onExit }: MinigameProps) {
       }
       drawn.sort((m, n) => n.p.depth - m.p.depth)
       for (const { p, f, a } of drawn) drawFixture(ctx!, f, p, a, w.t)
+
+      // People, on the pavement where they belong.
+      const walkers: { p: NonNullable<ReturnType<typeof project>>; person: Person; a: number }[] = []
+      for (const person of w.people) {
+        const p = project(cam, person.x, groundHeightAt(person.x, person.z), person.z)
+        if (!p) continue
+        const a = clarity(p.depth, sight)
+        if (a <= 0.02) continue
+        walkers.push({ p, person, a })
+      }
+      walkers.sort((m, n) => n.p.depth - m.p.depth)
+      for (const { p, person, a } of walkers) drawPerson(ctx!, person, p, a, w.t)
 
       // A ring on whatever is to hand.
       const handy = nearestFixture(w)
@@ -449,17 +576,14 @@ export function CityMinigame({ onExit }: MinigameProps) {
   /* Chrome                                                            */
   /* ---------------------------------------------------------------- */
 
-  function buy(key: GearKey) {
-    const list = GEAR[key].list
-    const owned = saveRef.current[key] ?? 0
-    const next = list[owned + 1]
-    if (!next) return
-    if (!spend(next.cost)) {
-      showToast('Not enough yet.')
-      return
-    }
-    setSave((s) => ({ ...s, [key]: owned + 1 }))
-    showToast(`Bought: ${next.label}`)
+  /** Up off the pavement, or back down onto it. */
+  function toggleFly() {
+    const w = worldRef.current
+    if (!w) return
+    w.flying = !w.flying
+    if (!w.flying) w.cam.y = groundHeightAt(w.cam.x, w.cam.z) - EYE
+    w.speed = 0
+    showToast(w.flying ? 'Up you go.' : 'Back on the pavement.')
   }
 
   const place = inside ? INTERIOR_BY_KEY[inside] : null
@@ -500,11 +624,17 @@ export function CityMinigame({ onExit }: MinigameProps) {
 
         <div style={S.topBar}>
           <div style={S.readout}>
-            <span style={S.label}>Height</span>
-            <span style={S.big}>{hud.height} m</span>
+            <span style={S.label}>{hud.flying ? 'Flying' : 'On foot'}</span>
+            <span style={S.big}>{hud.flying ? `${hud.height} m` : 'street level'}</span>
           </div>
-          <span style={S.hint}>hold to fly · look where you want to go</span>
-          <span style={S.coins}>🪙 {coins}</span>
+          <span style={S.hint}>
+            {hud.flying
+              ? 'hold to fly · look where you want to go'
+              : 'hold to walk · stand at a door to open it'}
+          </span>
+          <span style={S.label}>
+            {(save.visited ?? []).length} / {INTERIORS.length} places
+          </span>
         </div>
 
         {toast && <div style={S.toast}>{toast}</div>}
@@ -512,12 +642,12 @@ export function CityMinigame({ onExit }: MinigameProps) {
         <div style={S.bottomBar}>
           {hud.door && (
             <button
-              style={{ ...S.act, opacity: hud.door.locked ? 0.55 : 1 }}
+              style={{ ...S.act, opacity: hud.door.onFoot ? 1 : 0.5 }}
               onClick={goInside}
             >
-              {hud.door.locked
-                ? `${INTERIOR_BY_KEY[hud.door.interior].label} · locked`
-                : `Go inside ${INTERIOR_BY_KEY[hud.door.interior].label}`}
+              {hud.door.onFoot
+                ? `Open door · ${INTERIOR_BY_KEY[hud.door.interior].label}`
+                : `${INTERIOR_BY_KEY[hud.door.interior].label} · land first`}
             </button>
           )}
           {!hud.door && hud.fixture && (
@@ -530,8 +660,8 @@ export function CityMinigame({ onExit }: MinigameProps) {
           <button style={S.ghost} onClick={() => setSheet(sheet === 'journal' ? null : 'journal')}>
             Journal
           </button>
-          <button style={S.ghost} onClick={() => setSheet(sheet === 'gear' ? null : 'gear')}>
-            Kit
+          <button style={S.ghost} onClick={toggleFly}>
+            {hud.flying ? 'Land' : 'Fly'}
           </button>
           <button style={S.ghost} onClick={onExit}>
             Leave
@@ -548,7 +678,7 @@ export function CityMinigame({ onExit }: MinigameProps) {
                 <div key={d.key} style={{ ...S.row, ...(done ? S.rowDone : null) }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={S.rowName}>{d.label}</div>
-                    <div style={S.rowNote}>{done ? d.note : `worth ${d.coins} 🪙`}</div>
+                    <div style={S.rowNote}>{done ? d.note : 'have a go'}</div>
                   </div>
                   {done ? (
                     <span style={S.tick}>✓</span>
@@ -569,7 +699,7 @@ export function CityMinigame({ onExit }: MinigameProps) {
               <Tally label="Places" value={`${(save.visited ?? []).length} / ${INTERIORS.length}`} />
               <Tally label="Things tried" value={String((save.kinds ?? []).length)} />
               <Tally label="Highest" value={`${Math.max(save.highest ?? 0, hud.height)} m`} />
-              <Tally label="Flights" value={String(save.flights ?? 0)} />
+              <Tally label="Walked" value={`${save.walked ?? 0} m`} />
             </div>
             <div style={S.section}>Places in the city</div>
             {INTERIORS.map((i) => {
@@ -580,11 +710,7 @@ export function CityMinigame({ onExit }: MinigameProps) {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={S.rowName}>{been ? i.label : 'Somewhere you have not been'}</div>
                     <div style={S.rowNote}>
-                      {been
-                        ? `${doneCount} of ${i.doings.length} things done`
-                        : i.pass > 0
-                          ? 'Needs a pass'
-                          : 'Open to anyone'}
+                      {been ? `${doneCount} of ${i.doings.length} things done` : 'Not been in yet'}
                     </div>
                   </div>
                   <span style={S.rowNote}>{been ? `${doneCount}/${i.doings.length}` : '—'}</span>
@@ -600,42 +726,6 @@ export function CityMinigame({ onExit }: MinigameProps) {
           </Sheet>
         )}
 
-        {sheet === 'gear' && (
-          <Sheet title="Kit" onClose={() => setSheet(null)} back="Back to the city">
-            <p style={S.blurb}>
-              Everything out here pays the first time you do it: a go on the swings, a door you
-              have not been through before. A pass is what gets you into the places that are
-              choosy.
-            </p>
-            {(Object.keys(GEAR) as GearKey[]).map((key) => {
-              const { list, label } = GEAR[key]
-              const owned = save[key] ?? 0
-              const next = list[owned + 1]
-              return (
-                <div key={key} style={S.row}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={S.section}>{label}</div>
-                    <div style={S.rowName}>{list[owned].label}</div>
-                    <div style={S.rowNote}>{next ? next.blurb : 'Nothing better going.'}</div>
-                  </div>
-                  {next ? (
-                    <button
-                      style={{ ...S.small, opacity: coins >= next.cost ? 1 : 0.45 }}
-                      onClick={() => buy(key)}
-                    >
-                      {next.label}
-                      <span style={S.cost}>🪙 {next.cost}</span>
-                    </button>
-                  ) : (
-                    <span style={S.rowNote}>best</span>
-                  )}
-                </div>
-              )
-            })}
-            <div style={S.section}>Coin</div>
-            <GiftRow from="city" />
-          </Sheet>
-        )}
       </div>
     </div>
   )

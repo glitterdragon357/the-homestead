@@ -21,8 +21,43 @@ export const GRID = 12
 
 export const WORLD = { width: BLOCK * GRID, depth: BLOCK * GRID }
 
-/** Street level. Down is positive, so a roof is a smaller number. */
+/** Road level. Down is positive, so a roof is a smaller number. */
 export const GROUND = 0
+
+/**
+ * How high the pavement stands over the road.
+ *
+ * Small, but it is the thing that makes a street read as a street: you
+ * step up onto the kerb, cars stay down on the tarmac, and people walk
+ * along the raised bit.
+ */
+export const KERB = 7
+
+/** The middle of the street is tarmac; the edges are pavement. */
+export function isRoad(x: number, z: number): boolean {
+  const ix = ((x % BLOCK) + BLOCK) % BLOCK
+  const iz = ((z % BLOCK) + BLOCK) % BLOCK
+  const alongX = iz < STREET && iz > STREET * 0.26 && iz < STREET * 0.74
+  const alongZ = ix < STREET && ix > STREET * 0.26 && ix < STREET * 0.74
+  return alongX || alongZ
+}
+
+/** How high the ground is where you are standing. */
+export function groundHeightAt(x: number, z: number): number {
+  return isRoad(x, z) ? GROUND : GROUND - KERB
+}
+
+/** Is this spot pavement you could walk along? */
+export function isPavement(x: number, z: number): boolean {
+  const ix = ((x % BLOCK) + BLOCK) % BLOCK
+  const iz = ((z % BLOCK) + BLOCK) % BLOCK
+  return (ix < STREET || iz < STREET) && !isRoad(x, z)
+}
+
+/** The centreline of the nearest road running each way. */
+export function laneCentre(v: number): number {
+  return Math.floor(v / BLOCK) * BLOCK + STREET / 2
+}
 /** You cannot fly below the pavement or above the weather. */
 export const CEILING = -1500
 
@@ -176,22 +211,6 @@ export const FIXTURE_LABEL: Record<FixtureKind, string> = {
   bench: 'a bench',
 }
 
-/** What you get for having a go on each. */
-export const FIXTURE_COIN: Record<FixtureKind, number> = {
-  swings: 14,
-  slide: 12,
-  roundabout: 14,
-  climber: 16,
-  seesaw: 12,
-  fountain: 18,
-  bandstand: 22,
-  statue: 16,
-  clock: 30,
-  market: 20,
-  pond: 18,
-  bench: 8,
-}
-
 /** What actually happens when you use one. */
 export const FIXTURE_DOING: Record<FixtureKind, string> = {
   swings: 'You get the swing going until the chains go slack at the top.',
@@ -261,6 +280,43 @@ export const REACH = 150
 export const DOOR_REACH = 320
 
 /* ------------------------------------------------------------------ */
+/* Traffic and passers-by                                              */
+/* ------------------------------------------------------------------ */
+
+export interface Car {
+  x: number
+  z: number
+  /** Which way it is pointing, in radians. */
+  heading: number
+  speed: number
+  colour: string
+  /** Saloon, van or bus - they are different sizes. */
+  size: number
+  height: number
+}
+
+export const CAR_COLOURS = [
+  '#b8392f', '#2f5fa8', '#d9c04a', '#3f7a52', '#e0e0e0', '#2b2b30', '#c2762f', '#7a4a8a',
+]
+
+export interface Person {
+  x: number
+  z: number
+  heading: number
+  speed: number
+  coat: string
+  legs: number
+  /** Adults and children, so the pavement is not all one height. */
+  scale: number
+}
+
+export const COATS = ['#b8392f', '#2f5fa8', '#3f7a52', '#d9c04a', '#8a4a8a', '#e0dcd2', '#2b2b30', '#c2762f']
+export const LEGS = ['#3a3f4a', '#4a3a2f', '#2b2b30', '#5a4a3a']
+
+/** People walk along here, a step in from the kerb. */
+export const PAVEMENT_INSET = STREET * 0.13
+
+/* ------------------------------------------------------------------ */
 /* Inside                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -268,12 +324,9 @@ export interface Interior {
   key: string
   label: string
   sign: string
-  /** Which pass you need on the door. 0 is open to anyone. */
-  pass: number
-  coins: number
   blurb: string
   /** Things you can do in there. */
-  doings: { key: string; label: string; note: string; coins: number }[]
+  doings: { key: string; label: string; note: string }[]
 }
 
 export const INTERIORS: Interior[] = [
@@ -281,100 +334,84 @@ export const INTERIORS: Interior[] = [
     key: 'cafe',
     label: 'The Corner Café',
     sign: 'CAFÉ',
-    pass: 0,
-    coins: 24,
     blurb: 'Steamed windows, four tables, and a cat asleep on the till.',
     doings: [
-      { key: 'coffee', label: 'Order a coffee', note: 'It comes in a cup the size of a bowl.', coins: 10 },
-      { key: 'cat', label: 'Say hello to the cat', note: 'The cat does not open its eyes.', coins: 12 },
-      { key: 'window', label: 'Sit by the window', note: 'You watch the street until the cup is cold.', coins: 9 },
+      { key: 'coffee', label: 'Order a coffee', note: 'It comes in a cup the size of a bowl.' },
+      { key: 'cat', label: 'Say hello to the cat', note: 'The cat does not open its eyes.' },
+      { key: 'window', label: 'Sit by the window', note: 'You watch the street until the cup is cold.' },
     ],
   },
   {
     key: 'library',
     label: 'The Reading Room',
     sign: 'LIBRARY',
-    pass: 0,
-    coins: 30,
     blurb: 'Green lamps, long tables, and a silence with weight to it.',
     doings: [
-      { key: 'atlas', label: 'Open the big atlas', note: 'Somebody has pencilled a route across the sea.', coins: 16 },
-      { key: 'stacks', label: 'Get lost in the stacks', note: 'You come out three aisles from where you went in.', coins: 14 },
-      { key: 'window', label: 'Read by the window', note: 'You get through four pages and most of an hour.', coins: 11 },
+      { key: 'atlas', label: 'Open the big atlas', note: 'Somebody has pencilled a route across the sea.' },
+      { key: 'stacks', label: 'Get lost in the stacks', note: 'You come out three aisles from where you went in.' },
+      { key: 'window', label: 'Read by the window', note: 'You get through four pages and most of an hour.' },
     ],
   },
   {
     key: 'arcade',
     label: 'Pier Arcade',
     sign: 'ARCADE',
-    pass: 0,
-    coins: 26,
     blurb: 'Carpet you cannot look at directly, and everything is beeping.',
     doings: [
-      { key: 'claw', label: 'Try the claw machine', note: 'It lifts the bear and then thinks better of it.', coins: 13 },
-      { key: 'pinball', label: 'Play the pinball', note: 'You get the multiball and immediately lose it.', coins: 15 },
-      { key: 'photo', label: 'Sit in the photo booth', note: 'Four pictures. You blink in three.', coins: 12 },
+      { key: 'claw', label: 'Try the claw machine', note: 'It lifts the bear and then thinks better of it.' },
+      { key: 'pinball', label: 'Play the pinball', note: 'You get the multiball and immediately lose it.' },
+      { key: 'photo', label: 'Sit in the photo booth', note: 'Four pictures. You blink in three.' },
     ],
   },
   {
     key: 'bakery',
     label: 'The Bakehouse',
     sign: 'BAKERY',
-    pass: 0,
-    coins: 22,
     blurb: 'Warm enough to fall asleep in, and it smells like the morning.',
     doings: [
-      { key: 'bun', label: 'Buy a bun', note: 'Still hot. You eat it standing up.', coins: 11 },
-      { key: 'watch', label: 'Watch the oven', note: 'Thirty loaves go in on a paddle the size of an oar.', coins: 13 },
+      { key: 'bun', label: 'Buy a bun', note: 'Still hot. You eat it standing up.' },
+      { key: 'watch', label: 'Watch the oven', note: 'Thirty loaves go in on a paddle the size of an oar.' },
     ],
   },
   {
     key: 'records',
     label: 'Second Spin Records',
     sign: 'RECORDS',
-    pass: 1,
-    coins: 34,
     blurb: 'Crates to the ceiling and somebody playing something you half know.',
     doings: [
-      { key: 'crate', label: 'Dig through a crate', note: 'Nothing, nothing, nothing, and then something.', coins: 18 },
-      { key: 'listen', label: 'Use the listening post', note: 'The headphones are held together with tape.', coins: 15 },
+      { key: 'crate', label: 'Dig through a crate', note: 'Nothing, nothing, nothing, and then something.' },
+      { key: 'listen', label: 'Use the listening post', note: 'The headphones are held together with tape.' },
     ],
   },
   {
     key: 'museum',
     label: 'City Museum',
     sign: 'MUSEUM',
-    pass: 1,
-    coins: 46,
     blurb: 'Marble, echo, and a whale hanging from the ceiling.',
     doings: [
-      { key: 'whale', label: 'Fly up to the whale', note: 'Close up, the bones are the colour of tea.', coins: 24 },
-      { key: 'cases', label: 'Read every label', note: 'Somebody spent a life on the things in case nine.', coins: 18 },
-      { key: 'stairs', label: 'Sit on the big stairs', note: 'Everyone sits on the big stairs.', coins: 12 },
+      { key: 'whale', label: 'Fly up to the whale', note: 'Close up, the bones are the colour of tea.' },
+      { key: 'cases', label: 'Read every label', note: 'Somebody spent a life on the things in case nine.' },
+      { key: 'stairs', label: 'Sit on the big stairs', note: 'Everyone sits on the big stairs.' },
     ],
   },
   {
     key: 'cinema',
     label: 'The Roxy',
     sign: 'CINEMA',
-    pass: 2,
-    coins: 52,
     blurb: 'Red velvet gone bald at the arms, and one screen.',
     doings: [
-      { key: 'balcony', label: 'Sit in the balcony', note: 'The whole row is yours.', coins: 22 },
-      { key: 'projector', label: 'Look in the projection room', note: 'The reels are taller than you are.', coins: 26 },
+      { key: 'balcony', label: 'Sit in the balcony', note: 'The whole row is yours.' },
+      { key: 'projector', label: 'Look in the projection room', note: 'The reels are taller than you are.' },
     ],
   },
   {
     key: 'tower',
     label: 'The Tower Office',
     sign: 'TOWER',
-    pass: 2,
-    coins: 68,
     blurb: 'Forty floors of nothing much, and then the roof.',
     doings: [
-      { key: 'roof', label: 'Go up to the roof', note: 'The whole city, laid out and getting on with it.', coins: 40 },
-      { key: 'lift', label: 'Ride the lift to the top', note: 'Your ears go on the twenty-second floor.', coins: 16 },
+      { key: 'roof', label: 'Go up to the roof', note: 'The whole city, laid out and getting on with it.' },
+      { key: 'lift', label: 'Ride the lift to the top', note: 'Your ears go on the twenty-second floor.' },
     ],
   },
 ]
@@ -385,54 +422,10 @@ export const INTERIOR_BY_KEY: Record<string, Interior> = Object.fromEntries(
 )
 
 /* ------------------------------------------------------------------ */
-/* Kit                                                                 */
-/* ------------------------------------------------------------------ */
-
-export interface GearLevel {
-  label: string
-  cost: number
-  value: number
-  blurb: string
-}
-
-/** How fast you fly. */
-export const WINGS: GearLevel[] = [
-  { label: 'Just You', cost: 0, value: 420, blurb: 'Arms out, and hope.' },
-  { label: 'Good Coat', cost: 120, value: 620, blurb: 'It catches the air properly.' },
-  { label: 'Glider Rig', cost: 380, value: 880, blurb: 'You stop flapping and start going.' },
-  { label: 'The Real Thing', cost: 900, value: 1250, blurb: 'Rooftop to rooftop in one breath.' },
-]
-
-/** How far you can see through the city haze. */
-export const EYES: GearLevel[] = [
-  { label: 'Squinting', cost: 0, value: 1, blurb: 'The far side of the block, and no more.' },
-  { label: 'Clear Day', cost: 200, value: 1.3, blurb: 'You can pick out a spire across town.' },
-  { label: 'Hawk', cost: 540, value: 1.6, blurb: 'You see the whole grid from up high.' },
-]
-
-/** Which doors will open for you. */
-export const PASSES: GearLevel[] = [
-  { label: 'No Pass', cost: 0, value: 0, blurb: 'Anywhere that lets anybody in.' },
-  { label: 'Members Card', cost: 260, value: 1, blurb: 'The record shop and the museum.' },
-  { label: 'All-Areas', cost: 720, value: 2, blurb: 'Every door in the city, including the tower.' },
-]
-
-export const GEAR = {
-  wings: { list: WINGS, label: 'Wings' },
-  eyes: { list: EYES, label: 'Eyes' },
-  pass: { list: PASSES, label: 'Pass' },
-} as const
-
-export type GearKey = keyof typeof GEAR
-
-/* ------------------------------------------------------------------ */
 /* Save                                                                */
 /* ------------------------------------------------------------------ */
 
 export interface CitySave {
-  wings: number
-  eyes: number
-  pass: number
   /** Fixture keys you have had a go on. */
   used: string[]
   /** Interior keys you have been inside. */
@@ -441,26 +434,22 @@ export interface CitySave {
   done: string[]
   /** Kinds of fixture tried at least once, for the journal. */
   kinds: string[]
-  flights: number
+  outings: number
   highest: number
+  /** How far you have walked, in metres. */
+  walked: number
 }
 
 export function initialCity(): CitySave {
-  return { wings: 0, eyes: 0, pass: 0, used: [], visited: [], done: [], kinds: [], flights: 0, highest: 0 }
+  return { used: [], visited: [], done: [], kinds: [], outings: 0, highest: 0, walked: 0 }
 }
 
-export function gearValue(save: CitySave, key: GearKey): number {
-  const list = GEAR[key].list
-  return list[Math.min(save[key] ?? 0, list.length - 1)].value
-}
-
-export function sightRange(save: CitySave): number {
-  return BASE_SIGHT * gearValue(save, 'eyes')
-}
-
-export function canEnter(save: CitySave, interior: Interior): boolean {
-  return gearValue(save, 'pass') >= interior.pass
-}
+/*
+ * There is no money in this city and nothing to buy. Every door that is
+ * a door will open, and what you get for doing a thing is having done
+ * it - the journal is the whole of the score.
+ */
+export const SIGHT = BASE_SIGHT
 
 /** Height above the street, in metres, for the readout. */
 export function heightOf(y: number): number {

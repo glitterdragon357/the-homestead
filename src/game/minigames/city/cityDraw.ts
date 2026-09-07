@@ -23,8 +23,13 @@ import {
   STREET,
   VIEW,
   blockKind,
+  groundHeightAt,
+  isRoad,
+  laneCentre,
   type Building,
+  type Car,
   type Fixture,
+  type Person,
 } from './cityData'
 
 const VIEWPORT = { width: VIEW.width, height: VIEW.height }
@@ -88,21 +93,68 @@ export function drawSky(ctx: CanvasRenderingContext2D, cam: Camera, t: number) {
 /* Streets                                                             */
 /* ------------------------------------------------------------------ */
 
-/** Tarmac, pavement, grass or paving, depending on where you are. */
+/** Tarmac, paving, grass or the rubber matting of a playground. */
 function groundColour(x: number, z: number): string {
   const bx = Math.floor(x / BLOCK)
   const bz = Math.floor(z / BLOCK)
+  if (isRoad(x, z)) return '#3f4045'
   const ix = x - bx * BLOCK
   const iz = z - bz * BLOCK
-  const onStreet = ix < STREET || iz < STREET
-  if (onStreet) {
-    const kerb = ix < STREET * 0.22 || iz < STREET * 0.22 || ix > STREET * 0.78 || iz > STREET * 0.78
-    return kerb ? '#8d8a84' : '#4a4a4e'
+  if (ix < STREET || iz < STREET) {
+    // Paving slabs, in two shades so the pavement has a grain to it.
+    const slab = (Math.floor(x / 26) + Math.floor(z / 26)) % 2
+    return slab ? '#9a968e' : '#918d85'
   }
   const kind = blockKind(bx, bz)
-  if (kind === 'park' || kind === 'playground') return '#5f8a4a'
+  if (kind === 'playground') {
+    // Rubber matting rather than grass, so a playground reads as one.
+    const patch = (Math.floor(x / 90) + Math.floor(z / 90)) % 3
+    return patch === 0 ? '#8a5a3f' : patch === 1 ? '#4a7a6a' : '#7a6a3f'
+  }
+  if (kind === 'park') return '#5f8a4a'
   if (kind === 'plaza') return '#9a938a'
   return '#7d7870'
+}
+
+/** A low fence round the playground blocks, so they read from anywhere. */
+export function drawPlaygroundFences(ctx: CanvasRenderingContext2D, cam: Camera, sight: number) {
+  const b0 = Math.floor((cam.x - sight) / BLOCK)
+  const b1 = Math.floor((cam.x + sight) / BLOCK)
+  const c0 = Math.floor((cam.z - sight) / BLOCK)
+  const c1 = Math.floor((cam.z + sight) / BLOCK)
+  ctx.save()
+  ctx.strokeStyle = '#4a6f5a'
+  for (let bx = b0; bx <= b1; bx++) {
+    for (let bz = c0; bz <= c1; bz++) {
+      if (blockKind(bx, bz) !== 'playground') continue
+      const x0 = bx * BLOCK + STREET * 0.72
+      const z0 = bz * BLOCK + STREET * 0.72
+      const span = BLOCK - STREET * 1.1
+      const d = Math.hypot(x0 + span / 2 - cam.x, z0 + span / 2 - cam.z)
+      const k = clarity(d, sight)
+      if (k <= 0.03) continue
+      ctx.globalAlpha = k
+      const step = span / 12
+      for (let i = 0; i <= 12; i++) {
+        for (const [px, pz] of [
+          [x0 + i * step, z0],
+          [x0 + i * step, z0 + span],
+          [x0, z0 + i * step],
+          [x0 + span, z0 + i * step],
+        ]) {
+          const foot = project(cam, px, GROUND - 7, pz)
+          const head = project(cam, px, GROUND - 46, pz)
+          if (!foot || !head) continue
+          ctx.lineWidth = Math.max(0.8, 3 * foot.scale)
+          ctx.beginPath()
+          ctx.moveTo(foot.sx, foot.sy)
+          ctx.lineTo(head.sx, head.sy)
+          ctx.stroke()
+        }
+      }
+    }
+  }
+  ctx.restore()
 }
 
 export function drawGround(ctx: CanvasRenderingContext2D, cam: Camera, sight: number) {
@@ -134,14 +186,44 @@ export function drawGround(ctx: CanvasRenderingContext2D, cam: Camera, sight: nu
         if (d > far || d < near) continue
         const k = clarity(d, sight)
         if (k <= 0.02) continue
-        const a = project(cam, x, GROUND, z)
-        const b = project(cam, x + G, GROUND, z)
-        const c = project(cam, x + G, GROUND, z + G)
-        const e = project(cam, x, GROUND, z + G)
+        // Each corner sits at its own height, so the kerb is a real step
+        // up from the road rather than a change of colour.
+        const a = project(cam, x, groundHeightAt(x, z), z)
+        const b = project(cam, x + G, groundHeightAt(x + G, z), z)
+        const c = project(cam, x + G, groundHeightAt(x + G, z + G), z + G)
+        const e = project(cam, x, groundHeightAt(x, z + G), z + G)
         if (!a || !b || !c || !e) continue
         ctx.globalAlpha = k
         ctx.fillStyle = groundColour(x + G / 2, z + G / 2)
         fillQuad(ctx, [a, b, c, e])
+
+        // A dashed white line down the middle of the tarmac.
+        if (G <= 110 && isRoad(x + G / 2, z + G / 2) && d < 900) {
+          const ix = ((x % BLOCK) + BLOCK) % BLOCK
+          const iz = ((z % BLOCK) + BLOCK) % BLOCK
+          const midX = Math.abs(ix - STREET / 2) < G
+          const midZ = Math.abs(iz - STREET / 2) < G
+          const dash = Math.floor((midX ? z : x) / 46) % 2 === 0
+          if ((midX || midZ) && dash) {
+            const w = 3
+            const p1 = midX
+              ? project(cam, laneCentre(x) - w, GROUND, z)
+              : project(cam, x, GROUND, laneCentre(z) - w)
+            const p2 = midX
+              ? project(cam, laneCentre(x) + w, GROUND, z)
+              : project(cam, x, GROUND, laneCentre(z) + w)
+            const p3 = midX
+              ? project(cam, laneCentre(x) + w, GROUND, z + G * 0.5)
+              : project(cam, x + G * 0.5, GROUND, laneCentre(z) + w)
+            const p4 = midX
+              ? project(cam, laneCentre(x) - w, GROUND, z + G * 0.5)
+              : project(cam, x + G * 0.5, GROUND, laneCentre(z) - w)
+            if (p1 && p2 && p3 && p4) {
+              ctx.fillStyle = '#d8d4c4'
+              fillQuad(ctx, [p1, p2, p3, p4])
+            }
+          }
+        }
       }
     }
   }
@@ -267,6 +349,123 @@ export function drawBuilding(
   }
   ctx.restore()
 }
+
+/* ------------------------------------------------------------------ */
+/* Traffic                                                             */
+/* ------------------------------------------------------------------ */
+
+/** A car, built the same way a building is: a box with sides. */
+export function drawCar(ctx: CanvasRenderingContext2D, car: Car, cam: Camera, sight: number) {
+  const d = Math.hypot(car.x - cam.x, car.z - cam.z)
+  const k = clarity(d, sight)
+  if (k <= 0.02) return
+
+  const c = Math.cos(car.heading)
+  const sn = Math.sin(car.heading)
+  const L = car.size
+  const Wd = car.size * 0.42
+  // Corners of the footprint, turned to face the way it is going.
+  const corner = (fx: number, fz: number) => ({
+    x: car.x + fx * L * sn + fz * Wd * c,
+    z: car.z + fx * L * c - fz * Wd * sn,
+  })
+  const fl = corner(0.5, -1)
+  const fr = corner(0.5, 1)
+  const bl = corner(-0.5, -1)
+  const br = corner(-0.5, 1)
+  const top = GROUND - car.height
+
+  ctx.save()
+  ctx.globalAlpha = k
+
+  const faces: [{ x: number; z: number }, { x: number; z: number }, number][] = [
+    [fl, fr, 1],
+    [br, bl, 0.72],
+    [bl, fl, 0.86],
+    [fr, br, 0.86],
+  ]
+  for (const [p, q, lit] of faces) {
+    const mx = (p.x + q.x) / 2
+    const mz = (p.z + q.z) / 2
+    // Skip the faces pointing away, same as the buildings.
+    const nx = mx - car.x
+    const nz = mz - car.z
+    if ((cam.x - mx) * nx + (cam.z - mz) * nz <= 0) continue
+    const a = project(cam, p.x, GROUND, p.z)
+    const b = project(cam, q.x, GROUND, q.z)
+    const cc = project(cam, q.x, top, q.z)
+    const e = project(cam, p.x, top, p.z)
+    if (!a || !b || !cc || !e) continue
+    ctx.fillStyle = shade(car.colour, lit)
+    fillQuad(ctx, [a, b, cc, e])
+  }
+
+  // Roof, and a windscreen band so it reads as a car and not a crate.
+  const r1 = project(cam, fl.x, top, fl.z)
+  const r2 = project(cam, fr.x, top, fr.z)
+  const r3 = project(cam, br.x, top, br.z)
+  const r4 = project(cam, bl.x, top, bl.z)
+  if (r1 && r2 && r3 && r4) {
+    ctx.fillStyle = shade(car.colour, 1.18)
+    fillQuad(ctx, [r1, r2, r3, r4])
+  }
+  const gl = corner(0.16, -1)
+  const gr = corner(0.16, 1)
+  const g1 = project(cam, gl.x, top, gl.z)
+  const g2 = project(cam, gr.x, top, gr.z)
+  const g3 = project(cam, gr.x, top + car.height * 0.42, gr.z)
+  const g4 = project(cam, gl.x, top + car.height * 0.42, gl.z)
+  if (g1 && g2 && g3 && g4) {
+    ctx.fillStyle = '#2b3540'
+    fillQuad(ctx, [g1, g2, g3, g4])
+  }
+  ctx.restore()
+}
+
+/** Somebody on the pavement, drawn as a little figure. */
+export function drawPerson(
+  ctx: CanvasRenderingContext2D,
+  person: Person,
+  p: Projected,
+  alpha: number,
+  t: number
+) {
+  const s = p.scale * person.scale
+  const step = Math.sin(t * 0.006 + person.x * 0.05) * (person.speed > 4 ? 1 : 0.15)
+  ctx.save()
+  ctx.globalAlpha = alpha
+  ctx.translate(p.sx, p.sy)
+  ctx.scale(s, s)
+
+  ctx.strokeStyle = LEG_COLOURS[person.legs % LEG_COLOURS.length]
+  ctx.lineWidth = 4.4
+  ctx.lineCap = 'round'
+  for (const side of [-1, 1]) {
+    ctx.beginPath()
+    ctx.moveTo(0, -18)
+    ctx.lineTo(step * 5 * side, 0)
+    ctx.stroke()
+  }
+  ctx.fillStyle = person.coat
+  ctx.beginPath()
+  ctx.roundRect(-6.5, -38, 13, 22, 3)
+  ctx.fill()
+  ctx.strokeStyle = person.coat
+  ctx.lineWidth = 3.4
+  for (const side of [-1, 1]) {
+    ctx.beginPath()
+    ctx.moveTo(side * 6, -35)
+    ctx.lineTo(side * 8 - step * 3 * side, -20)
+    ctx.stroke()
+  }
+  ctx.fillStyle = '#c9a184'
+  ctx.beginPath()
+  ctx.arc(0, -44, 5.4, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+}
+
+const LEG_COLOURS = ['#3a3f4a', '#4a3a2f', '#2b2b30', '#5a4a3a']
 
 /* ------------------------------------------------------------------ */
 /* Street furniture                                                    */
