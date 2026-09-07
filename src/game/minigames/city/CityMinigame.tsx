@@ -735,9 +735,21 @@ export function CityMinigame({ onExit }: MinigameProps) {
       <div
         style={S.stage}
         onPointerDown={(e) => {
-          if (sheet || inside) return
+          /*
+           * Only an open panel swallows the pointer. Being indoors used
+           * to as well, which left you standing in a room unable to walk
+           * a step - the same mistake as pausing the world in there.
+           */
+          if (sheet) return
           if ((e.target as HTMLElement).closest('button')) return
-          ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
+          // Capturing can throw for a pointer the browser is not tracking, and
+          // an exception here would abort the handler before you ever started
+          // moving.
+          try {
+            ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
+          } catch {
+            // Not fatal - the window-level pointerup still ends the stroke.
+          }
           const p = toCanvas(e.clientX, e.clientY)
           pressRef.current = { x: p.x, y: p.y, at: performance.now(), moved: 0 }
           const w = worldRef.current
