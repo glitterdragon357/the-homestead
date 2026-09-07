@@ -93,6 +93,13 @@ export type SlotKey = 'bowl' | 'trough' | 'bed' | 'toy' | 'brush' | 'perch'
 export interface Tier {
   label: string
   cost: number
+  /**
+   * What the second-hand shop gives you for it when you replace it.
+   *
+   * Upgrading sells the old one, which is where the real money is - the
+   * coins you earn a go at a time only ever trickled in.
+   */
+  resale: number
   /** How much of the meter one go puts back. */
   restore: number
   /** How much nicer this is than the bare minimum, for happiness. */
@@ -118,9 +125,9 @@ export const SLOTS: Slot[] = [
     x: 118,
     y: 300,
     tiers: [
-      { label: 'Chipped bowl', cost: 0, restore: 44, joy: 0, blurb: 'It holds food. Just about.' },
-      { label: 'Ceramic bowl', cost: 90, restore: 62, joy: 6, blurb: 'Heavy enough that it stays put.' },
-      { label: 'Raised feeder', cost: 260, restore: 82, joy: 14, blurb: 'Kinder on the neck, and they notice.' },
+      { label: 'Chipped bowl', cost: 0, resale: 40, restore: 44, joy: 0, blurb: 'It holds food. Just about.' },
+      { label: 'Ceramic bowl', cost: 90, resale: 52, restore: 62, joy: 6, blurb: 'Heavy enough that it stays put.' },
+      { label: 'Raised feeder', cost: 260, resale: 151, restore: 82, joy: 14, blurb: 'Kinder on the neck, and they notice.' },
     ],
   },
   {
@@ -130,9 +137,9 @@ export const SLOTS: Slot[] = [
     x: 214,
     y: 336,
     tiers: [
-      { label: 'Old saucer', cost: 0, restore: 46, joy: 0, blurb: 'Gets dusty within the hour.' },
-      { label: 'Deep bowl', cost: 80, restore: 64, joy: 5, blurb: 'Holds a day of it.' },
-      { label: 'Bubbling fountain', cost: 280, restore: 86, joy: 16, blurb: 'Running water. They drink far more of it.' },
+      { label: 'Old saucer', cost: 0, resale: 40, restore: 46, joy: 0, blurb: 'Gets dusty within the hour.' },
+      { label: 'Deep bowl', cost: 80, resale: 46, restore: 64, joy: 5, blurb: 'Holds a day of it.' },
+      { label: 'Bubbling fountain', cost: 280, resale: 162, restore: 86, joy: 16, blurb: 'Running water. They drink far more of it.' },
     ],
   },
   {
@@ -142,9 +149,9 @@ export const SLOTS: Slot[] = [
     x: 520,
     y: 300,
     tiers: [
-      { label: 'Folded blanket', cost: 0, restore: 42, joy: 0, blurb: 'Better than the bare floor.' },
-      { label: 'Cushioned basket', cost: 120, restore: 64, joy: 8, blurb: 'Sides to lean against.' },
-      { label: 'Canopy bed', cost: 340, restore: 88, joy: 18, blurb: 'A roof of their own. Nobody ever comes out.' },
+      { label: 'Folded blanket', cost: 0, resale: 40, restore: 42, joy: 0, blurb: 'Better than the bare floor.' },
+      { label: 'Cushioned basket', cost: 120, resale: 70, restore: 64, joy: 8, blurb: 'Sides to lean against.' },
+      { label: 'Canopy bed', cost: 340, resale: 197, restore: 88, joy: 18, blurb: 'A roof of their own. Nobody ever comes out.' },
     ],
   },
   {
@@ -154,9 +161,9 @@ export const SLOTS: Slot[] = [
     x: 330,
     y: 250,
     tiers: [
-      { label: 'Bit of string', cost: 0, restore: 40, joy: 0, blurb: 'Works far better than it should.' },
-      { label: 'Feather wand', cost: 110, restore: 62, joy: 9, blurb: 'Worth the arm ache.' },
-      { label: 'Puzzle tower', cost: 320, restore: 84, joy: 20, blurb: 'Keeps them busy long after you have stopped.' },
+      { label: 'Bit of string', cost: 0, resale: 40, restore: 40, joy: 0, blurb: 'Works far better than it should.' },
+      { label: 'Feather wand', cost: 110, resale: 64, restore: 62, joy: 9, blurb: 'Worth the arm ache.' },
+      { label: 'Puzzle tower', cost: 320, resale: 186, restore: 84, joy: 20, blurb: 'Keeps them busy long after you have stopped.' },
     ],
   },
   {
@@ -166,9 +173,9 @@ export const SLOTS: Slot[] = [
     x: 430,
     y: 336,
     tiers: [
-      { label: 'Old comb', cost: 0, restore: 40, joy: 0, blurb: 'Pulls a bit.' },
-      { label: 'Soft brush', cost: 100, restore: 60, joy: 8, blurb: 'They lean into it.' },
-      { label: 'Grooming kit', cost: 300, restore: 82, joy: 17, blurb: 'Brush, comb, clippers, the lot.' },
+      { label: 'Old comb', cost: 0, resale: 40, restore: 40, joy: 0, blurb: 'Pulls a bit.' },
+      { label: 'Soft brush', cost: 100, resale: 58, restore: 60, joy: 8, blurb: 'They lean into it.' },
+      { label: 'Grooming kit', cost: 300, resale: 174, restore: 82, joy: 17, blurb: 'Brush, comb, clippers, the lot.' },
     ],
   },
   {
@@ -178,9 +185,9 @@ export const SLOTS: Slot[] = [
     x: 596,
     y: 236,
     tiers: [
-      { label: 'Cardboard box', cost: 0, restore: 34, joy: 2, blurb: 'The best thing you own, apparently.' },
-      { label: 'Window perch', cost: 160, restore: 54, joy: 12, blurb: 'A whole street to watch.' },
-      { label: 'Climbing tree', cost: 420, restore: 76, joy: 24, blurb: 'Four levels and a rope. Worth every coin.' },
+      { label: 'Cardboard box', cost: 0, resale: 40, restore: 34, joy: 2, blurb: 'The best thing you own, apparently.' },
+      { label: 'Window perch', cost: 160, resale: 93, restore: 54, joy: 12, blurb: 'A whole street to watch.' },
+      { label: 'Climbing tree', cost: 420, resale: 244, restore: 76, joy: 24, blurb: 'Four levels and a rope. Worth every coin.' },
     ],
   },
 ]
@@ -224,6 +231,8 @@ export interface PetSave {
   /** When the needs were last worked out, so they drain while you watch. */
   tickedAt: number
   looked: number
+  /** Whether the room has music on. Off is remembered too. */
+  music?: boolean
 }
 
 const NAMES = [
@@ -287,6 +296,7 @@ export function initialPets(): PetSave {
     nextId: 2,
     tickedAt: now,
     looked: 0,
+    music: true,
   }
 }
 
@@ -312,11 +322,22 @@ export function happiness(pet: Pet, tiers: Record<SlotKey, number>): number {
   return Math.max(0, Math.min(100, met * 0.72 + favourite * 0.12 + comfort(tiers) * 0.5))
 }
 
-/** What one go at something is worth, in coins. */
+/**
+ * What one go at something is worth, in coins.
+ *
+ * Raised sharply from where this started: at the old rate a go paid six
+ * coins and the whole shop took a hundred minutes of solid tapping,
+ * against thirty-odd for every other trade on the homestead.
+ */
 export function payFor(before: number, tier: Tier): number {
-  // Catching something before it gets low is worth more than a rescue.
+  // Catching something before it gets desperate is worth more than a rescue.
   const need = Math.max(0, 100 - before) / 100
-  return Math.round(3 + need * 7 + tier.joy * 0.4)
+  return Math.round(5 + need * 20 + tier.joy * 0.7)
+}
+
+/** What you get for the thing you are replacing. */
+export function resaleOf(slot: Slot, owned: number): number {
+  return slot.tiers[owned]?.resale ?? 0
 }
 
 export function petsPending(s: PetSave | undefined) {

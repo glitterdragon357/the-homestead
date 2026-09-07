@@ -4,6 +4,7 @@ import { useMinigameProgress } from '../../state/useMinigameProgress'
 import { usePurse } from '../../state/usePurse'
 import { GiftRow } from '../../economy/GiftRow'
 import { panel } from '../farm/farmStyles'
+import { useAmbientMusic } from '../../audio/useAmbientMusic'
 import { PetBody, SlotArt } from './PetArt'
 import {
   FLOOR,
@@ -19,6 +20,7 @@ import {
   initialPets,
   makePet,
   payFor,
+  resaleOf,
   type Pet,
   type PetSave,
   type SlotKey,
@@ -48,6 +50,9 @@ export function PetCareMinigame({ onExit }: MinigameProps) {
   const { coins, earn, spend } = usePurse('pets')
   const saveRef = useRef(save)
   saveRef.current = save
+
+  const music = save.music !== false
+  useAmbientMusic(music)
 
   const [chosen, setChosen] = useState<number | null>(null)
   const [sheet, setSheet] = useState<null | 'shop' | 'adopt'>(null)
@@ -161,12 +166,16 @@ export function PetCareMinigame({ onExit }: MinigameProps) {
     const owned = saveRef.current.tiers?.[slotKey] ?? 0
     const next = slot.tiers[owned + 1]
     if (!next) return
-    if (!spend(next.cost)) {
-      showToast('Not enough coins yet.')
+    const back = resaleOf(slot, owned)
+    // You are trading the old one in, so you only need the difference.
+    if (!spend(Math.max(0, next.cost - back))) {
+      showToast('Not enough coins yet, even with the old one traded in.')
       return
     }
     setSave((s) => ({ ...s, tiers: { ...s.tiers, [slotKey]: owned + 1 } }))
-    showToast(`Bought the ${next.label.toLowerCase()}. They will notice.`)
+    showToast(
+      `Sold the ${slot.tiers[owned].label.toLowerCase()} for ${back} 🪙 and brought home the ${next.label.toLowerCase()}.`
+    )
   }
 
   function adopt(key: SpeciesKey) {
@@ -205,7 +214,16 @@ export function PetCareMinigame({ onExit }: MinigameProps) {
     <div style={{ ...panel.wrap, width: 'min(760px, calc(100vw - 20px))' }}>
       <div style={panel.header}>
         <h2 style={panel.title}>Pet Care</h2>
-        <span style={panel.coins}>🪙 {coins}</span>
+        <span style={S.headRight}>
+          <button
+            style={S.mute}
+            onClick={() => setSave((s) => ({ ...s, music: !(s.music !== false) }))}
+            title={music ? 'Turn the music off' : 'Turn the music on'}
+          >
+            {music ? '🔊' : '🔇'}
+          </button>
+          <span style={panel.coins}>🪙 {coins}</span>
+        </span>
       </div>
 
       <GiftRow from="pets" />
@@ -365,8 +383,9 @@ export function PetCareMinigame({ onExit }: MinigameProps) {
       {sheet === 'shop' && (
         <div style={S.sheet}>
           <p style={S.sheetHint}>
-            Nicer things put more back and, more to the point, make the whole room a better place
-            to live. Comfort so far: {nicety}.
+            Nicer things put more back and make the whole room a better place to live. When you
+            buy one the old one is sold on, so you only pay the difference — and clearing out the
+            cheap stuff is where the real money is. Comfort so far: {nicety}.
           </p>
           {SLOTS.map((slot) => {
             const owned = save.tiers?.[slot.key] ?? 0
@@ -381,13 +400,20 @@ export function PetCareMinigame({ onExit }: MinigameProps) {
                   <div style={S.buyNote}>{next ? next.blurb : 'The best there is.'}</div>
                 </div>
                 {next ? (
-                  <button
-                    style={{ ...S.buyBtn, opacity: coins >= next.cost ? 1 : 0.45 }}
-                    onClick={() => buyTier(slot.key)}
-                  >
-                    {next.label}
-                    <span style={S.buyCost}>🪙 {next.cost}</span>
-                  </button>
+                  (() => {
+                    const back = resaleOf(slot, owned)
+                    const due = Math.max(0, next.cost - back)
+                    return (
+                      <button
+                        style={{ ...S.buyBtn, opacity: coins >= due ? 1 : 0.45 }}
+                        onClick={() => buyTier(slot.key)}
+                      >
+                        {next.label}
+                        <span style={S.buyCost}>🪙 {due}</span>
+                        <span style={S.tradeIn}>{back} back for the old one</span>
+                      </button>
+                    )
+                  })()
                 ) : (
                   <span style={S.buyNote}>best</span>
                 )}
@@ -446,6 +472,15 @@ const S: Record<string, React.CSSProperties> = {
     borderRadius: 10,
     background: '#e0d5bd',
     display: 'block',
+  },
+  headRight: { display: 'flex', alignItems: 'center', gap: 8 },
+  mute: {
+    border: 'none',
+    background: 'none',
+    fontSize: 16,
+    cursor: 'pointer',
+    padding: 0,
+    lineHeight: 1,
   },
   hint: { fontSize: 12, color: '#6b5a44', textAlign: 'center', margin: '6px 0 2px' },
 
@@ -523,6 +558,7 @@ const S: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
   },
   buyCost: { fontSize: 10.5, opacity: 0.85 },
+  tradeIn: { fontSize: 9, opacity: 0.8, fontWeight: 600 },
 
   leave: {
     background: 'none',
