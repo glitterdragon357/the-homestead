@@ -119,7 +119,7 @@ export type Age = 'foal' | 'yearling' | 'grown'
  * clock while you are elsewhere, a foal only grows in the time you
  * actually spend out here with her.
  */
-export const STAGE_MS = 100_000
+export const STAGE_MS = 200_000
 
 export function ageOf(horse: StabledHorse, now: number): Age {
   const grown = horse.grownAt ?? 0
@@ -134,12 +134,19 @@ export function growthLeft(horse: StabledHorse, now: number): number {
 /**
  * How long a feed and a bucket last, in time spent out here.
  *
- * Water goes first, as it does. A youngster that runs out of either
- * stops coming on until you see to her - she does not come to harm, she
- * simply does not grow, which is punishment enough for forgetting.
+ * Five minutes each. A youngster that runs out of either stops coming on
+ * until you see to her - she does not come to harm, she simply does not
+ * grow, which is punishment enough for forgetting.
+ *
+ * Growing takes longer than one bucket on purpose. At the old minute-ish
+ * timers a foal was hungry constantly; at five minutes against the old
+ * growth she would have been grown before she was ever hungry once, and
+ * the manger would have been scenery. She now comes on over about seven
+ * minutes, so raising one asks you to see to her a couple of times and
+ * no more than that.
  */
-export const FEED_MS = 70_000
-export const WATER_MS = 50_000
+export const FEED_MS = 300_000
+export const WATER_MS = 300_000
 
 export function isYoung(horse: StabledHorse, now: number): boolean {
   return ageOf(horse, now) !== 'grown'

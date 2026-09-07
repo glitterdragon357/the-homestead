@@ -1149,7 +1149,7 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
                               }}
                             >
                               {AGE_LABEL[age]}
-                              {left > 0 && (stalled ? ' · waiting on you' : ` · ${Math.ceil(left / 1000)}s`)}
+                              {left > 0 && (stalled ? ' · waiting on you' : ` · ${countdown(left)}`)}
                             </span>
                             <button
                               style={{ ...S.small, opacity: age === 'grown' ? 1 : 0.55 }}
@@ -1244,6 +1244,13 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
       </div>
     </div>
   )
+}
+
+/** A wait in minutes and seconds, now that these run long. */
+function countdown(ms: number): string {
+  const total = Math.ceil(ms / 1000)
+  if (total < 90) return `${total}s`
+  return `${Math.floor(total / 60)}m ${String(total % 60).padStart(2, '0')}s`
 }
 
 function CareRow({
