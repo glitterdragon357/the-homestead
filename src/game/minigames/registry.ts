@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react'
-import { KittenCareMinigame } from './kitten/KittenCareMinigame'
+import { PetCareMinigame } from './pets/PetCareMinigame'
+import { petsPending, type PetSave } from './pets/petData'
 import { FishingMinigame } from './fishing/FishingMinigame'
 import { FarmsteadMinigame, farmsteadPending } from './farm/FarmsteadMinigame'
 import { RECIPES } from './farm/farmData'
@@ -162,12 +163,13 @@ export const MINIGAME_REGISTRY: Record<string, MinigameDefinition> = {
     icon: '\u{1F93F}',
     component: OceanMinigame,
   },
-  kitten: {
-    id: 'kitten',
-    name: 'Kitten Care',
-    description: 'Tend to the kitten through day and night as it grows up.',
-    icon: '🐱',
-    component: KittenCareMinigame,
+  pets: {
+    id: 'pets',
+    name: 'Pet Care',
+    description: 'A houseful of animals: tap a thing and they go and use it.',
+    icon: '🐾',
+    component: PetCareMinigame,
+    pending: (p) => petsPending(p.pets as PetSave),
   },
 }
 

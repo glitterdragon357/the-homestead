@@ -8,7 +8,7 @@ export interface HomesteadTile {
   type: TileType
   /** Display label shown on hover/interaction, e.g. "Vegetable Patch". */
   label?: string
-  /** Emoji drawn on top of the tile, e.g. a cat icon for the kitten tile. */
+  /** Emoji drawn on top of the tile, e.g. a paw for the pet room. */
   icon?: string
   /** If set, interacting with this tile launches the given minigame. */
   minigameId?: string
@@ -26,13 +26,13 @@ interface Placement {
 }
 
 /**
- * Where each building sits: the farmstead west, the kitten north-east,
+ * Where each building sits: the farmstead west, the pets north-east,
  * the pond in its corner, and the clay bank on the pond's edge - the
  * pottery only makes sense next to the water it digs from.
  */
 const PLACEMENTS: Placement[] = [
   { x: 1, y: 5, type: 'building', label: 'Farmstead', icon: '🚜', minigameId: 'farmstead' },
-  { x: 4, y: 1, type: 'grass', label: 'Kitten', icon: '🐱', minigameId: 'kitten' },
+  { x: 4, y: 1, type: 'building', label: 'Pet Care', icon: '🐾', minigameId: 'pets' },
   { x: 5, y: 6, type: 'dirt', label: 'Clay Bank', icon: '🏺', minigameId: 'pottery' },
   { x: 6, y: 2, type: 'forest', label: 'Woodlot', icon: '🌲', minigameId: 'lumber' },
   { x: 2, y: 2, type: 'orchard', label: 'Orchard', icon: '🍎', minigameId: 'fruit' },
