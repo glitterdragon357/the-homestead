@@ -280,6 +280,56 @@ export const REACH = 150
 export const DOOR_REACH = 320
 
 /* ------------------------------------------------------------------ */
+/* What you cannot walk through                                        */
+/* ------------------------------------------------------------------ */
+
+/** How much room each bit of street furniture takes up. */
+export const FIXTURE_RADIUS: Record<FixtureKind, number> = {
+  swings: 48,
+  slide: 40,
+  roundabout: 46,
+  climber: 44,
+  seesaw: 44,
+  fountain: 54,
+  bandstand: 58,
+  statue: 22,
+  clock: 26,
+  market: 52,
+  pond: 74,
+  bench: 26,
+}
+
+/** Where the fence round a playground stands, and where its gate is. */
+export function playgroundFence(bx: number, bz: number) {
+  const x0 = bx * BLOCK + STREET * 0.72
+  const z0 = bz * BLOCK + STREET * 0.72
+  const span = BLOCK - STREET * 1.1
+  return { x0, z0, x1: x0 + span, z1: z0 + span, gate: x0 + span / 2, gateWide: 60 }
+}
+
+/**
+ * Does the fence stop you here? There is a gate in the near side, or a
+ * fenced playground would be a playground nobody could get into.
+ */
+export function fenceBlocks(x: number, z: number, pad = 8): boolean {
+  const bx = Math.floor(x / BLOCK)
+  const bz = Math.floor(z / BLOCK)
+  if (blockKind(bx, bz) !== 'playground') return false
+  const f = playgroundFence(bx, bz)
+  const onX = x > f.x0 - pad && x < f.x1 + pad
+  const onZ = z > f.z0 - pad && z < f.z1 + pad
+  if (!onX || !onZ) return false
+  const nearNear = Math.abs(z - f.z0) < pad
+  const nearFar = Math.abs(z - f.z1) < pad
+  const nearLeft = Math.abs(x - f.x0) < pad
+  const nearRight = Math.abs(x - f.x1) < pad
+  if (!(nearNear || nearFar || nearLeft || nearRight)) return false
+  // The gate.
+  if (nearNear && Math.abs(x - f.gate) < f.gateWide / 2) return false
+  return true
+}
+
+/* ------------------------------------------------------------------ */
 /* Traffic and passers-by                                              */
 /* ------------------------------------------------------------------ */
 
@@ -320,14 +370,52 @@ export const PAVEMENT_INSET = STREET * 0.13
 /* Inside                                                              */
 /* ------------------------------------------------------------------ */
 
+export type PropArt =
+  | 'counter'
+  | 'table'
+  | 'shelf'
+  | 'machine'
+  | 'seat'
+  | 'oven'
+  | 'crate'
+  | 'desk'
+  | 'stairs'
+  | 'whale'
+  | 'screen'
+  | 'window'
+
+/** Something in a room you can walk up to and have a go at. */
+export interface Prop {
+  key: string
+  label: string
+  note: string
+  /** Where it stands, measured from the middle of the room. */
+  x: number
+  z: number
+  art: PropArt
+  /** How much floor it takes up, so you cannot walk through it. */
+  r: number
+  h: number
+}
+
 export interface Interior {
   key: string
   label: string
   sign: string
   blurb: string
-  /** Things you can do in there. */
-  doings: { key: string; label: string; note: string }[]
+  /** Half the width and half the depth of the room. */
+  hw: number
+  hd: number
+  wall: string
+  floor: string
+  ceiling: string
+  /** How high the ceiling is. */
+  tall: number
+  props: Prop[]
 }
+
+/** You come in and go out through the middle of the near wall. */
+export const DOOR_WIDE = 46
 
 export const INTERIORS: Interior[] = [
   {
@@ -335,10 +423,16 @@ export const INTERIORS: Interior[] = [
     label: 'The Corner Café',
     sign: 'CAFÉ',
     blurb: 'Steamed windows, four tables, and a cat asleep on the till.',
-    doings: [
-      { key: 'coffee', label: 'Order a coffee', note: 'It comes in a cup the size of a bowl.' },
-      { key: 'cat', label: 'Say hello to the cat', note: 'The cat does not open its eyes.' },
-      { key: 'window', label: 'Sit by the window', note: 'You watch the street until the cup is cold.' },
+    hw: 150,
+    hd: 120,
+    wall: '#6b5744',
+    floor: '#8a6f52',
+    ceiling: '#4a3a2c',
+    tall: 90,
+    props: [
+      { key: 'counter', label: 'the counter', note: 'You order a coffee. It comes in a cup the size of a bowl.', x: 0, z: 78, art: 'counter', r: 40, h: 42 },
+      { key: 'cat', label: 'the cat', note: 'You say hello to the cat. The cat does not open its eyes.', x: 96, z: 60, art: 'crate', r: 22, h: 30 },
+      { key: 'window', label: 'the window table', note: 'You sit by the window until the cup is cold.', x: -100, z: -30, art: 'table', r: 30, h: 34 },
     ],
   },
   {
@@ -346,10 +440,16 @@ export const INTERIORS: Interior[] = [
     label: 'The Reading Room',
     sign: 'LIBRARY',
     blurb: 'Green lamps, long tables, and a silence with weight to it.',
-    doings: [
-      { key: 'atlas', label: 'Open the big atlas', note: 'Somebody has pencilled a route across the sea.' },
-      { key: 'stacks', label: 'Get lost in the stacks', note: 'You come out three aisles from where you went in.' },
-      { key: 'window', label: 'Read by the window', note: 'You get through four pages and most of an hour.' },
+    hw: 190,
+    hd: 150,
+    wall: '#5a4c3c',
+    floor: '#6f5a42',
+    ceiling: '#3f3226',
+    tall: 120,
+    props: [
+      { key: 'atlas', label: 'the big atlas', note: 'Somebody has pencilled a route across the sea.', x: 0, z: 20, art: 'desk', r: 38, h: 36 },
+      { key: 'stacks', label: 'the stacks', note: 'You come out three aisles from where you went in.', x: -130, z: 70, art: 'shelf', r: 44, h: 100 },
+      { key: 'window', label: 'the window seat', note: 'You get through four pages and most of an hour.', x: 132, z: -60, art: 'window', r: 30, h: 60 },
     ],
   },
   {
@@ -357,10 +457,16 @@ export const INTERIORS: Interior[] = [
     label: 'Pier Arcade',
     sign: 'ARCADE',
     blurb: 'Carpet you cannot look at directly, and everything is beeping.',
-    doings: [
-      { key: 'claw', label: 'Try the claw machine', note: 'It lifts the bear and then thinks better of it.' },
-      { key: 'pinball', label: 'Play the pinball', note: 'You get the multiball and immediately lose it.' },
-      { key: 'photo', label: 'Sit in the photo booth', note: 'Four pictures. You blink in three.' },
+    hw: 170,
+    hd: 130,
+    wall: '#2b2438',
+    floor: '#3f2f4a',
+    ceiling: '#1a1622',
+    tall: 95,
+    props: [
+      { key: 'claw', label: 'the claw machine', note: 'It lifts the bear and then thinks better of it.', x: -110, z: 60, art: 'machine', r: 30, h: 76 },
+      { key: 'pinball', label: 'the pinball table', note: 'You get the multiball and immediately lose it.', x: 0, z: 70, art: 'table', r: 34, h: 44 },
+      { key: 'photo', label: 'the photo booth', note: 'Four pictures. You blink in three.', x: 116, z: 40, art: 'machine', r: 32, h: 84 },
     ],
   },
   {
@@ -368,9 +474,15 @@ export const INTERIORS: Interior[] = [
     label: 'The Bakehouse',
     sign: 'BAKERY',
     blurb: 'Warm enough to fall asleep in, and it smells like the morning.',
-    doings: [
-      { key: 'bun', label: 'Buy a bun', note: 'Still hot. You eat it standing up.' },
-      { key: 'watch', label: 'Watch the oven', note: 'Thirty loaves go in on a paddle the size of an oar.' },
+    hw: 150,
+    hd: 115,
+    wall: '#8a6f52',
+    floor: '#a8896b',
+    ceiling: '#6b5744',
+    tall: 88,
+    props: [
+      { key: 'bun', label: 'the counter', note: 'You buy a bun. Still hot. You eat it standing up.', x: 60, z: 62, art: 'counter', r: 40, h: 42 },
+      { key: 'oven', label: 'the oven', note: 'Thirty loaves go in on a paddle the size of an oar.', x: -92, z: 66, art: 'oven', r: 42, h: 80 },
     ],
   },
   {
@@ -378,9 +490,15 @@ export const INTERIORS: Interior[] = [
     label: 'Second Spin Records',
     sign: 'RECORDS',
     blurb: 'Crates to the ceiling and somebody playing something you half know.',
-    doings: [
-      { key: 'crate', label: 'Dig through a crate', note: 'Nothing, nothing, nothing, and then something.' },
-      { key: 'listen', label: 'Use the listening post', note: 'The headphones are held together with tape.' },
+    hw: 160,
+    hd: 125,
+    wall: '#3a3348',
+    floor: '#4a4054',
+    ceiling: '#2b2438',
+    tall: 92,
+    props: [
+      { key: 'crate', label: 'the crates', note: 'Nothing, nothing, nothing, and then something.', x: -80, z: 40, art: 'crate', r: 40, h: 50 },
+      { key: 'listen', label: 'the listening post', note: 'The headphones are held together with tape.', x: 96, z: 66, art: 'machine', r: 28, h: 60 },
     ],
   },
   {
@@ -388,10 +506,16 @@ export const INTERIORS: Interior[] = [
     label: 'City Museum',
     sign: 'MUSEUM',
     blurb: 'Marble, echo, and a whale hanging from the ceiling.',
-    doings: [
-      { key: 'whale', label: 'Fly up to the whale', note: 'Close up, the bones are the colour of tea.' },
-      { key: 'cases', label: 'Read every label', note: 'Somebody spent a life on the things in case nine.' },
-      { key: 'stairs', label: 'Sit on the big stairs', note: 'Everyone sits on the big stairs.' },
+    hw: 250,
+    hd: 200,
+    wall: '#8d8a84',
+    floor: '#a8a49c',
+    ceiling: '#c2bfb6',
+    tall: 190,
+    props: [
+      { key: 'whale', label: 'the whale', note: 'Close up, the bones are the colour of tea.', x: 0, z: 60, art: 'whale', r: 120, h: 78 },
+      { key: 'cases', label: 'the cases', note: 'Somebody spent a life on the things in case nine.', x: -170, z: 90, art: 'shelf', r: 40, h: 60 },
+      { key: 'stairs', label: 'the big stairs', note: 'Everyone sits on the big stairs.', x: 170, z: 120, art: 'stairs', r: 50, h: 60 },
     ],
   },
   {
@@ -399,9 +523,16 @@ export const INTERIORS: Interior[] = [
     label: 'The Roxy',
     sign: 'CINEMA',
     blurb: 'Red velvet gone bald at the arms, and one screen.',
-    doings: [
-      { key: 'balcony', label: 'Sit in the balcony', note: 'The whole row is yours.' },
-      { key: 'projector', label: 'Look in the projection room', note: 'The reels are taller than you are.' },
+    hw: 210,
+    hd: 170,
+    wall: '#4a2b30',
+    floor: '#3a2126',
+    ceiling: '#2b1a1e',
+    tall: 140,
+    props: [
+      { key: 'balcony', label: 'the back row', note: 'The whole row is yours.', x: 0, z: -110, art: 'seat', r: 60, h: 40 },
+      { key: 'projector', label: 'the projection room', note: 'The reels are taller than you are.', x: -160, z: -120, art: 'machine', r: 34, h: 70 },
+      { key: 'screen', label: 'the screen', note: 'Up close it is a bedsheet with a million tiny holes.', x: 0, z: 150, art: 'screen', r: 110, h: 84 },
     ],
   },
   {
@@ -409,9 +540,16 @@ export const INTERIORS: Interior[] = [
     label: 'The Tower Office',
     sign: 'TOWER',
     blurb: 'Forty floors of nothing much, and then the roof.',
-    doings: [
-      { key: 'roof', label: 'Go up to the roof', note: 'The whole city, laid out and getting on with it.' },
-      { key: 'lift', label: 'Ride the lift to the top', note: 'Your ears go on the twenty-second floor.' },
+    hw: 180,
+    hd: 140,
+    wall: '#5a6470',
+    floor: '#6f7a86',
+    ceiling: '#46505c',
+    tall: 100,
+    props: [
+      { key: 'lift', label: 'the lift', note: 'Your ears go on the twenty-second floor.', x: -120, z: 80, art: 'machine', r: 34, h: 88 },
+      { key: 'roof', label: 'the window', note: 'The whole city, laid out and getting on with it.', x: 0, z: 128, art: 'window', r: 60, h: 80 },
+      { key: 'desk', label: 'somebody\'s desk', note: 'A cold coffee and a photograph of a dog.', x: 120, z: 20, art: 'desk', r: 34, h: 36 },
     ],
   },
 ]

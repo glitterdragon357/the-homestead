@@ -9,16 +9,19 @@ import {
   drawGround,
   drawPerson,
   drawPlaygroundFences,
+  drawProp,
+  drawRoom,
   drawSky,
   project,
 } from './cityDraw'
-import { InteriorScene } from './CityArt'
 import {
   CAR_COLOURS,
   CEILING,
   COATS,
   DOOR_REACH,
   FIXTURE_DOING,
+  FIXTURE_RADIUS,
+  fenceBlocks,
   FIXTURE_LABEL,
   GROUND,
   INTERIORS,
@@ -41,7 +44,9 @@ import {
   type Car,
   type CitySave,
   type Fixture,
+  type Interior,
   type Person,
+  type Prop,
 } from './cityData'
 
 /**
@@ -60,6 +65,10 @@ interface World {
   speed: number
   /** On your feet, or up in the air. */
   flying: boolean
+  /** The room you are standing in, if you have gone inside. */
+  room: Interior | null
+  /** Where you were on the street, so you come back out where you left. */
+  outside: { x: number; z: number; yaw: number } | null
   cars: Car[]
   people: Person[]
   t: number
@@ -142,8 +151,13 @@ export function CityMinigame({ onExit }: MinigameProps) {
 
   const [sheet, setSheet] = useState<null | 'journal' | 'gear'>(null)
   const [inside, setInside] = useState<string | null>(null)
+  /*
+   * Only a real panel pauses the world. Being indoors used to count as
+   * one, which froze the room the moment you stepped into it - you could
+   * look at it but not walk a single pace.
+   */
   const sheetRef = useRef<string | null>(null)
-  sheetRef.current = sheet ?? inside
+  sheetRef.current = sheet
 
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<number | undefined>(undefined)
@@ -152,6 +166,8 @@ export function CityMinigame({ onExit }: MinigameProps) {
     flying: false,
     fixture: null as null | { key: string; kind: Fixture['kind']; used: boolean },
     door: null as null | { key: string; interior: string; onFoot: boolean },
+    prop: null as null | { key: string; label: string; done: boolean },
+    indoors: null as null | string,
   })
 
   const showToast = useCallback((msg: string) => {
@@ -171,6 +187,8 @@ export function CityMinigame({ onExit }: MinigameProps) {
       },
       speed: 0,
       flying: false,
+      room: null,
+      outside: null,
       cars: [],
       people: [],
       t: 0,
@@ -234,6 +252,20 @@ export function CityMinigame({ onExit }: MinigameProps) {
     return best
   }, [])
 
+  const nearestProp = useCallback((w: World): Prop | null => {
+    if (!w.room) return null
+    let best: Prop | null = null
+    let bestD = 70
+    for (const prop of w.room.props) {
+      const d = Math.hypot(prop.x - w.cam.x, prop.z - w.cam.z) - prop.r
+      if (d < bestD) {
+        best = prop
+        bestD = d
+      }
+    }
+    return best
+  }, [])
+
   const useFixture = useCallback(() => {
     const w = worldRef.current
     if (!w) return
@@ -261,22 +293,53 @@ export function CityMinigame({ onExit }: MinigameProps) {
       return
     }
     const place = INTERIOR_BY_KEY[b.interior]
+    // Remember the street so you come back out where you went in.
+    w.outside = { x: w.cam.x, z: w.cam.z, yaw: w.cam.yaw }
+    w.room = place
+    w.cam.x = 0
+    w.cam.z = -place.hd + 40
+    w.cam.y = GROUND - EYE
+    w.cam.yaw = 0
+    w.cam.pitch = 0.02
+    w.speed = 0
     setSave((s) => ({
       ...s,
       visited: s.visited?.includes(place.key) ? s.visited : [...(s.visited ?? []), place.key],
     }))
     setInside(place.key)
+    showToast(place.blurb)
   }, [nearestDoor, setSave, showToast])
 
-  function doThing(placeKey: string, doingKey: string) {
-    const place = INTERIOR_BY_KEY[placeKey]
-    const doing = place?.doings.find((d) => d.key === doingKey)
-    if (!doing) return
-    const id = `${placeKey}:${doingKey}`
-    if ((save.done ?? []).includes(id)) return
+  /** Back out onto the pavement. */
+  const goOutside = useCallback(() => {
+    const w = worldRef.current
+    if (!w?.room) return
+    if (w.outside) {
+      w.cam.x = w.outside.x
+      w.cam.z = w.outside.z
+      w.cam.yaw = w.outside.yaw + Math.PI
+    }
+    w.room = null
+    w.outside = null
+    w.cam.y = groundHeightAt(w.cam.x, w.cam.z) - EYE
+    w.speed = 0
+    setInside(null)
+  }, [])
+
+  /** Have a go at whatever you are standing next to indoors. */
+  const useProp = useCallback(() => {
+    const w = worldRef.current
+    if (!w?.room) return
+    const near = nearestProp(w)
+    if (!near) return
+    const id = `${w.room.key}:${near.key}`
+    if ((saveRef.current.done ?? []).includes(id)) {
+      showToast('You have done that already.')
+      return
+    }
     setSave((s) => ({ ...s, done: [...(s.done ?? []), id] }))
-    showToast(doing.note)
-  }
+    showToast(near.note)
+  }, [setSave, showToast])
 
   /* ---------------------------------------------------------------- */
   /* Input                                                             */
@@ -287,7 +350,7 @@ export function CityMinigame({ onExit }: MinigameProps) {
       const w = worldRef.current
       if (!w) return
       if (e.key === 'Escape') {
-        if (inside) setInside(null)
+        if (inside) goOutside()
         else if (sheet) setSheet(null)
         else onExit()
         return
@@ -295,7 +358,8 @@ export function CityMinigame({ onExit }: MinigameProps) {
       if (e.code === 'Space') {
         e.preventDefault()
         if (sheetRef.current) return
-        if (nearestDoor(w)) goInside()
+        if (w.room) useProp()
+        else if (nearestDoor(w)) goInside()
         else useFixture()
         return
       }
@@ -327,7 +391,7 @@ export function CityMinigame({ onExit }: MinigameProps) {
       window.removeEventListener('pointerup', release)
       window.removeEventListener('pointercancel', release)
     }
-  }, [goInside, inside, nearestDoor, onExit, sheet, useFixture])
+  }, [goInside, inside, nearestDoor, onExit, sheet, useFixture, useProp])
 
   const toCanvas = useCallback((clientX: number, clientY: number) => {
     const el = canvasRef.current
@@ -367,8 +431,8 @@ export function CityMinigame({ onExit }: MinigameProps) {
 
       if (now - hudAt > 110) {
         hudAt = now
-        const f = nearestFixture(w)
-        const b = nearestDoor(w)
+        const f = w.room ? null : nearestFixture(w)
+        const b = w.room ? null : nearestDoor(w)
         const place = b?.interior ? INTERIOR_BY_KEY[b.interior] : null
         setHud({
           height: heightOf(w.cam.y),
@@ -377,8 +441,49 @@ export function CityMinigame({ onExit }: MinigameProps) {
             ? { key: f.key, kind: f.kind, used: (saveRef.current.used ?? []).includes(f.key) }
             : null,
           door: place ? { key: b!.key, interior: place.key, onFoot: !w.flying } : null,
+          prop: (() => {
+            const pr = nearestProp(w)
+            if (!pr || !w.room) return null
+            return {
+              key: pr.key,
+              label: pr.label,
+              done: (saveRef.current.done ?? []).includes(`${w.room.key}:${pr.key}`),
+            }
+          })(),
+          indoors: w.room?.key ?? null,
         })
       }
+    }
+
+    /** Is this spot taken by something you cannot walk through? */
+    function blockedOutside(w: World, x: number, y: number, z: number): boolean {
+      const pad = 16
+      for (const b of buildingsAround(x, z, 420)) {
+        if (insideBuilding(b, x, y, z, pad)) return true
+      }
+      if (!w.flying) {
+        if (fenceBlocks(x, z)) return true
+        for (const f of fixturesAround(x, z, 300)) {
+          if (Math.hypot(f.x - x, f.z - z) < FIXTURE_RADIUS[f.kind]) return true
+        }
+        for (const car of w.cars) {
+          if (Math.hypot(car.x - x, car.z - z) < car.size * 0.75) return true
+        }
+        for (const p of w.people) {
+          if (Math.hypot(p.x - x, p.z - z) < 14) return true
+        }
+      }
+      return false
+    }
+
+    /** Indoors: the walls and the furniture. */
+    function blockedInside(room: Interior, x: number, z: number): boolean {
+      const pad = 15
+      if (Math.abs(x) > room.hw - pad || Math.abs(z) > room.hd - pad) return true
+      for (const prop of room.props) {
+        if (Math.hypot(prop.x - x, prop.z - z) < prop.r + 10) return true
+      }
+      return false
     }
 
     function step(w: World, dt: number) {
@@ -407,12 +512,26 @@ export function CityMinigame({ onExit }: MinigameProps) {
       cam.yaw += turn * TURN_RATE * dt
       cam.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, cam.pitch + pitch * PITCH_RATE * dt))
 
-      const top = w.flying ? FLY_SPEED : WALK_SPEED
+      const top = w.room ? WALK_SPEED : w.flying ? FLY_SPEED : WALK_SPEED
       w.speed += (Math.max(-0.6, Math.min(1, pace)) * top - w.speed) * Math.min(1, dt * 3.4)
 
       const f = forwardOf(cam)
       const wasX = cam.x
       const wasZ = cam.z
+
+      if (w.room) {
+        // Indoors you are always on your feet.
+        const flat = Math.hypot(f.x, f.z) || 1
+        cam.x += (f.x / flat) * w.speed * dt
+        cam.z += (f.z / flat) * w.speed * dt
+        if (blockedInside(w.room, cam.x, cam.z)) {
+          cam.x = wasX
+          cam.z = wasZ
+          w.speed = 0
+        }
+        cam.y = GROUND - EYE
+        return
+      }
 
       if (w.flying) {
         // In the air you go wherever you are pointing.
@@ -435,20 +554,16 @@ export function CityMinigame({ onExit }: MinigameProps) {
       cam.x = Math.min(WORLD.width - 40, Math.max(40, cam.x))
       cam.z = Math.min(WORLD.depth - 40, Math.max(40, cam.z))
 
-      // The city is solid whichever way you are travelling.
-      for (const b of buildingsAround(cam.x, cam.z, 400)) {
-        if (!insideBuilding(b, cam.x, cam.y, cam.z)) continue
-        const overX = b.hw + 14 - Math.abs(cam.x - b.x)
-        const overZ = b.hd + 14 - Math.abs(cam.z - b.z)
-        const overY = cam.y - (GROUND - b.height)
-        if (overY < 0) continue
-        if (w.flying && overY < Math.min(overX, overZ) * 0.6) {
-          cam.y = GROUND - b.height - 6
-        } else if (overX < overZ) {
-          cam.x = b.x + Math.sign(cam.x - b.x || 1) * (b.hw + 15)
-        } else {
-          cam.z = b.z + Math.sign(cam.z - b.z || 1) * (b.hd + 15)
-        }
+      /*
+       * Everything out here is solid, and running into it stops you.
+       *
+       * Not a slide along the wall - you come to a halt and have to turn
+       * around, which is what it is like to walk into a building.
+       */
+      if (blockedOutside(w, cam.x, cam.y, cam.z)) {
+        cam.x = wasX
+        cam.z = wasZ
+        w.speed = 0
       }
 
       const stepped = Math.hypot(cam.x - wasX, cam.z - wasZ)
@@ -487,6 +602,35 @@ export function CityMinigame({ onExit }: MinigameProps) {
     function render(w: World) {
       const cam = w.cam
       const sight = SIGHT
+
+      if (w.room) {
+        const room = w.room
+        ctx!.fillStyle = room.ceiling
+        ctx!.fillRect(0, 0, VIEW.width, VIEW.height)
+        drawRoom(ctx!, room, cam)
+        const items = room.props
+          .map((prop) => ({ prop, p: project(cam, prop.x, GROUND, prop.z) }))
+          .filter((i) => i.p)
+          .sort((a, b) => b.p!.depth - a.p!.depth)
+        for (const { prop, p } of items) {
+          drawProp(ctx!, prop, p!, w.t, (saveRef.current.done ?? []).includes(`${room.key}:${prop.key}`))
+        }
+        ctx!.save()
+        ctx!.strokeStyle = 'rgba(255,255,255,0.4)'
+        ctx!.lineWidth = 1.5
+        const mx = VIEW.width / 2
+        const my = VIEW.height / 2
+        for (const [a, b] of [[-10, -4], [4, 10]]) {
+          ctx!.beginPath()
+          ctx!.moveTo(mx + a, my)
+          ctx!.lineTo(mx + b, my)
+          ctx!.moveTo(mx, my + a)
+          ctx!.lineTo(mx, my + b)
+          ctx!.stroke()
+        }
+        ctx!.restore()
+        return
+      }
 
       drawSky(ctx!, cam, w.t)
       drawGround(ctx!, cam, sight)
@@ -570,7 +714,7 @@ export function CityMinigame({ onExit }: MinigameProps) {
 
     raf = requestAnimationFrame(frame)
     return () => cancelAnimationFrame(raf)
-  }, [nearestDoor, nearestFixture])
+  }, [nearestDoor, nearestFixture, nearestProp])
 
   /* ---------------------------------------------------------------- */
   /* Chrome                                                            */
@@ -585,8 +729,6 @@ export function CityMinigame({ onExit }: MinigameProps) {
     w.speed = 0
     showToast(w.flying ? 'Up you go.' : 'Back on the pavement.')
   }
-
-  const place = inside ? INTERIOR_BY_KEY[inside] : null
 
   return (
     <div style={S.wrap}>
@@ -624,13 +766,19 @@ export function CityMinigame({ onExit }: MinigameProps) {
 
         <div style={S.topBar}>
           <div style={S.readout}>
-            <span style={S.label}>{hud.flying ? 'Flying' : 'On foot'}</span>
-            <span style={S.big}>{hud.flying ? `${hud.height} m` : 'street level'}</span>
+            <span style={S.label}>
+              {hud.indoors ? INTERIOR_BY_KEY[hud.indoors].label : hud.flying ? 'Flying' : 'On foot'}
+            </span>
+            <span style={S.big}>
+              {hud.indoors ? 'inside' : hud.flying ? `${hud.height} m` : 'street level'}
+            </span>
           </div>
           <span style={S.hint}>
-            {hud.flying
-              ? 'hold to fly · look where you want to go'
-              : 'hold to walk · stand at a door to open it'}
+            {hud.indoors
+              ? 'hold to walk · go up to a thing to try it'
+              : hud.flying
+                ? 'hold to fly · look where you want to go'
+                : 'hold to walk · stand at a door to open it'}
           </span>
           <span style={S.label}>
             {(save.visited ?? []).length} / {INTERIORS.length} places
@@ -640,58 +788,54 @@ export function CityMinigame({ onExit }: MinigameProps) {
         {toast && <div style={S.toast}>{toast}</div>}
 
         <div style={S.bottomBar}>
-          {hud.door && (
-            <button
-              style={{ ...S.act, opacity: hud.door.onFoot ? 1 : 0.5 }}
-              onClick={goInside}
-            >
-              {hud.door.onFoot
-                ? `Open door · ${INTERIOR_BY_KEY[hud.door.interior].label}`
-                : `${INTERIOR_BY_KEY[hud.door.interior].label} · land first`}
-            </button>
-          )}
-          {!hud.door && hud.fixture && (
-            <button style={{ ...S.act, opacity: hud.fixture.used ? 0.55 : 1 }} onClick={useFixture}>
-              {hud.fixture.used
-                ? `${FIXTURE_LABEL[hud.fixture.kind]} · done`
-                : `Have a go on ${FIXTURE_LABEL[hud.fixture.kind]}`}
-            </button>
+          {hud.indoors ? (
+            <>
+              {hud.prop && (
+                <button
+                  style={{ ...S.act, opacity: hud.prop.done ? 0.55 : 1 }}
+                  onClick={useProp}
+                >
+                  {hud.prop.done ? `${hud.prop.label} · done` : `Try ${hud.prop.label}`}
+                </button>
+              )}
+              <button style={S.ghost} onClick={goOutside}>
+                Out to the street
+              </button>
+            </>
+          ) : (
+            <>
+              {hud.door && (
+                <button
+                  style={{ ...S.act, opacity: hud.door.onFoot ? 1 : 0.5 }}
+                  onClick={goInside}
+                >
+                  {hud.door.onFoot
+                    ? `Open door · ${INTERIOR_BY_KEY[hud.door.interior].label}`
+                    : `${INTERIOR_BY_KEY[hud.door.interior].label} · land first`}
+                </button>
+              )}
+              {!hud.door && hud.fixture && (
+                <button
+                  style={{ ...S.act, opacity: hud.fixture.used ? 0.55 : 1 }}
+                  onClick={useFixture}
+                >
+                  {hud.fixture.used
+                    ? `${FIXTURE_LABEL[hud.fixture.kind]} · done`
+                    : `Have a go on ${FIXTURE_LABEL[hud.fixture.kind]}`}
+                </button>
+              )}
+              <button style={S.ghost} onClick={toggleFly}>
+                {hud.flying ? 'Land' : 'Fly'}
+              </button>
+            </>
           )}
           <button style={S.ghost} onClick={() => setSheet(sheet === 'journal' ? null : 'journal')}>
             Journal
-          </button>
-          <button style={S.ghost} onClick={toggleFly}>
-            {hud.flying ? 'Land' : 'Fly'}
           </button>
           <button style={S.ghost} onClick={onExit}>
             Leave
           </button>
         </div>
-
-        {place && (
-          <Sheet title={place.label} onClose={() => setInside(null)} back="Back out to the street">
-            <InteriorScene which={place.key} />
-            <p style={S.blurb}>{place.blurb}</p>
-            {place.doings.map((d) => {
-              const done = (save.done ?? []).includes(`${place.key}:${d.key}`)
-              return (
-                <div key={d.key} style={{ ...S.row, ...(done ? S.rowDone : null) }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={S.rowName}>{d.label}</div>
-                    <div style={S.rowNote}>{done ? d.note : 'have a go'}</div>
-                  </div>
-                  {done ? (
-                    <span style={S.tick}>✓</span>
-                  ) : (
-                    <button style={S.small} onClick={() => doThing(place.key, d.key)}>
-                      Do it
-                    </button>
-                  )}
-                </div>
-              )
-            })}
-          </Sheet>
-        )}
 
         {sheet === 'journal' && (
           <Sheet title="Journal" onClose={() => setSheet(null)} back="Back to the city">
@@ -704,16 +848,16 @@ export function CityMinigame({ onExit }: MinigameProps) {
             <div style={S.section}>Places in the city</div>
             {INTERIORS.map((i) => {
               const been = (save.visited ?? []).includes(i.key)
-              const doneCount = i.doings.filter((d) => (save.done ?? []).includes(`${i.key}:${d.key}`)).length
+              const doneCount = i.props.filter((d) => (save.done ?? []).includes(`${i.key}:${d.key}`)).length
               return (
                 <div key={i.key} style={S.row}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={S.rowName}>{been ? i.label : 'Somewhere you have not been'}</div>
                     <div style={S.rowNote}>
-                      {been ? `${doneCount} of ${i.doings.length} things done` : 'Not been in yet'}
+                      {been ? `${doneCount} of ${i.props.length} things done` : 'Not been in yet'}
                     </div>
                   </div>
-                  <span style={S.rowNote}>{been ? `${doneCount}/${i.doings.length}` : '—'}</span>
+                  <span style={S.rowNote}>{been ? `${doneCount}/${i.props.length}` : '—'}</span>
                 </div>
               )
             })}

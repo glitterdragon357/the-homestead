@@ -36,7 +36,7 @@ export interface Viewport {
 
 /** Focal length, giving roughly an 85 degree horizontal field of view. */
 export const FOCAL = 520
-const NEAR = 12
+export const NEAR = 12
 
 export function project(
   cam: Camera,
@@ -62,6 +62,80 @@ export function project(
   if (rd < NEAR) return null
   const scale = FOCAL / rd
   return { sx: view.width / 2 + rx * scale, sy: view.height / 2 + ry * scale, scale, depth: rd }
+}
+
+/** A point moved into the camera's own frame, before projection. */
+export interface InCamera {
+  rx: number
+  ry: number
+  /** Distance along the view axis. Negative is behind you. */
+  rd: number
+}
+
+export function toCamera(cam: Camera, x: number, y: number, z: number): InCamera {
+  const dx = x - cam.x
+  const dy = y - cam.y
+  const dz = z - cam.z
+  const cy = Math.cos(cam.yaw)
+  const sy = Math.sin(cam.yaw)
+  const rx = dx * cy - dz * sy
+  const rz = dx * sy + dz * cy
+  const cp = Math.cos(cam.pitch)
+  const sp = Math.sin(cam.pitch)
+  return { rx, ry: dy * cp - rz * sp, rd: dy * sp + rz * cp }
+}
+
+/**
+ * Project a polygon, clipping it against the near plane rather than
+ * throwing it away.
+ *
+ * This is what stops a wall vanishing the moment you walk up to it. A
+ * face with one corner behind your eye cannot be projected corner by
+ * corner - the maths gives nonsense - so the usual shortcut is to drop
+ * the whole face, which is exactly why buildings disappeared when you
+ * got close. Cutting the polygon along the near plane first leaves a
+ * shape that is entirely in front of you and can be drawn honestly.
+ */
+export function projectPoly(
+  cam: Camera,
+  points: [number, number, number][],
+  view: Viewport
+): { sx: number; sy: number }[] | null {
+  const cs = points.map((p) => toCamera(cam, p[0], p[1], p[2]))
+
+  // Sutherland-Hodgman against the single plane rd = NEAR.
+  const clipped: InCamera[] = []
+  for (let i = 0; i < cs.length; i++) {
+    const a = cs[i]
+    const b = cs[(i + 1) % cs.length]
+    const aIn = a.rd >= NEAR
+    const bIn = b.rd >= NEAR
+    if (aIn) clipped.push(a)
+    if (aIn !== bIn) {
+      const t = (NEAR - a.rd) / (b.rd - a.rd)
+      clipped.push({
+        rx: a.rx + (b.rx - a.rx) * t,
+        ry: a.ry + (b.ry - a.ry) * t,
+        rd: NEAR,
+      })
+    }
+  }
+  if (clipped.length < 3) return null
+
+  return clipped.map((c) => ({
+    sx: view.width / 2 + (c.rx * FOCAL) / c.rd,
+    sy: view.height / 2 + (c.ry * FOCAL) / c.rd,
+  }))
+}
+
+/** Fill a polygon that has already been projected and clipped. */
+export function fillPoly(ctx: CanvasRenderingContext2D, pts: { sx: number; sy: number }[]) {
+  if (pts.length < 3) return
+  ctx.beginPath()
+  ctx.moveTo(pts[0].sx, pts[0].sy)
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].sx, pts[i].sy)
+  ctx.closePath()
+  ctx.fill()
 }
 
 /** The unit vector you are facing, for moving and for culling. */
