@@ -19,6 +19,7 @@ import {
   type Camera,
   type Projected,
 } from '../../engine/firstPerson'
+import { contactShadow } from '../../engine/polish'
 import {
   BLOCK,
   GROUND,
@@ -456,6 +457,8 @@ export function drawPerson(
   ctx.globalAlpha = alpha
   ctx.translate(p.sx, p.sy)
   ctx.scale(s, s)
+
+  contactShadow(ctx, 0, 1.5, 11, 3.2, 0.38)
 
   ctx.strokeStyle = LEG_COLOURS[person.legs % LEG_COLOURS.length]
   ctx.lineWidth = 4.4

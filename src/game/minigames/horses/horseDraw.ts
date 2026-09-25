@@ -16,6 +16,7 @@ import {
   type Camera,
   type Projected,
 } from '../../engine/firstPerson'
+import { contactShadow } from '../../engine/polish'
 import { VIEW, groundAt, type Breed, type Coat, type Quarry } from './horseData'
 
 const VIEWPORT = { width: VIEW.width, height: VIEW.height }
@@ -256,6 +257,8 @@ export function drawHorse(
   ctx.translate(p.sx, p.sy)
   ctx.scale(p.scale * Math.max(0.18, Math.abs(squash)) * dir, p.scale)
 
+  contactShadow(ctx, 0, L * 0.02, L * 0.52, L * 0.11, 0.3)
+
   const step = t * 0.006 * (0.4 + gait * 1.9) + seed
   const body = coat.body
   const mane = coat.mane
@@ -380,6 +383,7 @@ export function drawQuarry(
   ctx.globalAlpha = alpha
   ctx.translate(p.sx, p.sy)
   ctx.scale(p.scale * Math.max(0.18, Math.abs(squash)) * dir, p.scale)
+  contactShadow(ctx, 0, L * 0.02, L * 0.45, L * 0.1, 0.28)
   const step = t * 0.008 * (0.4 + gait * 2) + seed
 
   if (q.art === 'hare') {

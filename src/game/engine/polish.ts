@@ -85,3 +85,34 @@ export function finish(
   vignette(ctx, view, opts.vignette ?? 0.42)
   grain(ctx, view, opts.grain ?? 0.045)
 }
+
+/**
+ * The soft dark patch a thing casts where it meets the ground.
+ *
+ * A billboard figure standing on a flat fill reads as a sticker; the same
+ * figure with a shadow under its feet reads as standing there. Draw this
+ * before the figure, in the same coordinate frame, with the origin where
+ * the feet are.
+ */
+export function contactShadow(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  rx: number,
+  ry: number,
+  strength = 0.34
+) {
+  const r = Math.max(1, rx)
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.scale(1, Math.max(0.05, ry / r))
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r)
+  g.addColorStop(0, `rgba(0,0,0,${strength.toFixed(3)})`)
+  g.addColorStop(0.55, `rgba(0,0,0,${(strength * 0.4).toFixed(3)})`)
+  g.addColorStop(1, 'rgba(0,0,0,0)')
+  ctx.fillStyle = g
+  ctx.beginPath()
+  ctx.arc(0, 0, r, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+}
