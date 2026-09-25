@@ -360,3 +360,31 @@ export function drawBolt(ctx: CanvasRenderingContext2D, x: number, y: number, bi
   ctx.ellipse(x, y, len, big ? 13 : 5, 0, 0, Math.PI * 2)
   ctx.fill()
 }
+
+/**
+ * The aiming reticle. The ring is the honest truth about how near a click
+ * has to land, so a repulsor upgrade visibly widens it.
+ */
+export function drawReticle(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  reach: number,
+  ready: boolean
+) {
+  ctx.save()
+  ctx.lineWidth = 1.5
+  ctx.strokeStyle = ready ? 'rgba(255,214,140,0.85)' : 'rgba(255,255,255,0.28)'
+  ctx.beginPath()
+  ctx.arc(x, y, reach, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.strokeStyle = ready ? 'rgba(255,240,210,0.95)' : 'rgba(255,255,255,0.4)'
+  ctx.lineWidth = 2
+  for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+    ctx.beginPath()
+    ctx.moveTo(x + dx * 7, y + dy * 7)
+    ctx.lineTo(x + dx * 15, y + dy * 15)
+    ctx.stroke()
+  }
+  ctx.restore()
+}

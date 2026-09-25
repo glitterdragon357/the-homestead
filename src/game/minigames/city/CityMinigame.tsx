@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MinigameProps } from '../registry'
 import { useMinigameProgress } from '../../state/useMinigameProgress'
 import { clarity, forwardOf, type Camera } from '../../engine/firstPerson'
+import { finish } from '../../engine/polish'
 import {
   drawBuilding,
   drawCar,
@@ -629,6 +630,7 @@ export function CityMinigame({ onExit }: MinigameProps) {
           ctx!.stroke()
         }
         ctx!.restore()
+        finish(ctx!, VIEW, { vignette: 0.46, grain: 0.05 })
         return
       }
 
@@ -710,6 +712,8 @@ export function CityMinigame({ onExit }: MinigameProps) {
         ctx!.stroke()
       }
       ctx!.restore()
+
+      finish(ctx!, VIEW, { vignette: 0.4, grain: 0.044 })
     }
 
     raf = requestAnimationFrame(frame)

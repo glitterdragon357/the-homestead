@@ -46,10 +46,10 @@ export const SYSTEMS: SuitSystem[] = [
     label: 'Repulsors',
     unit: 'damage',
     levels: [
-      { label: 'Hand emitters', cost: 0, value: 26, blurb: 'Enough to knock something out of the air. Eventually.' },
-      { label: 'Focused array', cost: 220, value: 44, blurb: 'Tighter beam, twice the bite.' },
-      { label: 'Twin cannons', cost: 600, value: 68, blurb: 'Two at once, and they track on their own.' },
-      { label: 'Overcharged pair', cost: 1400, value: 96, blurb: 'Most things do not get a second hit.' },
+      { label: 'Hand emitters', cost: 0, value: 26, blurb: 'Enough to knock something out of the air, if you aim well.' },
+      { label: 'Focused array', cost: 220, value: 44, blurb: 'Twice the bite, and a little more forgiving to aim.' },
+      { label: 'Twin cannons', cost: 600, value: 68, blurb: 'Two at once. You can be well off centre and still connect.' },
+      { label: 'Overcharged pair', cost: 1400, value: 96, blurb: 'Most things do not get a second hit, and the spread is wide.' },
     ],
   },
   {
@@ -118,6 +118,18 @@ export const GRAVITY = 1150
 export const THRUST_DRAIN = 9
 /** Power that comes back when you are gliding, a second. */
 export const GLIDE_CHARGE = 6
+
+/**
+ * How hard the suit chases the pointer. The thrusters set the ceiling on
+ * it, so a better set of boots really does turn more sharply.
+ */
+export const STEER = 3.4
+/** How near a click has to land to hit something, before upgrades. */
+export const REPULSOR_REACH = 58
+/** How much wider each repulsor upgrade makes that. */
+export const REACH_PER_LEVEL = 13
+/** The gap between repulsor shots, in ms. */
+export const REPULSOR_COOLDOWN = 260
 /** What one unibeam costs, and what it does. */
 export const UNIBEAM_COST = 34
 export const UNIBEAM_DAMAGE = 140
@@ -147,7 +159,7 @@ export interface ThingSpec {
 }
 
 export const THINGS: Record<ThingKind, ThingSpec> = {
-  drone: { kind: 'drone', label: 'Drone', hp: 30, harm: 14, r: 20, shootable: true, colour: '#8d99a4', note: 'Hangs about at your height and waits for you.' },
+  drone: { kind: 'drone', label: 'Drone', hp: 30, harm: 14, r: 20, shootable: true, colour: '#8d99a4', note: 'Hangs about at your height. Click it twice.' },
   missile: { kind: 'missile', label: 'Missile', hp: 14, harm: 26, r: 14, shootable: true, colour: '#c2452f', note: 'Comes in fast and low. Shoot it or climb.' },
   gunship: { kind: 'gunship', label: 'Gunship', hp: 120, harm: 34, r: 38, shootable: true, colour: '#4a5560', note: 'Slow, heavy, and it takes a unibeam to hurry it along.' },
   debris: { kind: 'debris', label: 'Debris', hp: 0, harm: 18, r: 26, shootable: false, colour: '#6b5a42', note: 'Half a building, tumbling. Go round it.' },
@@ -174,50 +186,50 @@ export const MISSIONS: Mission[] = [
     key: 'patrol',
     label: 'Evening patrol',
     brief: 'Nothing on the scanner. Go and look anyway.',
-    distance: 5200,
-    density: 0.55,
+    distance: 18000,
+    density: 1.5,
     mix: ['drone', 'debris', 'civilian'],
-    pay: 120,
+    pay: 75,
     wants: 0,
   },
   {
     key: 'fire',
     label: 'Tower fire',
     brief: 'Forty floors alight and the stairwell is gone. Get them out.',
-    distance: 6400,
-    density: 0.8,
+    distance: 21000,
+    density: 1.9,
     mix: ['flare', 'civilian', 'debris', 'drone'],
-    pay: 210,
+    pay: 130,
     wants: 2,
   },
   {
     key: 'swarm',
     label: 'Drone swarm',
     brief: 'Somebody has bought a great many of somebody else\'s drones.',
-    distance: 7000,
-    density: 1.05,
+    distance: 24000,
+    density: 2.4,
     mix: ['drone', 'drone', 'missile', 'debris'],
-    pay: 320,
+    pay: 200,
     wants: 4,
   },
   {
     key: 'convoy',
     label: 'Convoy intercept',
     brief: 'Gunships over the river, heading for the bridge.',
-    distance: 7800,
-    density: 1.0,
+    distance: 27000,
+    density: 2.3,
     mix: ['gunship', 'missile', 'drone', 'civilian'],
-    pay: 480,
+    pay: 300,
     wants: 6,
   },
   {
     key: 'reactor',
     label: 'Reactor run',
     brief: 'The plant is going up. You have one pass to get everyone clear.',
-    distance: 9000,
-    density: 1.35,
+    distance: 31000,
+    density: 2.9,
     mix: ['flare', 'civilian', 'debris', 'missile', 'gunship'],
-    pay: 720,
+    pay: 440,
     wants: 8,
   },
 ]
@@ -226,10 +238,15 @@ export const MISSION_BY_KEY: Record<string, Mission> = Object.fromEntries(
   MISSIONS.map((m) => [m.key, m])
 )
 
+/** How near a click has to land to hit something, with the suit as built. */
+export function reachOf(save: { repulsors?: number }): number {
+  return REPULSOR_REACH + (save.repulsors ?? 0) * REACH_PER_LEVEL
+}
+
 /** What a run was worth, all in. */
 export function payout(mission: Mission, saved: number, downed: number, reached: boolean): number {
   const base = reached ? mission.pay : Math.round(mission.pay * 0.35)
-  return base + saved * 34 + downed * 12
+  return base + saved * 9 + downed * 3
 }
 
 /* ------------------------------------------------------------------ */

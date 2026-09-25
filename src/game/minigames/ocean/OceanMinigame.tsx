@@ -37,6 +37,7 @@ import {
   stepFish,
   type Fish,
 } from './oceanLife'
+import { finish } from '../../engine/polish'
 import {
   clarity,
   drawBackdrop,
@@ -687,6 +688,8 @@ export function OceanMinigame({ onExit }: MinigameProps) {
       }
 
       if (mix < 0.9) drawCrosshair(ctx!, w)
+
+      finish(ctx!, VIEW, { vignette: 0.5, grain: 0.05 })
     }
 
     function drawCrosshair(ctx: CanvasRenderingContext2D, w: World) {

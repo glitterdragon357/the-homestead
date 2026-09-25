@@ -4,6 +4,7 @@ import { useMinigameProgress } from '../../state/useMinigameProgress'
 import { usePurse } from '../../state/usePurse'
 import { GiftRow } from '../../economy/GiftRow'
 import { billboard, forwardOf, type Camera } from '../../engine/firstPerson'
+import { finish } from '../../engine/polish'
 import { clarity } from '../../engine/firstPerson'
 import { drawHorse, drawLand, drawQuarry, drawSky, project } from './horseDraw'
 import { HorsePortrait, Stall } from './HorseArt'
@@ -910,6 +911,8 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
         ctx!.stroke()
       }
       ctx!.restore()
+
+      finish(ctx!, VIEW, { vignette: 0.38, grain: 0.042 })
     }
 
     raf = requestAnimationFrame(frame)

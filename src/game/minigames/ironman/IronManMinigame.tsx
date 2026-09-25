@@ -4,7 +4,8 @@ import { useMinigameProgress } from '../../state/useMinigameProgress'
 import { usePurse } from '../../state/usePurse'
 import { GiftRow } from '../../economy/GiftRow'
 import { useAmbientMusic } from '../../audio/useAmbientMusic'
-import { drawBolt, drawCity, drawSky, drawSuit, drawThing, type Thing } from './ironDraw'
+import { drawBolt, drawCity, drawReticle, drawSky, drawSuit, drawThing, type Thing } from './ironDraw'
+import { finish as finishFrame } from '../../engine/polish'
 import {
   CEILING,
   CRUISE,
@@ -15,6 +16,9 @@ import {
   SYSTEMS,
   THINGS,
   THRUST_DRAIN,
+  STEER,
+  REPULSOR_COOLDOWN,
+  reachOf,
   UNIBEAM_COOLDOWN,
   UNIBEAM_COST,
   UNIBEAM_DAMAGE,
@@ -33,11 +37,11 @@ import {
  * Iron Man Life.
  *
  * Downstairs you build the suit; upstairs you find out what it can take.
- * Flight is one control on purpose - hold to climb, let go to fall -
- * because the repulsors aim themselves and there is quite enough coming
- * at you already. The reactor is the thing you actually manage: holding
- * the thrusters open burns it down, gliding puts it back, and the
- * unibeam costs a good chunk of whatever is left.
+ * One pointer does both jobs: the suit flies to wherever you are pointing,
+ * and clicking fires the repulsors at what is under the cursor. Nothing
+ * aims itself, so a mission is something you fly rather than watch. The
+ * reactor is what you manage - climbing burns it down, levelling out puts
+ * it back, and the unibeam costs a good chunk of whatever is left.
  */
 
 const SUIT_X = 250
@@ -58,6 +62,9 @@ interface Run {
   nextShot: number
   unibeamAt: number
   hurtUntil: number
+  /** Where the pointer is. Null means it has left the stage, so you fall. */
+  aimX: number
+  aimY: number | null
   thrusting: boolean
   over: null | 'done' | 'downed'
   t: number
@@ -111,6 +118,8 @@ export function IronManMinigame({ onExit }: MinigameProps) {
       downed: 0,
       nextSpawn: 600,
       nextShot: 0,
+      aimX: VIEW.width * 0.62,
+      aimY: null,
       unibeamAt: 0,
       hurtUntil: 0,
       thrusting: false,
@@ -153,7 +162,6 @@ export function IronManMinigame({ onExit }: MinigameProps) {
 
     const s = saveRef.current
     const lift = statOf(s, 'thrusters')
-    const hit = statOf(s, 'repulsors')
     const maxPower = statOf(s, 'reactor')
     const maxHull = statOf(s, 'plating')
 
@@ -169,9 +177,18 @@ export function IronManMinigame({ onExit }: MinigameProps) {
       last = now
       run.t = now
 
-      /* --- flying ------------------------------------------------- */
-      const wants = run.thrusting && run.power > 0
-      run.vy += (wants ? -lift : GRAVITY) * dt
+      /* --- flying: the suit chases wherever you are pointing -------- */
+      const steering = run.aimY != null && run.power > 0
+      if (steering) {
+        const want = Math.max(CEILING, Math.min(FLOOR_Y - 26, run.aimY!))
+        const gap = want - run.y
+        const reach = lift * 0.74
+        const target = Math.max(-reach, Math.min(reach, gap * STEER))
+        run.vy += (target - run.vy) * Math.min(1, dt * 9)
+      } else {
+        run.vy += GRAVITY * dt
+      }
+      const wants = steering && run.vy < -12
       run.vy = Math.max(-520, Math.min(620, run.vy))
       run.y += run.vy * dt
       if (run.y < CEILING) {
@@ -221,22 +238,6 @@ export function IronManMinigame({ onExit }: MinigameProps) {
         if (thing.kind === 'civilian' && thing.y > FLOOR_Y - 30) thing.y = FLOOR_Y - 30
       }
 
-      /* --- repulsors, which aim themselves ------------------------- */
-      if (now > run.nextShot) {
-        const target = run.things
-          .filter((th) => !th.dead && THINGS[th.kind].shootable && th.x > SUIT_X && th.x < VIEW.width + 40)
-          .sort((a, b) => a.x - b.x)[0]
-        if (target && Math.abs(target.y - run.y) < 150) {
-          target.hp -= hit
-          run.bolts.push({ x: (SUIT_X + target.x) / 2, y: (run.y + target.y) / 2, big: false, until: now + 90 })
-          run.nextShot = now + 360
-          if (target.hp <= 0) {
-            target.dead = true
-            run.downed++
-          }
-        }
-      }
-
       /* --- collisions ---------------------------------------------- */
       for (const thing of run.things) {
         if (thing.dead) continue
@@ -272,6 +273,12 @@ export function IronManMinigame({ onExit }: MinigameProps) {
       const tilt = Math.max(-0.4, Math.min(0.45, run.vy / 900))
       drawSuit(ctx, SUIT_X, run.y, wants, tilt, run.t, run.hurtUntil > now ? 1 : 0)
 
+      if (run.aimY != null) {
+        drawReticle(ctx, run.aimX, run.aimY, reachOf(saveRef.current), now > run.nextShot)
+      }
+
+      finishFrame(ctx, VIEW, { vignette: 0.52, grain: 0.05 })
+
       if (now - hudAt > 100) {
         hudAt = now
         setHud({
@@ -292,6 +299,35 @@ export function IronManMinigame({ onExit }: MinigameProps) {
   /* ---------------------------------------------------------------- */
   /* Controls                                                          */
   /* ---------------------------------------------------------------- */
+
+  /** A repulsor shot at whatever you clicked on. */
+  const fire = useCallback((px: number, py: number) => {
+    const run = runRef.current
+    if (!run) return
+    const now = performance.now()
+    if (now < run.nextShot) return
+    run.nextShot = now + REPULSOR_COOLDOWN
+
+    const reach = reachOf(saveRef.current)
+    let best: Thing | null = null
+    let bestGap = Infinity
+    for (const thing of run.things) {
+      if (thing.dead || !THINGS[thing.kind].shootable) continue
+      const gap = Math.hypot(thing.x - px, thing.y - py)
+      if (gap < reach + THINGS[thing.kind].r && gap < bestGap) {
+        bestGap = gap
+        best = thing
+      }
+    }
+
+    run.bolts.push({ x: best ? best.x : px, y: best ? best.y : py, big: false, until: now + 110 })
+    if (!best) return
+    best.hp -= statOf(saveRef.current, 'repulsors')
+    if (best.hp <= 0) {
+      best.dead = true
+      run.downed++
+    }
+  }, [])
 
   const unibeam = useCallback(() => {
     const run = runRef.current
@@ -372,12 +408,26 @@ export function IronManMinigame({ onExit }: MinigameProps) {
       <div style={S.wrap}>
         <div
           style={S.stage}
+          onPointerMove={(e) => {
+            const run = runRef.current
+            if (!run) return
+            const box = e.currentTarget.getBoundingClientRect()
+            run.aimX = ((e.clientX - box.left) / box.width) * VIEW.width
+            run.aimY = ((e.clientY - box.top) / box.height) * VIEW.height
+          }}
+          onPointerLeave={() => {
+            if (runRef.current) runRef.current.aimY = null
+          }}
           onPointerDown={(e) => {
             if ((e.target as HTMLElement).closest('button')) return
-            if (runRef.current) runRef.current.thrusting = true
-          }}
-          onPointerUp={() => {
-            if (runRef.current) runRef.current.thrusting = false
+            const run = runRef.current
+            if (!run) return
+            const box = e.currentTarget.getBoundingClientRect()
+            const px = ((e.clientX - box.left) / box.width) * VIEW.width
+            const py = ((e.clientY - box.top) / box.height) * VIEW.height
+            run.aimX = px
+            run.aimY = py
+            fire(px, py)
           }}
         >
           <canvas ref={canvasRef} width={VIEW.width} height={VIEW.height} style={S.canvas} />
@@ -413,7 +463,7 @@ export function IronManMinigame({ onExit }: MinigameProps) {
           {toast && <div style={S.toast}>{toast}</div>}
 
           <div style={S.hudBottom}>
-            <span style={S.hint}>hold anywhere to climb · let go to fall</span>
+            <span style={S.hint}>the suit follows your pointer · click a drone to fire</span>
             <button
               style={{ ...S.beamBtn, opacity: hud.beam > 0 ? 0.4 : 1 }}
               onPointerDown={(e) => {
