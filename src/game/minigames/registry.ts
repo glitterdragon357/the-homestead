@@ -17,6 +17,8 @@ import { doctorPending, type DoctorSave } from './doctor/doctorData'
 import { OceanMinigame } from './ocean/OceanMinigame'
 import { HorsesMinigame } from './horses/HorsesMinigame'
 import { CityMinigame } from './city/CityMinigame'
+import { IronManMinigame } from './ironman/IronManMinigame'
+import { ironPending, type IronSave } from './ironman/ironData'
 import { cityPending, type CitySave } from './city/cityData'
 import { horsesPending, type HorseSave } from './horses/horseData'
 import { SpaMinigame } from './spa/SpaMinigame'
@@ -139,6 +141,14 @@ export const MINIGAME_REGISTRY: Record<string, MinigameDefinition> = {
     icon: '\u{1F485}',
     component: SpaMinigame,
     pending: (p, now) => spaPending(p.spa as SpaSave, now),
+  },
+  ironman: {
+    id: 'ironman',
+    name: 'Iron Man Life',
+    description: 'Build the suit in the workshop, then fly it out over the city.',
+    icon: '\u{1F9BE}',
+    component: IronManMinigame,
+    pending: (p) => ironPending(p.ironman as IronSave),
   },
   city: {
     id: 'city',

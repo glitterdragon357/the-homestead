@@ -23,6 +23,7 @@ export const TRADES: Trade[] = [
   { id: 'doctor', label: 'Doctor', icon: '⚕️' },
   { id: 'salon', label: 'Pet Salon', icon: '✂️' },
   { id: 'pets', label: 'Pet Care', icon: '🐾' },
+  { id: 'ironman', label: 'Iron Man Life', icon: '🦾' },
   { id: 'spa', label: 'Day Spa', icon: '💅' },
   { id: 'horses', label: 'Wild Horses', icon: '🐎' },
 ]
