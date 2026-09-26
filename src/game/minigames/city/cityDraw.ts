@@ -20,7 +20,7 @@ import {
   type Camera,
   type Projected,
 } from '../../engine/firstPerson'
-import { SUN, contactShadow, faceAO, litFill } from '../../engine/polish'
+import { SUN, blend, contactShadow, faceAO, litFill, parseColour, toCss } from '../../engine/polish'
 import {
   BLOCK,
   GROUND,
@@ -473,30 +473,50 @@ export function drawCar(ctx: CanvasRenderingContext2D, car: Car, cam: Camera, si
   ctx.save()
   ctx.globalAlpha = k
 
-  const faces: [{ x: number; z: number }, { x: number; z: number }, number][] = [
-    [fl, fr, 1],
-    [br, bl, 0.72],
-    [bl, fl, 0.86],
-    [fr, br, 0.86],
-  ]
-  for (const [p, q, lit] of faces) {
+  // What it keeps the sun off. Cars sit low, so this is a short shadow
+  // hugging the near side rather than the long throw a building makes.
+  const drop = car.height / -SUN.y
+  const sx = -SUN.x * drop
+  const sz = -SUN.z * drop
+  ctx.fillStyle = 'rgba(16,18,26,0.34)'
+  face(ctx, cam, [
+    [fl.x + sx * 0.4, GROUND - 0.5, fl.z + sz * 0.4],
+    [fr.x + sx * 0.4, GROUND - 0.5, fr.z + sz * 0.4],
+    [br.x + sx, GROUND - 0.5, br.z + sz],
+    [bl.x + sx, GROUND - 0.5, bl.z + sz],
+  ])
+
+  for (const [p, q] of [[fl, fr], [br, bl], [bl, fl], [fr, br]] as const) {
     const mx = (p.x + q.x) / 2
     const mz = (p.z + q.z) / 2
     // Skip the faces pointing away, same as the buildings.
     const nx = mx - car.x
     const nz = mz - car.z
     if ((cam.x - mx) * nx + (cam.z - mz) * nz <= 0) continue
-    ctx.fillStyle = shade(car.colour, lit)
-    face(ctx, cam, [
+    const len = Math.hypot(nx, nz) || 1
+    ctx.fillStyle = litFill(car.colour, nx / len, 0, nz / len, 0.4)
+    if (!face(ctx, cam, [
       [p.x, GROUND, p.z],
       [q.x, GROUND, q.z],
       [q.x, top, q.z],
       [p.x, top, p.z],
+    ], { ao: 0.3 })) continue
+
+    // Glass along the upper half of the side, and a sill under it. Paint
+    // and glass catching the light differently is most of what tells you
+    // a car is a car at this size.
+    const eye = top + car.height * 0.34
+    ctx.fillStyle = mix('#1d2630', '#9fc2dd', 0.24 + Math.max(0, nx * SUN.x + nz * SUN.z) * 0.5)
+    face(ctx, cam, [
+      [p.x + (q.x - p.x) * 0.14, top + car.height * 0.1, p.z + (q.z - p.z) * 0.14],
+      [p.x + (q.x - p.x) * 0.86, top + car.height * 0.1, p.z + (q.z - p.z) * 0.86],
+      [p.x + (q.x - p.x) * 0.86, eye, p.z + (q.z - p.z) * 0.86],
+      [p.x + (q.x - p.x) * 0.14, eye, p.z + (q.z - p.z) * 0.14],
     ])
   }
 
-  // Roof, and a windscreen band so it reads as a car and not a crate.
-  ctx.fillStyle = shade(car.colour, 1.18)
+  // Roof, flat to the sky and so the brightest thing on it.
+  ctx.fillStyle = litFill(car.colour, 0, -1, 0, 0.5)
   face(ctx, cam, [
     [fl.x, top, fl.z],
     [fr.x, top, fr.z],
@@ -505,7 +525,7 @@ export function drawCar(ctx: CanvasRenderingContext2D, car: Car, cam: Camera, si
   ])
   const gl = corner(0.16, -1)
   const gr = corner(0.16, 1)
-  ctx.fillStyle = '#2b3540'
+  ctx.fillStyle = mix('#222c38', '#93b6d4', 0.3)
   face(ctx, cam, [
     [gl.x, top, gl.z],
     [gr.x, top, gr.z],
@@ -541,11 +561,19 @@ export function drawPerson(
     ctx.lineTo(step * 5 * side, 0)
     ctx.stroke()
   }
-  ctx.fillStyle = person.coat
+  // A coat is not one colour. The sun is up and to one side, so the near
+  // shoulder catches it and the far side of the body falls into its own
+  // shadow - which is the difference between a person and a paper doll.
+  const coat = parseColour(person.coat)
+  const lit = ctx.createLinearGradient(-7, -40, 7, -16)
+  lit.addColorStop(0, toCss(blend(coat, [255, 244, 222], 0.34)))
+  lit.addColorStop(0.5, toCss(coat))
+  lit.addColorStop(1, toCss(blend(coat, [24, 26, 40], 0.4)))
+  ctx.fillStyle = lit
   ctx.beginPath()
   ctx.roundRect(-6.5, -38, 13, 22, 3)
   ctx.fill()
-  ctx.strokeStyle = person.coat
+  ctx.strokeStyle = toCss(blend(coat, [24, 26, 40], 0.22))
   ctx.lineWidth = 3.4
   for (const side of [-1, 1]) {
     ctx.beginPath()
@@ -553,9 +581,20 @@ export function drawPerson(
     ctx.lineTo(side * 8 - step * 3 * side, -20)
     ctx.stroke()
   }
-  ctx.fillStyle = '#c9a184'
+
+  // The head, lit from the same side, with the coat's own shadow on the
+  // underside of the jaw.
+  const skin = ctx.createRadialGradient(-2, -46.5, 0.5, 0, -44, 6.4)
+  skin.addColorStop(0, '#e4c0a2')
+  skin.addColorStop(0.6, '#c9a184')
+  skin.addColorStop(1, '#8e6d58')
+  ctx.fillStyle = skin
   ctx.beginPath()
   ctx.arc(0, -44, 5.4, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = 'rgba(40,30,34,0.28)'
+  ctx.beginPath()
+  ctx.ellipse(0, -39.6, 4.6, 1.6, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
 }
