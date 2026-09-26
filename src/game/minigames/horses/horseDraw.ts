@@ -16,7 +16,7 @@ import {
   type Camera,
   type Projected,
 } from '../../engine/firstPerson'
-import { contactShadow } from '../../engine/polish'
+import { contactShadow, litFill, textureFace } from '../../engine/polish'
 import { VIEW, groundAt, type Breed, type Coat, type Quarry } from './horseData'
 
 const VIEWPORT = { width: VIEW.width, height: VIEW.height }
@@ -148,17 +148,24 @@ export function drawLand(ctx: CanvasRenderingContext2D, cam: Camera, sight: numb
         const e = project(cam, x, yE, z + G)
         if (!a || !b || !c || !e) continue
 
-        // Slope shading: the light comes from the same bearing as the sun.
+        // The real normal of this piece of ground, against the one sun
+        // the whole game shares. A slope facing the light comes out warm
+        // and the far side of the same rise comes out cold, which is what
+        // makes open country read as country rather than green paper.
         const slopeX = (yB + yC - yA - yE) / (2 * G)
         const slopeZ = (yE + yC - yA - yB) / (2 * G)
-        const lit = Math.max(0, Math.min(1, 0.5 - slopeX * 2.6 - slopeZ * 1.5))
+        const len = Math.hypot(slopeX, 1, slopeZ)
         const patch = hash(x * 0.017 + z * 0.013)
-        const r = Math.round(74 + lit * 62 + patch * 16)
-        const g = Math.round(96 + lit * 74 + patch * 14)
-        const bl = Math.round(48 + lit * 44 + patch * 10)
+        const grass = `rgb(${Math.round(92 + patch * 9)},${Math.round(118 + patch * 9)},${Math.round(58 + patch * 6)})`
         ctx.globalAlpha = k
-        ctx.fillStyle = `rgb(${r},${g},${bl})`
+        // A high ambient on purpose. The mesh is coarse out here, so each
+        // quad is one flat colour; any real contrast between neighbours
+        // stops reading as a slope and starts reading as a patchwork.
+        ctx.fillStyle = litFill(grass, slopeX / len, -1 / len, slopeZ / len, 0.82)
         fillQuad(ctx, [a, b, c, e])
+        // Grain, but only on the ground you are standing near enough to
+        // see the texture of.
+        if (d < 520) textureFace(ctx, [a, b, c, e].map((q) => ({ sx: q.sx, sy: q.sy })), 0.16)
       }
     }
   }
@@ -193,6 +200,7 @@ function drawScenery(ctx: CanvasRenderingContext2D, cam: Camera, sight: number, 
         const foot = project(cam, px, base, pz)
         if (!p || !foot) continue
         ctx.globalAlpha = k
+        contactShadow(ctx, foot.sx, foot.sy, 62 * foot.scale, 16 * foot.scale, 0.32)
         ctx.strokeStyle = '#5e4630'
         ctx.lineWidth = Math.max(1, 12 * p.scale)
         ctx.beginPath()
@@ -210,7 +218,8 @@ function drawScenery(ctx: CanvasRenderingContext2D, cam: Camera, sight: number, 
         const p = project(cam, px, base - r * 0.5, pz)
         if (!p) continue
         ctx.globalAlpha = k
-        ctx.fillStyle = '#8d8a83'
+        contactShadow(ctx, p.sx, p.sy + r * 0.45 * p.scale, r * 1.3 * p.scale, r * 0.34 * p.scale, 0.3)
+        ctx.fillStyle = litFill('#8d8a83', 0, -0.7, -0.7, 0.5)
         ctx.beginPath()
         ctx.ellipse(p.sx, p.sy, r * p.scale, r * 0.72 * p.scale, 0, 0, Math.PI * 2)
         ctx.fill()
