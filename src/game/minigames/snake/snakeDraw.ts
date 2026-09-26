@@ -24,6 +24,13 @@ export function toScreen(cam: Camera, x: number, y: number): { sx: number; sy: n
   }
 }
 
+/** A filled circle, which is most of what drawing a snake consists of. */
+function dot(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
+  ctx.beginPath()
+  ctx.arc(x, y, r, 0, Math.PI * 2)
+  ctx.fill()
+}
+
 function hsl(hue: number, s: number, l: number, a = 1): string {
   return `hsla(${Math.round(hue)},${Math.round(s)}%,${Math.round(l)}%,${a})`
 }
@@ -188,6 +195,9 @@ export function drawSnake(
       ctx.fill()
     }
 
+    const wasAlpha = ctx.globalAlpha
+    if (s.pattern === 'ghost') ctx.globalAlpha = wasAlpha * 0.55
+
     const body = ctx.createRadialGradient(p.sx - r * 0.4, p.sy - r * 0.45, r * 0.1, p.sx, p.sy, r)
     body.addColorStop(0, hsl(hue, 78, light + 22))
     body.addColorStop(0.55, hsl(hue, 72, light))
@@ -196,29 +206,83 @@ export function drawSnake(
     ctx.beginPath()
     ctx.arc(p.sx, p.sy, r, 0, Math.PI * 2)
     ctx.fill()
+    if (s.pattern === 'ghost') ctx.globalAlpha = wasAlpha
 
     // Markings. Whatever it is, it runs down the back, because that is
     // the only part of a snake anyone ever sees.
-    if (taper > 0.35) {
-      if (s.pattern === 'bands' && i % 3 === 0) {
-        ctx.fillStyle = hsl(hue, 60, light - 16, 0.5)
-        ctx.beginPath()
-        ctx.arc(p.sx, p.sy, r * 0.52, 0, Math.PI * 2)
-        ctx.fill()
-      } else if (s.pattern === 'stripe') {
-        ctx.fillStyle = hsl(hue, 40, light + 30, 0.6)
-        ctx.beginPath()
-        ctx.arc(p.sx, p.sy, r * 0.3, 0, Math.PI * 2)
-        ctx.fill()
-      } else if (s.pattern === 'diamond' && i % 4 === 0) {
-        ctx.fillStyle = hsl(hue, 70, light - 30, 0.75)
-        ctx.beginPath()
-        ctx.moveTo(p.sx, p.sy - r * 0.68)
-        ctx.lineTo(p.sx + r * 0.52, p.sy)
-        ctx.lineTo(p.sx, p.sy + r * 0.68)
-        ctx.lineTo(p.sx - r * 0.52, p.sy)
-        ctx.closePath()
-        ctx.fill()
+    if (taper > 0.3) {
+      const a = s.accent
+      switch (s.pattern) {
+        case 'bands':
+          if (i % 3 === 0) {
+            ctx.fillStyle = hsl(hue, 60, light - 16, 0.5)
+            dot(ctx, p.sx, p.sy, r * 0.52)
+          }
+          break
+        case 'stripe':
+          ctx.fillStyle = hsl(hue, 40, light + 30, 0.6)
+          dot(ctx, p.sx, p.sy, r * 0.3)
+          break
+        case 'diamond':
+          if (i % 4 === 0) {
+            ctx.fillStyle = hsl(a, 70, light - 26, 0.8)
+            ctx.beginPath()
+            ctx.moveTo(p.sx, p.sy - r * 0.68)
+            ctx.lineTo(p.sx + r * 0.52, p.sy)
+            ctx.lineTo(p.sx, p.sy + r * 0.68)
+            ctx.lineTo(p.sx - r * 0.52, p.sy)
+            ctx.closePath()
+            ctx.fill()
+          }
+          break
+        case 'speckle': {
+          // Freckling, fixed per bead so it does not crawl about.
+          const n = (i * 2654435761) % 7
+          if (n < 4) {
+            ctx.fillStyle = hsl(a, 55, light + 18, 0.55)
+            dot(ctx, p.sx + ((n - 2) * r) / 4, p.sy + ((n % 3) - 1) * r * 0.3, r * 0.2)
+          }
+          break
+        }
+        case 'rings':
+          if (i % 5 < 2) {
+            ctx.strokeStyle = hsl(a, 72, light + 16, 0.75)
+            ctx.lineWidth = Math.max(0.7, r * 0.22)
+            ctx.beginPath()
+            ctx.arc(p.sx, p.sy, r * 0.66, 0, Math.PI * 2)
+            ctx.stroke()
+          }
+          break
+        case 'ladder':
+          if (i % 2 === 0) {
+            ctx.strokeStyle = hsl(a, 60, light + 12, 0.6)
+            ctx.lineWidth = Math.max(0.7, r * 0.26)
+            ctx.beginPath()
+            ctx.moveTo(p.sx - r * 0.6, p.sy)
+            ctx.lineTo(p.sx + r * 0.6, p.sy)
+            ctx.stroke()
+          }
+          break
+        case 'twotone':
+          // Alternating blocks of two colours, four beads each.
+          if (Math.floor(i / 4) % 2 === 0) {
+            ctx.fillStyle = hsl(a, 62, light - 4, 0.65)
+            dot(ctx, p.sx, p.sy, r * 0.8)
+          }
+          break
+        case 'metal': {
+          // A hard specular line along the top, not a coloured marking.
+          ctx.fillStyle = `rgba(255,255,255,${(0.34 * taper).toFixed(2)})`
+          ctx.beginPath()
+          ctx.ellipse(p.sx - r * 0.2, p.sy - r * 0.42, r * 0.44, r * 0.2, -0.5, 0, Math.PI * 2)
+          ctx.fill()
+          break
+        }
+        case 'ghost':
+          // Nothing added; the body itself is drawn faint. See below.
+          break
+        default:
+          break
       }
     }
   }

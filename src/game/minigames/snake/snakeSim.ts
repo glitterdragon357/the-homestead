@@ -18,7 +18,7 @@ import {
   GROW,
   HEAD_R,
   PELLET_R,
-  RIVAL_HUES,
+  rivalHues,
   RIVAL_NAMES,
   SKIN_BY_KEY,
   SEGMENT,
@@ -64,7 +64,7 @@ export function makeSnake(
   fed: number,
   player: boolean,
   rng: () => number,
-  look?: { hue: number; pattern: Pattern },
+  look?: { hue: number; pattern: Pattern; accent?: number },
   map?: MapSpec
 ): Snake {
   const heading = rng() * Math.PI * 2
@@ -84,7 +84,7 @@ export function makeSnake(
     id,
     player,
     name: player ? 'You' : RIVAL_NAMES[id % RIVAL_NAMES.length],
-    hue: look?.hue ?? (player ? 140 : RIVAL_HUES[id % RIVAL_HUES.length]),
+    hue: look?.hue ?? 140,
     x,
     y,
     heading,
@@ -97,6 +97,7 @@ export function makeSnake(
     shoveHeading: 0,
     safeUntil: 0,
     pattern: look?.pattern ?? 'bands',
+    accent: look?.accent ?? 0,
     bittenUntil: 0,
   }
 }
@@ -145,13 +146,16 @@ export function makePellet(
 export function makeWorld(map: MapSpec, skinKey: string, rng: () => number): World {
   const skin = SKIN_BY_KEY[skinKey] ?? SKIN_BY_KEY.grass
   const snakes: Snake[] = [
-    makeSnake(0, map.w / 2, map.h / 2, START_FED, true, rng, { hue: skin.hue, pattern: skin.pattern }, map),
+    makeSnake(0, map.w / 2, map.h / 2, START_FED, true, rng, { hue: skin.hue, pattern: skin.pattern, accent: skin.accent }, map),
   ]
+  const hues = rivalHues(skin.hue)
   for (let i = 1; i <= map.rivals; i++) {
     // Everyone opens at level one, you included. Whatever is big later
     // got that way in front of you.
     const spot = clearOf(snakes[0], rng, map)
-    snakes.push(makeSnake(i, spot.x, spot.y, START_FED, false, rng, undefined, map))
+    snakes.push(
+      makeSnake(i, spot.x, spot.y, START_FED, false, rng, { hue: hues[i % hues.length], pattern: 'bands' }, map)
+    )
   }
   const pellets: Pellet[] = []
   for (let i = 0; i < map.pellets; i++) pellets.push(makePellet(rng, map))
@@ -519,7 +523,11 @@ export function restock(world: World, now: number, rng: () => number) {
     // has been alive a while and eaten well, which is the only reason it
     // should ever be frightening.
     const spot = clearOf(player, rng, world.map)
-    const s = makeSnake(world.nextId++, spot.x, spot.y, START_FED, false, rng, undefined, world.map)
+    const hues = rivalHues(player?.hue ?? 140)
+    const s = makeSnake(world.nextId++, spot.x, spot.y, START_FED, false, rng, {
+      hue: hues[world.nextId % hues.length],
+      pattern: 'bands',
+    }, world.map)
     s.safeUntil = now + SPAWN_GRACE
     world.snakes.push(s)
     // Faster when the field is thin, slower when it is nearly full.

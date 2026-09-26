@@ -12,6 +12,7 @@ import {
   MAP_BY_KEY,
   SKINS,
   SKIN_BY_KEY,
+  SKIN_FAMILIES,
   ownedSkins,
   SPAWN_GRACE,
   fedForLevel,
@@ -68,6 +69,9 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
     found: number
   }>(null)
   const [hud, setHud] = useState({ level: 1, fed: 0, dash: 1, eaten: 0, rank: 1, of: 9, toNext: 0, bitten: 0, pocket: 0 })
+
+  const [filter, setFilter] = useState<'all' | 'yours' | 'affordable'>('all')
+  const owned = ownedSkins(save)
 
   const eatenRef = useRef(0)
   const bittenRef = useRef(0)
@@ -361,55 +365,92 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
         )}
 
         <div style={S.pickers}>
-          <p style={S.rulesHead}>Where</p>
-          <div style={S.grid}>
-            {MAPS.map((m) => {
-              const on = (save.map ?? 'pit') === m.key
-              return (
-                <button
-                  key={m.key}
-                  style={{ ...S.card, ...(on ? S.cardOn : null) }}
-                  onClick={() => setSave((v) => ({ ...v, map: m.key }))}
-                >
-                  <span style={S.cardName}>{m.name}</span>
-                  <span style={S.cardNote}>{m.blurb}</span>
-                  <span style={S.cardMeta}>
-                    {m.w}×{m.h} · {m.rivals} rivals
-                  </span>
-                </button>
-              )
-            })}
+          <div style={S.sectionHead}>
+            <p style={S.rulesHead}>Where · {MAPS.length} arenas</p>
+          </div>
+          <div style={S.scroller}>
+            <div style={S.grid}>
+              {MAPS.map((m) => {
+                const on = (save.map ?? 'pit') === m.key
+                return (
+                  <button
+                    key={m.key}
+                    style={{ ...S.card, ...(on ? S.cardOn : null) }}
+                    onClick={() => setSave((v) => ({ ...v, map: m.key }))}
+                  >
+                    <span style={S.cardName}>{m.name}</span>
+                    <span style={S.cardNote}>{m.blurb}</span>
+                    <span style={S.cardMeta}>
+                      {m.w}×{m.h} · {m.rivals} rivals
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
-          <p style={S.rulesHead}>Skin</p>
-          <div style={S.grid}>
-            {SKINS.map((k) => {
-              const owned = ownedSkins(save).includes(k.key)
-              const on = (save.skin ?? 'grass') === k.key
-              return (
+          <div style={S.sectionHead}>
+            <p style={S.rulesHead}>
+              Skin · {owned.length} of {SKINS.length}
+            </p>
+            <span style={S.filters}>
+              {(['all', 'yours', 'affordable'] as const).map((f) => (
                 <button
-                  key={k.key}
-                  style={{ ...S.card, ...(on ? S.cardOn : null) }}
-                  onClick={() => {
-                    if (owned) {
-                      setSave((v) => ({ ...v, skin: k.key }))
-                      return
-                    }
-                    if (!spend(k.cost)) return
-                    setSave((v) => ({
-                      ...v,
-                      skin: k.key,
-                      skins: [...ownedSkins(v), k.key],
-                    }))
-                  }}
+                  key={f}
+                  style={{ ...S.chip, ...(filter === f ? S.chipOn : null) }}
+                  onClick={() => setFilter(f)}
                 >
-                  <span style={S.swatchRow}>
-                    <SkinSwatch skin={k.key} />
-                    <span style={S.cardName}>{k.name}</span>
-                  </span>
-                  <span style={S.cardNote}>{k.blurb}</span>
-                  <span style={S.cardMeta}>{owned ? (on ? 'worn' : 'yours') : `🪙 ${k.cost}`}</span>
+                  {f}
                 </button>
+              ))}
+            </span>
+          </div>
+          <div style={S.scroller}>
+            {SKIN_FAMILIES.map((family) => {
+              const mine = SKINS.filter((k) => {
+                if (k.family !== family) return false
+                if (filter === 'yours') return owned.includes(k.key)
+                if (filter === 'affordable') return !owned.includes(k.key) && k.cost <= coins
+                return true
+              })
+              if (mine.length === 0) return null
+              return (
+                <div key={family}>
+                  <p style={S.family}>{family}</p>
+                  <div style={S.grid}>
+                    {mine.map((k) => {
+                      const have = owned.includes(k.key)
+                      const on = (save.skin ?? 'grass') === k.key
+                      return (
+                        <button
+                          key={k.key}
+                          style={{
+                            ...S.card,
+                            ...(on ? S.cardOn : null),
+                            ...(!have && k.cost > coins ? S.cardBroke : null),
+                          }}
+                          onClick={() => {
+                            if (have) {
+                              setSave((v) => ({ ...v, skin: k.key }))
+                              return
+                            }
+                            if (!spend(k.cost)) return
+                            setSave((v) => ({ ...v, skin: k.key, skins: [...ownedSkins(v), k.key] }))
+                          }}
+                        >
+                          <span style={S.swatchRow}>
+                            <SkinSwatch skin={k.key} />
+                            <span style={S.cardName}>{k.name}</span>
+                          </span>
+                          <span style={S.cardNote}>{k.blurb}</span>
+                          <span style={S.cardMeta}>
+                            {have ? (on ? 'worn' : 'yours') : `🪙 ${k.cost}`}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
               )
             })}
           </div>
@@ -465,31 +506,46 @@ function SkinSwatch({ skin }: { skin: string }) {
   const k = SKIN_BY_KEY[skin]
   if (!k) return null
   const beads = [0, 1, 2, 3, 4]
+  const body = (h: number) => `hsl(${h},72%,54%)`
   return (
-    <svg width="46" height="14" viewBox="0 0 46 14" aria-hidden>
+    <svg width="48" height="14" viewBox="0 0 48 14" aria-hidden style={{ flexShrink: 0 }}>
       {beads.map((i) => {
-        const hue = k.pattern === 'shift' ? (k.hue + i * 16) % 360 : k.hue
+        const hue = k.pattern === 'shift' ? (k.hue + i * 18) % 360 : k.hue
+        const cx = 5 + i * 9
         return (
-          <g key={i}>
-            <circle cx={5 + i * 9} cy={7} r={6} fill={`hsl(${hue},72%,54%)`} />
+          <g key={i} opacity={k.pattern === 'ghost' ? 0.5 : 1}>
+            <circle cx={cx} cy={7} r={6} fill={body(hue)} />
             {k.pattern === 'bands' && i % 2 === 0 && (
-              <circle cx={5 + i * 9} cy={7} r={3} fill={`hsl(${hue},60%,38%)`} />
+              <circle cx={cx} cy={7} r={3} fill={`hsl(${hue},60%,38%)`} />
             )}
-            {k.pattern === 'stripe' && (
-              <circle cx={5 + i * 9} cy={7} r={2} fill={`hsl(${hue},40%,84%)`} />
-            )}
+            {k.pattern === 'stripe' && <circle cx={cx} cy={7} r={2} fill={`hsl(${hue},40%,84%)`} />}
             {k.pattern === 'diamond' && i % 2 === 1 && (
               <rect
-                x={5 + i * 9 - 3}
+                x={cx - 3}
                 y={4}
                 width="6"
                 height="6"
-                transform={`rotate(45 ${5 + i * 9} 7)`}
-                fill={`hsl(${hue},70%,26%)`}
+                transform={`rotate(45 ${cx} 7)`}
+                fill={`hsl(${k.accent},70%,30%)`}
               />
             )}
+            {k.pattern === 'speckle' && i % 3 !== 2 && (
+              <circle cx={cx + 1} cy={5.5} r={1.4} fill={`hsl(${k.accent},55%,72%)`} />
+            )}
+            {k.pattern === 'rings' && i % 2 === 0 && (
+              <circle cx={cx} cy={7} r={3.6} fill="none" stroke={`hsl(${k.accent},72%,66%)`} strokeWidth="1.3" />
+            )}
+            {k.pattern === 'ladder' && i % 2 === 0 && (
+              <rect x={cx - 4} y={6.2} width="8" height="1.8" fill={`hsl(${k.accent},60%,64%)`} />
+            )}
+            {k.pattern === 'twotone' && i < 2 && (
+              <circle cx={cx} cy={7} r={5} fill={`hsl(${k.accent},62%,50%)`} />
+            )}
+            {k.pattern === 'metal' && (
+              <ellipse cx={cx - 1} cy={5} rx="2.6" ry="1.2" fill="rgba(255,255,255,0.55)" />
+            )}
             {k.pattern === 'glow' && (
-              <circle cx={5 + i * 9} cy={7} r={6} fill={`hsl(${hue},95%,70%)`} opacity={0.4} />
+              <circle cx={cx} cy={7} r={6} fill={`hsl(${hue},95%,70%)`} opacity={0.42} />
             )}
           </g>
         )
@@ -553,8 +609,12 @@ const S: Record<string, React.CSSProperties> = {
   },
   dashFill: { height: '100%' },
   sheet: {
-    width: 560,
+    width: 600,
     maxWidth: '94vw',
+    // The picker is long now. Without this the bottom of it - including
+    // the button that starts the game - is simply off the screen.
+    maxHeight: '92vh',
+    overflowY: 'auto',
     background: '#111a2b',
     color: '#e6eefc',
     borderRadius: 16,
@@ -573,7 +633,39 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: 14,
   },
   pickers: { marginTop: 16 },
-  grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 },
+  sectionHead: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 },
+  // Each list scrolls in its own right, so choosing a skin does not mean
+  // scrolling past twenty-five arenas to get back to the button.
+  scroller: {
+    maxHeight: 250,
+    overflowY: 'auto',
+    paddingRight: 6,
+    marginBottom: 14,
+    borderRadius: 10,
+    background: 'rgba(0,0,0,0.16)',
+    padding: 8,
+  },
+  family: {
+    margin: '6px 2px 6px',
+    fontSize: 11,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    opacity: 0.5,
+  },
+  filters: { display: 'flex', gap: 5 },
+  chip: {
+    font: 'inherit',
+    fontSize: 11,
+    padding: '3px 9px',
+    borderRadius: 20,
+    border: '1px solid rgba(255,255,255,0.12)',
+    background: 'transparent',
+    color: 'rgba(230,238,252,0.65)',
+    cursor: 'pointer',
+  },
+  chipOn: { background: '#3fb972', color: '#06210f', borderColor: '#3fb972', fontWeight: 700 },
+  cardBroke: { opacity: 0.42 },
+  grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 },
   card: {
     textAlign: 'left',
     display: 'flex',
