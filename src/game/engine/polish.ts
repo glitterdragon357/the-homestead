@@ -17,6 +17,36 @@ export interface Frame {
 }
 
 let noise: HTMLCanvasElement | null = null
+let sheet: HTMLCanvasElement | null = null
+
+/**
+ * One screen-sized sheet of noise, built once.
+ *
+ * The obvious way to grain a frame is to stamp a small tile across it,
+ * but that is forty-odd composited draws per frame and another forty per
+ * textured wall, which is exactly how this got to five frames a second.
+ * One big sheet is one draw. It is oversized by a tile so it can be
+ * offset each frame without leaving a gap at the edge.
+ */
+function noiseSheet(w: number, h: number): HTMLCanvasElement {
+  // Clamped hard. Callers derive sizes from projected geometry, and a face
+  // close to the camera projects to coordinates in the tens of thousands.
+  const want = Math.min(4096, Math.max(256, Math.ceil(w) + 128))
+  const tall = Math.min(4096, Math.max(256, Math.ceil(h) + 128))
+  if (sheet && sheet.width >= want && sheet.height >= tall) return sheet
+  const c = document.createElement('canvas')
+  c.width = want
+  c.height = tall
+  const ctx = c.getContext('2d')
+  if (ctx) {
+    const tile = noiseTile()
+    for (let x = 0; x < want; x += tile.width) {
+      for (let y = 0; y < tall; y += tile.height) ctx.drawImage(tile, x, y)
+    }
+  }
+  sheet = c
+  return c
+}
 
 /** One tile of monochrome noise, built once and reused for every frame. */
 function noiseTile(): HTMLCanvasElement {
@@ -57,17 +87,15 @@ export function vignette(ctx: CanvasRenderingContext2D, view: Frame, strength = 
 
 /** A fine grain over everything, drifting so it never looks like a texture. */
 export function grain(ctx: CanvasRenderingContext2D, view: Frame, amount = 0.045) {
-  const tile = noiseTile()
+  const sheetC = noiseSheet(view.width, view.height)
   ctx.save()
   ctx.globalCompositeOperation = 'overlay'
   ctx.globalAlpha = amount
-  const ox = -Math.floor(Math.random() * tile.width)
-  const oy = -Math.floor(Math.random() * tile.height)
-  for (let x = ox; x < view.width; x += tile.width) {
-    for (let y = oy; y < view.height; y += tile.height) {
-      ctx.drawImage(tile, x, y)
-    }
-  }
+  ctx.drawImage(
+    sheetC,
+    -Math.floor(Math.random() * 128),
+    -Math.floor(Math.random() * 128)
+  )
   ctx.restore()
 }
 
@@ -214,16 +242,20 @@ function clipTo(ctx: CanvasRenderingContext2D, poly: Poly) {
  */
 export function textureFace(ctx: CanvasRenderingContext2D, poly: Poly, amount = 0.2) {
   if (poly.length < 3) return
+  const vw = ctx.canvas.width
+  const vh = ctx.canvas.height
   const b = boundsOf(poly)
-  if (b.w < 2 || b.h < 2) return
-  const tile = noiseTile()
+  // Off-screen, or too small to show a texture - and there are a great
+  // many of these per frame, so both checks earn their keep.
+  if (b.x1 < 0 || b.y1 < 0 || b.x0 > vw || b.y0 > vh) return
+  if (Math.min(b.w, vw) < 14 || Math.min(b.h, vh) < 14) return
+  const sheetC = noiseSheet(vw, vh)
   ctx.save()
   clipTo(ctx, poly)
   ctx.globalCompositeOperation = 'overlay'
   ctx.globalAlpha *= amount
-  for (let x = b.x0; x < b.x1; x += tile.width) {
-    for (let y = b.y0; y < b.y1; y += tile.height) ctx.drawImage(tile, x, y)
-  }
+  // Screen-aligned and viewport-sized: one draw, whatever the face.
+  ctx.drawImage(sheetC, 0, 0)
   ctx.restore()
 }
 
@@ -233,14 +265,23 @@ export function textureFace(ctx: CanvasRenderingContext2D, poly: Poly, amount = 
  */
 export function faceAO(ctx: CanvasRenderingContext2D, poly: Poly, strength = 0.35) {
   if (poly.length < 3) return
+  const vw = ctx.canvas.width
+  const vh = ctx.canvas.height
   const b = boundsOf(poly)
   if (b.h < 3) return
+  if (b.x1 < 0 || b.y1 < 0 || b.x0 > vw || b.y0 > vh) return
+  // Clamped to the viewport before anything is filled, for the same
+  // reason as above: these bounds come from projected geometry.
+  const x0 = Math.max(0, b.x0)
+  const y0 = Math.max(0, b.y0)
+  const x1 = Math.min(vw, b.x1)
+  const y1 = Math.min(vh, b.y1)
   ctx.save()
   clipTo(ctx, poly)
-  const g = ctx.createLinearGradient(0, b.y1, 0, b.y1 - Math.min(b.h, b.h * 0.45))
+  const g = ctx.createLinearGradient(0, y1, 0, y1 - (y1 - y0) * 0.45)
   g.addColorStop(0, `rgba(18,20,26,${strength.toFixed(3)})`)
   g.addColorStop(1, 'rgba(18,20,26,0)')
   ctx.fillStyle = g
-  ctx.fillRect(b.x0 - 1, b.y0 - 1, b.w + 2, b.h + 2)
+  ctx.fillRect(x0, y0, x1 - x0, y1 - y0)
   ctx.restore()
 }

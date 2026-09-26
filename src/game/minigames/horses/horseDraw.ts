@@ -16,7 +16,7 @@ import {
   type Camera,
   type Projected,
 } from '../../engine/firstPerson'
-import { contactShadow, litFill, textureFace } from '../../engine/polish'
+import { contactShadow, litFill } from '../../engine/polish'
 import { VIEW, groundAt, type Breed, type Coat, type Quarry } from './horseData'
 
 const VIEWPORT = { width: VIEW.width, height: VIEW.height }
@@ -163,9 +163,6 @@ export function drawLand(ctx: CanvasRenderingContext2D, cam: Camera, sight: numb
         // stops reading as a slope and starts reading as a patchwork.
         ctx.fillStyle = litFill(grass, slopeX / len, -1 / len, slopeZ / len, 0.82)
         fillQuad(ctx, [a, b, c, e])
-        // Grain, but only on the ground you are standing near enough to
-        // see the texture of.
-        if (d < 520) textureFace(ctx, [a, b, c, e].map((q) => ({ sx: q.sx, sy: q.sy })), 0.16)
       }
     }
   }

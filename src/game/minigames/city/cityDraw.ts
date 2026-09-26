@@ -20,7 +20,7 @@ import {
   type Camera,
   type Projected,
 } from '../../engine/firstPerson'
-import { SUN, contactShadow, faceAO, litFill, textureFace } from '../../engine/polish'
+import { SUN, contactShadow, faceAO, litFill } from '../../engine/polish'
 import {
   BLOCK,
   GROUND,
@@ -52,12 +52,11 @@ function face(
   ctx: CanvasRenderingContext2D,
   cam: Camera,
   pts: [number, number, number][],
-  surface?: { texture?: number; ao?: number }
+  surface?: { ao?: number }
 ): boolean {
   const poly = projectPoly(cam, pts, VIEWPORT)
   if (!poly) return false
   fillPoly(ctx, poly)
-  if (surface?.texture) textureFace(ctx, poly, surface.texture)
   if (surface?.ao) faceAO(ctx, poly, surface.ao)
   return true
 }
@@ -223,7 +222,7 @@ export function drawGround(ctx: CanvasRenderingContext2D, cam: Camera, sight: nu
           [x + G, groundHeightAt(x + G, z), z],
           [x + G, groundHeightAt(x + G, z + G), z + G],
           [x, groundHeightAt(x, z + G), z + G],
-        ], { texture: d < 700 ? 0.16 : 0 })
+        ])
 
         // A dashed white line down the middle of the tarmac.
         if (G <= 110 && isRoad(x + G / 2, z + G / 2) && d < 900) {
@@ -365,7 +364,7 @@ export function drawBuilding(
       [x2, GROUND, z2],
       [x2, top, z2],
       [x1, top, z1],
-    ], { texture: d < 2400 ? 0.24 : 0, ao: 0.42 })) continue
+    ], { ao: 0.42 })) continue
     const lit = 0.46 + 0.54 * Math.max(0, nx * SUN.x + nz * SUN.z)
 
     // Windows, but only near enough to be worth the arithmetic.
@@ -413,7 +412,7 @@ export function drawBuilding(
         [b.x + b.hw, top, b.z - b.hd],
         [b.x + b.hw, top, b.z + b.hd],
         [b.x - b.hw, top, b.z + b.hd],
-      ], { texture: 0.2 })
+      ])
       // A bit of clutter so roofs are not blank lids.
       const hv = hash(b.x * 0.01 + b.z * 0.013)
       if (hv > 0.4) {
