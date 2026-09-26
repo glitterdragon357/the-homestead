@@ -8,7 +8,11 @@ import { finish } from '../../engine/polish'
 import { VIEW, drawArena, drawPellets, drawSnake, type Camera } from './snakeDraw'
 import {
   DASH_MAX,
-  RIVALS,
+  MAPS,
+  MAP_BY_KEY,
+  SKINS,
+  SKIN_BY_KEY,
+  ownedSkins,
   SPAWN_GRACE,
   fedForLevel,
   initialSnake,
@@ -16,7 +20,17 @@ import {
   payout,
   type SnakeSave,
 } from './snakeData'
-import { collide, feed, makeWorld, moveSnake, restock, scatter, steer, type World } from './snakeSim'
+import {
+  collide,
+  feed,
+  makeWorld,
+  moveSnake,
+  restock,
+  scatter,
+  scatterBeads,
+  steer,
+  type World,
+} from './snakeSim'
 
 /**
  * Snake Dash.
@@ -31,7 +45,7 @@ import { collide, feed, makeWorld, moveSnake, restock, scatter, steer, type Worl
 
 export function SnakeDashMinigame({ onExit }: MinigameProps) {
   const [save, setSave] = useMinigameProgress<SnakeSave>('snakedash', () => initialSnake)
-  const { coins, earn } = usePurse('snakedash')
+  const { coins, earn, spend } = usePurse('snakedash')
   const saveRef = useRef(save)
   saveRef.current = save
 
@@ -44,10 +58,16 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
   const dashRef = useRef(false)
 
   const [playing, setPlaying] = useState(false)
-  const [result, setResult] = useState<null | { pay: number; level: number; eaten: number }>(null)
-  const [hud, setHud] = useState({ level: 1, fed: 0, dash: 1, eaten: 0, rank: 1, of: RIVALS + 1, toNext: 0 })
+  const [result, setResult] = useState<null | {
+    pay: number
+    level: number
+    eaten: number
+    bitten: number
+  }>(null)
+  const [hud, setHud] = useState({ level: 1, fed: 0, dash: 1, eaten: 0, rank: 1, of: 9, toNext: 0, bitten: 0 })
 
   const eatenRef = useRef(0)
+  const bittenRef = useRef(0)
 
   /* ---------------------------------------------------------------- */
   /* A run                                                             */
@@ -55,10 +75,12 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
 
   function start() {
     const rng = Math.random
-    const w = makeWorld(RIVALS, rng)
+    const map = MAP_BY_KEY[saveRef.current.map] ?? MAPS[0]
+    const w = makeWorld(map, saveRef.current.skin ?? 'grass', rng)
     w.snakes[0].safeUntil = performance.now() + SPAWN_GRACE
     worldRef.current = w
     eatenRef.current = 0
+    bittenRef.current = 0
     aimRef.current = null
     dashRef.current = false
     setResult(null)
@@ -71,6 +93,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
     const me = w.snakes[0]
     const level = levelOf(me.fed)
     const pay = payout(level, eatenRef.current, me.fed)
+    const bitten = bittenRef.current
     earn(pay)
     setSave((s) => ({
       ...s,
@@ -79,7 +102,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
       best: Math.max(s.best ?? 0, me.fed),
       bestLevel: Math.max(s.bestLevel ?? 1, level),
     }))
-    setResult({ pay, level, eaten: eatenRef.current })
+    setResult({ pay, level, eaten: eatenRef.current, bitten })
     setPlaying(false)
     worldRef.current = null
   }, [earn, setSave])
@@ -112,32 +135,41 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
         if (s.player) {
           const aim = aimRef.current
           const want = aim ? Math.atan2(aim.y - s.y, aim.x - s.x) : s.heading
-          moveSnake(s, want, dashRef.current, dt, now)
+          moveSnake(s, want, dashRef.current, dt, now, w.map)
         } else {
           const think = steer(s, w)
-          moveSnake(s, think.heading, think.dash, dt, now)
+          moveSnake(s, think.heading, think.dash, dt, now, w.map)
         }
       }
 
       feed(w, rng)
 
-      for (const e of collide(w, now).eaten) {
+      const hits = collide(w, now)
+      for (const e of hits.eaten) {
         const victim = w.snakes.find((s) => s.id === e.victim)
         if (victim) scatter(victim, w, rng)
         if (e.by === 0) eatenRef.current++
+      }
+      for (const bite of hits.bites) {
+        // The piece that came off goes back on the field as food, so a
+        // long chase leaves a trail of it for everyone else.
+        scatterBeads(bite.lost, 2, w, rng)
+        const victim = w.snakes.find((s) => s.id === bite.victim)
+        if (victim) victim.bittenUntil = now + 220
+        if (bite.victim === 0) bittenRef.current++
       }
 
       if (me.dead) {
         end()
         return
       }
-      restock(w, RIVALS, now, rng)
+      restock(w, now, rng)
 
       /* --- drawing -------------------------------------------------- */
       const zoom = Math.max(0.46, Math.min(0.95, 0.95 - me.fed * 0.0009))
       const cam: Camera = { x: me.x, y: me.y, zoom }
 
-      drawArena(ctx, cam)
+      drawArena(ctx, cam, w.map)
       drawPellets(ctx, cam, w.pellets, now)
 
       // Rivals first, then you, so your own head is never buried.
@@ -181,6 +213,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
           rank,
           of: levels.length,
           toNext: Math.max(0, Math.min(1, (me.fed - from) / Math.max(1, need - from))),
+          bitten: bittenRef.current,
         })
       }
     }
@@ -300,8 +333,69 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
                 : `Level ${result.level}.`}
             </strong>{' '}
             {result.pay} 🪙
+            {result.bitten > 0 && (
+              <span style={S.bitNote}>
+                {' '}
+                · bitten {result.bitten} time{result.bitten === 1 ? '' : 's'} and kept going
+              </span>
+            )}
           </div>
         )}
+
+        <div style={S.pickers}>
+          <p style={S.rulesHead}>Where</p>
+          <div style={S.grid}>
+            {MAPS.map((m) => {
+              const on = (save.map ?? 'pit') === m.key
+              return (
+                <button
+                  key={m.key}
+                  style={{ ...S.card, ...(on ? S.cardOn : null) }}
+                  onClick={() => setSave((v) => ({ ...v, map: m.key }))}
+                >
+                  <span style={S.cardName}>{m.name}</span>
+                  <span style={S.cardNote}>{m.blurb}</span>
+                  <span style={S.cardMeta}>
+                    {m.w}×{m.h} · {m.rivals} rivals
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          <p style={S.rulesHead}>Skin</p>
+          <div style={S.grid}>
+            {SKINS.map((k) => {
+              const owned = ownedSkins(save).includes(k.key)
+              const on = (save.skin ?? 'grass') === k.key
+              return (
+                <button
+                  key={k.key}
+                  style={{ ...S.card, ...(on ? S.cardOn : null) }}
+                  onClick={() => {
+                    if (owned) {
+                      setSave((v) => ({ ...v, skin: k.key }))
+                      return
+                    }
+                    if (!spend(k.cost)) return
+                    setSave((v) => ({
+                      ...v,
+                      skin: k.key,
+                      skins: [...ownedSkins(v), k.key],
+                    }))
+                  }}
+                >
+                  <span style={S.swatchRow}>
+                    <SkinSwatch skin={k.key} />
+                    <span style={S.cardName}>{k.name}</span>
+                  </span>
+                  <span style={S.cardNote}>{k.blurb}</span>
+                  <span style={S.cardMeta}>{owned ? (on ? 'worn' : 'yours') : `🪙 ${k.cost}`}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
 
         <div style={S.rules}>
           <p style={S.rulesHead}>The only rule that matters</p>
@@ -309,7 +403,11 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
             <li>Run into a snake <strong>below</strong> your level and you eat it.</li>
             <li>Run into one <strong>above</strong> your level and you just bounce off.</li>
             <li>Meet one face to face: the <strong>higher level wins</strong>. Lower one dies.</li>
-            <li>If its face hits your body and it is higher, you die. If you are higher, it bounces.</li>
+            <li>
+              If a <strong>bigger</strong> snake bites your body, you do not die - everything
+              behind the bite is cut off and left as food. Keep getting bitten and it works its
+              way up you, and when there is nothing left in front of the bite, that is that.
+            </li>
           </ul>
           <p style={S.note}>Pellets make you longer. Longer makes you higher.</p>
         </div>
@@ -338,6 +436,44 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
         </button>
       </div>
     </div>
+  )
+}
+
+/** A little sample of a skin, so you can choose one by looking at it. */
+function SkinSwatch({ skin }: { skin: string }) {
+  const k = SKIN_BY_KEY[skin]
+  if (!k) return null
+  const beads = [0, 1, 2, 3, 4]
+  return (
+    <svg width="46" height="14" viewBox="0 0 46 14" aria-hidden>
+      {beads.map((i) => {
+        const hue = k.pattern === 'shift' ? (k.hue + i * 16) % 360 : k.hue
+        return (
+          <g key={i}>
+            <circle cx={5 + i * 9} cy={7} r={6} fill={`hsl(${hue},72%,54%)`} />
+            {k.pattern === 'bands' && i % 2 === 0 && (
+              <circle cx={5 + i * 9} cy={7} r={3} fill={`hsl(${hue},60%,38%)`} />
+            )}
+            {k.pattern === 'stripe' && (
+              <circle cx={5 + i * 9} cy={7} r={2} fill={`hsl(${hue},40%,84%)`} />
+            )}
+            {k.pattern === 'diamond' && i % 2 === 1 && (
+              <rect
+                x={5 + i * 9 - 3}
+                y={4}
+                width="6"
+                height="6"
+                transform={`rotate(45 ${5 + i * 9} 7)`}
+                fill={`hsl(${hue},70%,26%)`}
+              />
+            )}
+            {k.pattern === 'glow' && (
+              <circle cx={5 + i * 9} cy={7} r={6} fill={`hsl(${hue},95%,70%)`} opacity={0.4} />
+            )}
+          </g>
+        )
+      })}
+    </svg>
   )
 }
 
@@ -414,7 +550,28 @@ const S: Record<string, React.CSSProperties> = {
     background: 'rgba(126,242,168,0.12)',
     fontSize: 14,
   },
-  rules: { marginTop: 16 },
+  pickers: { marginTop: 16 },
+  grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 },
+  card: {
+    textAlign: 'left',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 3,
+    padding: '8px 10px',
+    borderRadius: 9,
+    border: '1px solid rgba(255,255,255,0.09)',
+    background: 'rgba(255,255,255,0.04)',
+    color: '#e6eefc',
+    cursor: 'pointer',
+    font: 'inherit',
+  },
+  cardOn: { borderColor: '#3fb972', background: 'rgba(63,185,114,0.16)' },
+  cardName: { fontWeight: 700, fontSize: 13 },
+  cardNote: { fontSize: 11, opacity: 0.66, lineHeight: 1.35 },
+  cardMeta: { fontSize: 11, opacity: 0.5 },
+  swatchRow: { display: 'flex', alignItems: 'center', gap: 7 },
+  bitNote: { opacity: 0.7 },
+  rules: { marginTop: 4 },
   rulesHead: { margin: '0 0 6px', fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', opacity: 0.6 },
   list: { margin: 0, paddingLeft: 18, fontSize: 14, lineHeight: 1.65 },
   note: { fontSize: 13, opacity: 0.7, marginTop: 8, marginBottom: 0 },

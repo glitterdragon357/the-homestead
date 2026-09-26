@@ -7,7 +7,7 @@
  * a snake reading as a string of dots.
  */
 
-import { ARENA, HEAD_R, girthOf, levelOf, segmentsOf, type Pellet, type Snake } from './snakeData'
+import { HEAD_R, girthOf, levelOf, segmentsOf, type MapSpec, type Pellet, type Snake } from './snakeData'
 
 export const VIEW = { width: 960, height: 640 }
 
@@ -32,7 +32,7 @@ function hsl(hue: number, s: number, l: number, a = 1): string {
 /* The floor                                                           */
 /* ------------------------------------------------------------------ */
 
-export function drawArena(ctx: CanvasRenderingContext2D, cam: Camera) {
+export function drawArena(ctx: CanvasRenderingContext2D, cam: Camera, map: MapSpec) {
   const bg = ctx.createRadialGradient(
     VIEW.width / 2,
     VIEW.height / 2,
@@ -41,15 +41,15 @@ export function drawArena(ctx: CanvasRenderingContext2D, cam: Camera) {
     VIEW.height / 2,
     VIEW.width * 0.75
   )
-  bg.addColorStop(0, '#16243a')
-  bg.addColorStop(1, '#0a1220')
+  bg.addColorStop(0, map.floorIn)
+  bg.addColorStop(1, map.floorOut)
   ctx.fillStyle = bg
   ctx.fillRect(0, 0, VIEW.width, VIEW.height)
 
   // A grid, so speed is legible. Without it a snake in open space looks
   // like it is barely moving whatever the actual speed.
   const step = 100
-  ctx.strokeStyle = 'rgba(120,170,230,0.075)'
+  ctx.strokeStyle = map.grid
   ctx.lineWidth = 1
   ctx.beginPath()
   const x0 = Math.floor((cam.x - VIEW.width / 2 / cam.zoom) / step) * step
@@ -72,11 +72,11 @@ export function drawArena(ctx: CanvasRenderingContext2D, cam: Camera) {
 
   // The wall, which you can slide along but not leave.
   const tl = toScreen(cam, 0, 0)
-  const br = toScreen(cam, ARENA.w, ARENA.h)
-  ctx.strokeStyle = 'rgba(126,196,255,0.55)'
+  const br = toScreen(cam, map.w, map.h)
+  ctx.strokeStyle = `rgba(${map.wall},0.55)`
   ctx.lineWidth = 4
   ctx.strokeRect(tl.sx, tl.sy, br.sx - tl.sx, br.sy - tl.sy)
-  ctx.strokeStyle = 'rgba(126,196,255,0.14)'
+  ctx.strokeStyle = `rgba(${map.wall},0.14)`
   ctx.lineWidth = 16
   ctx.strokeRect(tl.sx, tl.sy, br.sx - tl.sx, br.sy - tl.sy)
 }
@@ -134,22 +134,53 @@ export function drawSnake(
     const taper = i < from ? 1 : 1 - (i - from) / (beads.length - from + 0.001)
     const r = Math.max(1.5, girth * (0.55 + 0.45 * taper))
 
-    const light = s.dashing ? 66 : 54
+    const bitten = t < s.bittenUntil
+    const light = (s.dashing ? 66 : 54) + (bitten ? 22 : 0)
+    // 'shift' walks the colour down the body; everything else holds one.
+    const hue = s.pattern === 'shift' ? (s.hue + i * 3.2 + t * 0.03) % 360 : s.hue
+
+    if (s.pattern === 'glow') {
+      const halo = ctx.createRadialGradient(p.sx, p.sy, r * 0.3, p.sx, p.sy, r * 2.1)
+      halo.addColorStop(0, hsl(hue, 95, 62, 0.4))
+      halo.addColorStop(1, hsl(hue, 95, 55, 0))
+      ctx.fillStyle = halo
+      ctx.beginPath()
+      ctx.arc(p.sx, p.sy, r * 2.1, 0, Math.PI * 2)
+      ctx.fill()
+    }
+
     const body = ctx.createRadialGradient(p.sx - r * 0.4, p.sy - r * 0.45, r * 0.1, p.sx, p.sy, r)
-    body.addColorStop(0, hsl(s.hue, 78, light + 22))
-    body.addColorStop(0.55, hsl(s.hue, 72, light))
-    body.addColorStop(1, hsl(s.hue, 68, light - 26))
+    body.addColorStop(0, hsl(hue, 78, light + 22))
+    body.addColorStop(0.55, hsl(hue, 72, light))
+    body.addColorStop(1, hsl(hue, 68, light - 26))
     ctx.fillStyle = body
     ctx.beginPath()
     ctx.arc(p.sx, p.sy, r, 0, Math.PI * 2)
     ctx.fill()
 
-    // Banding down the back, which is most of what says "snake".
-    if (i % 3 === 0 && taper > 0.35) {
-      ctx.fillStyle = hsl(s.hue, 60, light - 16, 0.5)
-      ctx.beginPath()
-      ctx.arc(p.sx, p.sy, r * 0.52, 0, Math.PI * 2)
-      ctx.fill()
+    // Markings. Whatever it is, it runs down the back, because that is
+    // the only part of a snake anyone ever sees.
+    if (taper > 0.35) {
+      if (s.pattern === 'bands' && i % 3 === 0) {
+        ctx.fillStyle = hsl(hue, 60, light - 16, 0.5)
+        ctx.beginPath()
+        ctx.arc(p.sx, p.sy, r * 0.52, 0, Math.PI * 2)
+        ctx.fill()
+      } else if (s.pattern === 'stripe') {
+        ctx.fillStyle = hsl(hue, 40, light + 30, 0.6)
+        ctx.beginPath()
+        ctx.arc(p.sx, p.sy, r * 0.3, 0, Math.PI * 2)
+        ctx.fill()
+      } else if (s.pattern === 'diamond' && i % 4 === 0) {
+        ctx.fillStyle = hsl(hue, 70, light - 30, 0.75)
+        ctx.beginPath()
+        ctx.moveTo(p.sx, p.sy - r * 0.68)
+        ctx.lineTo(p.sx + r * 0.52, p.sy)
+        ctx.lineTo(p.sx, p.sy + r * 0.68)
+        ctx.lineTo(p.sx - r * 0.52, p.sy)
+        ctx.closePath()
+        ctx.fill()
+      }
     }
   }
 

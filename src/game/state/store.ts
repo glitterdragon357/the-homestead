@@ -267,7 +267,7 @@ export const useHomesteadStore = create<HomesteadState>()(
     }),
     {
       name: SAVE_KEY,
-      version: 13,
+      version: 14,
       storage: createJSONStorage(() => localStorage),
       // Runs before rehydration, so this captures the previous session's
       // save rather than anything this one has written.
@@ -378,6 +378,16 @@ export const useHomesteadStore = create<HomesteadState>()(
         // v12 -> v13: Snake Dash. Additive - its own save, its own purse,
         // and it reads nothing that came before it.
         if (progress.snakedash === undefined) progress.snakedash = { ...initialSnake }
+
+        // v13 -> v14: Snake Dash gains skins and a choice of arena. A save
+        // written before them has neither, so fill the gaps rather than
+        // letting an old save start with no skin and no map.
+        if (progress.snakedash) {
+          const snake = progress.snakedash as Record<string, unknown>
+          if (snake.skin === undefined) snake.skin = initialSnake.skin
+          if (snake.map === undefined) snake.map = initialSnake.map
+          snake.skins = [...new Set([...initialSnake.skins, ...((snake.skins as string[]) ?? [])])]
+        }
 
         return { ...state, progress, purses, pausedAt }
       },

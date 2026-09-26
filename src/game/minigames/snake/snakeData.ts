@@ -7,7 +7,128 @@
  * the whole game and they are easy to get subtly wrong.
  */
 
-export const ARENA = { w: 2600, h: 2000 }
+/* ------------------------------------------------------------------ */
+/* Maps                                                                */
+/* ------------------------------------------------------------------ */
+
+export interface MapSpec {
+  key: string
+  name: string
+  blurb: string
+  w: number
+  h: number
+  rivals: number
+  pellets: number
+  /** Floor at the centre, floor at the edges, the grid, and the wall. */
+  floorIn: string
+  floorOut: string
+  grid: string
+  wall: string
+}
+
+export const MAPS: MapSpec[] = [
+  {
+    key: 'pit',
+    name: 'The Pit',
+    blurb: 'Open ground, room to run, and eight others in it with you.',
+    w: 2600,
+    h: 2000,
+    rivals: 8,
+    pellets: 260,
+    floorIn: '#16243a',
+    floorOut: '#0a1220',
+    grid: 'rgba(120,170,230,0.075)',
+    wall: '126,196,255',
+  },
+  {
+    key: 'narrows',
+    name: 'The Narrows',
+    blurb: 'Long and thin. Nowhere to slip past anything bigger than you.',
+    w: 3600,
+    h: 1100,
+    rivals: 9,
+    pellets: 250,
+    floorIn: '#22203a',
+    floorOut: '#0e0c1a',
+    grid: 'rgba(180,150,235,0.08)',
+    wall: '190,160,255',
+  },
+  {
+    key: 'grove',
+    name: 'The Grove',
+    blurb: 'Wide and well fed. Fewer rivals, and plenty to grow on.',
+    w: 3200,
+    h: 2600,
+    rivals: 6,
+    pellets: 420,
+    floorIn: '#16301f',
+    floorOut: '#081409',
+    grid: 'rgba(140,220,150,0.075)',
+    wall: '150,240,170',
+  },
+  {
+    key: 'crucible',
+    name: 'The Crucible',
+    blurb: 'Small, crowded and mean. You will meet everything, quickly.',
+    w: 1700,
+    h: 1300,
+    rivals: 10,
+    pellets: 190,
+    floorIn: '#341c1c',
+    floorOut: '#160808',
+    grid: 'rgba(255,150,130,0.07)',
+    wall: '255,150,120',
+  },
+]
+
+export const MAP_BY_KEY: Record<string, MapSpec> = Object.fromEntries(MAPS.map((m) => [m.key, m]))
+
+/** The default, and the size everything falls back to. */
+export const ARENA = { w: MAPS[0].w, h: MAPS[0].h }
+
+/* ------------------------------------------------------------------ */
+/* Skins                                                              */
+/* ------------------------------------------------------------------ */
+
+export type Pattern = 'bands' | 'stripe' | 'diamond' | 'solid' | 'glow' | 'shift'
+
+export interface Skin {
+  key: string
+  name: string
+  blurb: string
+  hue: number
+  pattern: Pattern
+  /** Nothing to pay for the first few. */
+  cost: number
+}
+
+export const SKINS: Skin[] = [
+  { key: 'grass', name: 'Grass', blurb: 'The one you started in.', hue: 140, pattern: 'bands', cost: 0 },
+  { key: 'coral', name: 'Coral', blurb: 'Warm banding, hard to lose in a crowd.', hue: 8, pattern: 'bands', cost: 0 },
+  { key: 'deep', name: 'Deep', blurb: 'A single pale stripe down the spine.', hue: 212, pattern: 'stripe', cost: 0 },
+  { key: 'wasp', name: 'Wasp', blurb: 'Diamonds, and a warning to anything smaller.', hue: 48, pattern: 'diamond', cost: 120 },
+  { key: 'ink', name: 'Ink', blurb: 'No pattern at all. Just a shape in the dark.', hue: 268, pattern: 'solid', cost: 160 },
+  { key: 'ember', name: 'Ember', blurb: 'Lit from the inside.', hue: 22, pattern: 'glow', cost: 260 },
+  { key: 'frost', name: 'Frost', blurb: 'Cold, and glowing with it.', hue: 186, pattern: 'glow', cost: 260 },
+  { key: 'opal', name: 'Opal', blurb: 'The colour walks down the body as you move.', hue: 300, pattern: 'shift', cost: 420 },
+]
+
+export const SKIN_BY_KEY: Record<string, Skin> = Object.fromEntries(SKINS.map((s) => [s.key, s]))
+
+/** The ones that cost nothing, which everybody starts with. */
+export const FREE_SKINS = SKINS.filter((s) => s.cost === 0).map((s) => s.key)
+
+/**
+ * Which skins a save actually owns.
+ *
+ * A save written before skins existed has no list at all, and defaulting
+ * that to empty would take the free ones away from anyone who had
+ * already played.
+ */
+export function ownedSkins(save: Partial<SnakeSave>): string[] {
+  const had = save.skins ?? []
+  return [...new Set([...FREE_SKINS, ...had])]
+}
 
 /** How far apart the beads of a body sit. */
 export const SEGMENT = 13
@@ -76,27 +197,43 @@ export function speedOf(fed: number, dashing: boolean): number {
 /* Meeting another snake                                               */
 /* ------------------------------------------------------------------ */
 
-export type Meeting = 'eat' | 'die' | 'bounce'
+export type Meeting = 'eat' | 'die' | 'cut' | 'bounce'
 
 /**
  * What happens to the snake whose *head* did the touching.
  *
- * All four cases in the brief are the same rule seen from two sides:
+ * Head to head, the higher level eats and the lower dies. But a head
+ * meeting a *body* no longer kills: it cuts. Everything from the point
+ * of contact down to the tail comes off, and the snake that was cut
+ * swims on with whatever is left in front of the bite.
  *
- *  - my head into their body, I am higher  -> I eat them
- *  - my head into their body, I am lower   -> I bounce off
- *  - their head into my body, they are higher -> they eat me, I die
- *  - their head into my body, they are lower  -> they bounce off me
- *  - head to head, higher eats, lower dies; level a draw, both bounce
+ * That is what makes being chased a chase. A bigger snake on your tail
+ * has to work its way up you bite by bite, and you die only when it has
+ * eaten far enough forward that there is no snake left in front of it -
+ * which is the same thing as reaching your head.
  *
- * So: a head that meets something below its level consumes it, and a
- * head that meets something at or above its level comes off worse or
- * not at all. Only the head can start anything - a body is passive.
+ * Only a head can start anything; a body is passive. So the rule is
+ * symmetric: what happens when your head meets someone is exactly what
+ * happens to them when theirs meets you.
  */
 export function meet(myLevel: number, theirLevel: number, where: 'head' | 'body'): Meeting {
-  if (myLevel > theirLevel) return 'eat'
-  if (where === 'head' && myLevel < theirLevel) return 'die'
-  return 'bounce'
+  if (where === 'head') {
+    if (myLevel > theirLevel) return 'eat'
+    if (myLevel < theirLevel) return 'die'
+    return 'bounce'
+  }
+  return myLevel > theirLevel ? 'cut' : 'bounce'
+}
+
+/**
+ * What a snake is left with after a bite at `bead`, counting from the
+ * head. Null means there was not enough in front of the bite to go on
+ * with, so the chase is over.
+ */
+export function cutTo(bead: number): { fed: number } | null {
+  const left = (bead - BASE_LENGTH) / GROW
+  if (left < 0) return null
+  return { fed: left }
 }
 
 /* ------------------------------------------------------------------ */
@@ -123,6 +260,10 @@ export interface Snake {
   shoveHeading: number
   /** Newly spawned and briefly untouchable, so a spawn is not a death. */
   safeUntil: number
+  /** How it is painted. Rivals all wear plain bands. */
+  pattern: Pattern
+  /** Set briefly when a bite lands, so the flinch is visible. */
+  bittenUntil: number
 }
 
 /**
@@ -214,9 +355,22 @@ export interface SnakeSave {
   eaten: number
   runs: number
   music?: boolean
+  /** The skin being worn, and the ones bought so far. */
+  skin: string
+  skins: string[]
+  /** The map last played. */
+  map: string
 }
 
-export const initialSnake: SnakeSave = { best: 0, bestLevel: 1, eaten: 0, runs: 0 }
+export const initialSnake: SnakeSave = {
+  best: 0,
+  bestLevel: 1,
+  eaten: 0,
+  runs: 0,
+  skin: 'grass',
+  skins: [...FREE_SKINS],
+  map: 'pit',
+}
 
 /** What a finished run was worth. */
 export function payout(level: number, eaten: number, fed: number): number {

@@ -7,7 +7,6 @@
  */
 
 import {
-  ARENA,
   BASE_LENGTH,
   DASH_DRAIN,
   DASH_FLOOR,
@@ -15,20 +14,23 @@ import {
   DASH_REFILL,
   GROW,
   HEAD_R,
-  PELLET_COUNT,
   PELLET_R,
   RIVAL_HUES,
   RIVAL_NAMES,
+  SKIN_BY_KEY,
   SEGMENT,
   SPAWN_CLEAR,
   START_FED,
   SPAWN_GRACE,
   TURN_RATE,
   girthOf,
+  cutTo,
   levelOf,
   meet,
   segmentsOf,
   speedOf,
+  type MapSpec,
+  type Pattern,
   type Pellet,
   type Snake,
 } from './snakeData'
@@ -38,6 +40,7 @@ export interface World {
   pellets: Pellet[]
   t: number
   nextId: number
+  map: MapSpec
 }
 
 /* ------------------------------------------------------------------ */
@@ -50,7 +53,8 @@ export function makeSnake(
   y: number,
   fed: number,
   player: boolean,
-  rng: () => number
+  rng: () => number,
+  look?: { hue: number; pattern: Pattern }
 ): Snake {
   const heading = rng() * Math.PI * 2
   const trail: { x: number; y: number }[] = []
@@ -62,7 +66,7 @@ export function makeSnake(
     id,
     player,
     name: player ? 'You' : RIVAL_NAMES[id % RIVAL_NAMES.length],
-    hue: player ? 140 : RIVAL_HUES[id % RIVAL_HUES.length],
+    hue: look?.hue ?? (player ? 140 : RIVAL_HUES[id % RIVAL_HUES.length]),
     x,
     y,
     heading,
@@ -74,42 +78,60 @@ export function makeSnake(
     shoveUntil: 0,
     shoveHeading: 0,
     safeUntil: 0,
+    pattern: look?.pattern ?? 'bands',
+    bittenUntil: 0,
   }
 }
 
 /** Somewhere to appear that is not right on top of the player. */
-function clearOf(player: Snake | undefined, rng: () => number): { x: number; y: number } {
+function clearOf(
+  player: Snake | undefined,
+  rng: () => number,
+  map: MapSpec
+): { x: number; y: number } {
+  // The Crucible is small enough that "well away from the player" may
+  // not exist, so give up gracefully rather than looping.
+  const want = Math.min(SPAWN_CLEAR, Math.min(map.w, map.h) * 0.42)
   for (let tries = 0; tries < 24; tries++) {
-    const x = 120 + rng() * (ARENA.w - 240)
-    const y = 120 + rng() * (ARENA.h - 240)
-    if (!player || Math.hypot(x - player.x, y - player.y) > SPAWN_CLEAR) return { x, y }
+    const x = 120 + rng() * (map.w - 240)
+    const y = 120 + rng() * (map.h - 240)
+    if (!player || Math.hypot(x - player.x, y - player.y) > want) return { x, y }
   }
-  return { x: 120 + rng() * (ARENA.w - 240), y: 120 + rng() * (ARENA.h - 240) }
+  return { x: 120 + rng() * (map.w - 240), y: 120 + rng() * (map.h - 240) }
 }
 
-export function makePellet(rng: () => number, x?: number, y?: number, worth = 1): Pellet {
+export function makePellet(
+  rng: () => number,
+  map: MapSpec,
+  x?: number,
+  y?: number,
+  worth = 1
+): Pellet {
   return {
-    x: x ?? 40 + rng() * (ARENA.w - 80),
-    y: y ?? 40 + rng() * (ARENA.h - 80),
+    x: x ?? 40 + rng() * (map.w - 80),
+    y: y ?? 40 + rng() * (map.h - 80),
     worth,
     hue: 30 + rng() * 300,
   }
 }
 
-export function makeWorld(rivals: number, rng: () => number): World {
-  const snakes: Snake[] = [makeSnake(0, ARENA.w / 2, ARENA.h / 2, START_FED, true, rng)]
-  for (let i = 1; i <= rivals; i++) {
+export function makeWorld(map: MapSpec, skinKey: string, rng: () => number): World {
+  const skin = SKIN_BY_KEY[skinKey] ?? SKIN_BY_KEY.grass
+  const snakes: Snake[] = [
+    makeSnake(0, map.w / 2, map.h / 2, START_FED, true, rng, { hue: skin.hue, pattern: skin.pattern }),
+  ]
+  for (let i = 1; i <= map.rivals; i++) {
     // Mostly small, a few middling. Starting them spread over the whole
     // range meant spawning at level 1 among level sevens, which is not a
     // game - it is an ambush, and ninety-seven runs in a hundred ended
     // inside thirteen seconds.
     const fed = Math.round(Math.pow(rng(), 2.4) * 24)
-    const spot = clearOf(snakes[0], rng)
+    const spot = clearOf(snakes[0], rng, map)
     snakes.push(makeSnake(i, spot.x, spot.y, fed, false, rng))
   }
   const pellets: Pellet[] = []
-  for (let i = 0; i < PELLET_COUNT; i++) pellets.push(makePellet(rng))
-  return { snakes, pellets, t: 0, nextId: rivals + 1 }
+  for (let i = 0; i < map.pellets; i++) pellets.push(makePellet(rng, map))
+  return { snakes, pellets, t: 0, nextId: map.rivals + 1, map }
 }
 
 /* ------------------------------------------------------------------ */
@@ -167,11 +189,11 @@ export function steer(self: Snake, world: World): { heading: number; dash: boole
 
   // Keep off the wall. A rival that pins itself in a corner is not fun
   // to hunt and not dangerous to meet.
-  const edge = 220
-  if (self.x < edge) wantX += (edge - self.x) / edge * 2.4
-  if (self.x > ARENA.w - edge) wantX -= (edge - (ARENA.w - self.x)) / edge * 2.4
-  if (self.y < edge) wantY += (edge - self.y) / edge * 2.4
-  if (self.y > ARENA.h - edge) wantY -= (edge - (ARENA.h - self.y)) / edge * 2.4
+  const edge = Math.min(220, Math.min(world.map.w, world.map.h) * 0.16)
+  if (self.x < edge) wantX += ((edge - self.x) / edge) * 2.4
+  if (self.x > world.map.w - edge) wantX -= ((edge - (world.map.w - self.x)) / edge) * 2.4
+  if (self.y < edge) wantY += ((edge - self.y) / edge) * 2.4
+  if (self.y > world.map.h - edge) wantY -= ((edge - (world.map.h - self.y)) / edge) * 2.4
 
   if (Math.abs(wantX) < 0.001 && Math.abs(wantY) < 0.001) {
     return { heading: self.heading, dash: false }
@@ -190,7 +212,14 @@ function turnToward(current: number, want: number, most: number): number {
   return current + diff
 }
 
-export function moveSnake(s: Snake, want: number, wantDash: boolean, dt: number, now: number) {
+export function moveSnake(
+  s: Snake,
+  want: number,
+  wantDash: boolean,
+  dt: number,
+  now: number,
+  map: MapSpec
+) {
   // A shove from bouncing overrides steering for a moment, so a bounce
   // reads as a bounce rather than a stutter.
   const shoved = now < s.shoveUntil
@@ -208,8 +237,8 @@ export function moveSnake(s: Snake, want: number, wantDash: boolean, dt: number,
   // The wall stops you rather than killing you. Dying to scenery in a
   // game about eating other snakes is a bad way to lose.
   const r = girthOf(s.fed) * 0.5
-  s.x = Math.max(r, Math.min(ARENA.w - r, s.x))
-  s.y = Math.max(r, Math.min(ARENA.h - r, s.y))
+  s.x = Math.max(r, Math.min(map.w - r, s.x))
+  s.y = Math.max(r, Math.min(map.h - r, s.y))
 
   // Record the trail, but only once we have actually gone somewhere.
   const head = s.trail[0]
@@ -227,6 +256,11 @@ export function moveSnake(s: Snake, want: number, wantDash: boolean, dt: number,
 export interface Outcome {
   /** Ids of snakes that were eaten this tick, and who ate them. */
   eaten: { victim: number; by: number }[]
+  /**
+   * Bites taken out of a snake that survived it, with the piece that came
+   * off, so it can be scattered as food.
+   */
+  bites: { victim: number; by: number; lost: { x: number; y: number }[] }[]
 }
 
 function bounce(s: Snake, awayFrom: Snake, now: number) {
@@ -249,7 +283,7 @@ function bounce(s: Snake, awayFrom: Snake, now: number) {
  * is a fair warning about what it would have done to the frame rate.
  */
 export function collide(world: World, now: number): Outcome {
-  const out: Outcome = { eaten: [] }
+  const out: Outcome = { eaten: [], bites: [] }
   const alive = world.snakes.filter((s) => !s.dead)
 
   const bodies = new Map<number, { x: number; y: number }[]>()
@@ -268,16 +302,17 @@ export function collide(world: World, now: number): Outcome {
       const headTouch = HEAD_R + girthOf(a.fed) * 0.5 + girthOf(b.fed) * 0.5
 
       let where: 'head' | 'body' | null = null
+      let bead = -1
       if (headGap < headTouch) {
         where = 'head'
       } else {
-        // Does a's head touch b's body? Skip the beads nearest b's head,
-        // or every head-on meeting would also register as a body hit.
+        // Does a's head touch b's body, and how far down it? The bead
+        // index is the whole point now - it is where the bite lands.
         const beads = bodies.get(b.id)!
         const r = reach.get(b.id)!
-        // Cheap reject first: nothing can touch if the head is further
-        // away than the whole body could possibly extend.
         if (headGap < beads.length * SEGMENT + r + 8) {
+          // Skip the beads nearest b's head, or every head-on meeting
+          // would also register as a bite on the neck.
           for (let i = 2; i < beads.length; i++) {
             const dx = a.x - beads[i].x
             if (dx > r || dx < -r) continue
@@ -285,6 +320,7 @@ export function collide(world: World, now: number): Outcome {
             if (dy > r || dy < -r) continue
             if (dx * dx + dy * dy < r * r) {
               where = 'body'
+              bead = i
               break
             }
           }
@@ -292,11 +328,12 @@ export function collide(world: World, now: number): Outcome {
       }
       if (!where) continue
 
-      // Either of them newly spawned? Then nobody eats anybody.
+      // Either of them newly spawned? Then nobody bites anybody.
       const verdict =
         now < a.safeUntil || now < b.safeUntil
           ? 'bounce'
           : meet(levelOf(a.fed), levelOf(b.fed), where)
+
       if (verdict === 'eat') {
         b.dead = true
         a.fed += Math.round(b.fed * 0.5) + 4
@@ -305,12 +342,46 @@ export function collide(world: World, now: number): Outcome {
         a.dead = true
         b.fed += Math.round(a.fed * 0.5) + 4
         out.eaten.push({ victim: a.id, by: b.id })
+      } else if (verdict === 'cut') {
+        const beads = bodies.get(b.id)!
+        const left = cutTo(bead)
+        if (!left) {
+          // Bitten so far forward there is nothing in front of it.
+          b.dead = true
+          a.fed += Math.round(b.fed * 0.5) + 4
+          out.eaten.push({ victim: b.id, by: a.id })
+        } else {
+          const lost = b.fed - left.fed
+          b.fed = left.fed
+          // The biter gets a share of what came off, so working up a big
+          // snake from the tail is worth doing rather than merely tidy.
+          a.fed += Math.max(1, Math.round(lost * 0.4))
+          // Shove the bitten one clear, so one bite is one bite and not
+          // the same contact resolving again on the very next tick.
+          bounce(b, a, now)
+          out.bites.push({ victim: b.id, by: a.id, lost: beads.slice(bead) })
+        }
       } else {
         bounce(a, b, now)
       }
     }
   }
   return out
+}
+
+/** A severed piece goes back on the field as food. */
+export function scatterBeads(
+  beads: { x: number; y: number }[],
+  worth: number,
+  world: World,
+  rng: () => number
+) {
+  const step = Math.max(1, Math.floor(beads.length / 18))
+  for (let i = 0; i < beads.length; i += step) {
+    world.pellets.push(
+      makePellet(rng, world.map, beads[i].x + (rng() - 0.5) * 20, beads[i].y + (rng() - 0.5) * 20, worth)
+    )
+  }
 }
 
 /** A dead snake goes back on the field as food. */
@@ -321,6 +392,7 @@ export function scatter(s: Snake, world: World, rng: () => number) {
     world.pellets.push(
       makePellet(
         rng,
+        world.map,
         beads[i].x + (rng() - 0.5) * 22,
         beads[i].y + (rng() - 0.5) * 22,
         1 + Math.round(s.fed / 40)
@@ -345,7 +417,7 @@ export function feed(world: World, rng: () => number): number {
     }
   }
   // Keep the field stocked.
-  while (world.pellets.length < PELLET_COUNT) world.pellets.push(makePellet(rng))
+  while (world.pellets.length < world.map.pellets) world.pellets.push(makePellet(rng, world.map))
   return playerGot
 }
 
@@ -358,13 +430,13 @@ export function feed(world: World, rng: () => number): number {
  * worth chasing and something above you worth avoiding, whether you are
  * level two or level twenty.
  */
-export function restock(world: World, rivals: number, now: number, rng: () => number) {
+export function restock(world: World, now: number, rng: () => number) {
   const player = world.snakes.find((s) => s.player)
   const alive = world.snakes.filter((s) => !s.dead && !s.player).length
   const bar = Math.max(18, (player?.fed ?? 0) * 1.25)
-  for (let i = alive; i < rivals; i++) {
+  for (let i = alive; i < world.map.rivals; i++) {
     const fed = Math.round(Math.pow(rng(), 1.9) * bar)
-    const spot = clearOf(player, rng)
+    const spot = clearOf(player, rng, world.map)
     const s = makeSnake(world.nextId++, spot.x, spot.y, fed, false, rng)
     s.safeUntil = now + SPAWN_GRACE
     world.snakes.push(s)
