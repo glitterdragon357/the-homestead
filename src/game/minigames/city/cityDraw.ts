@@ -605,6 +605,26 @@ const LEG_COLOURS = ['#3a3f4a', '#4a3a2f', '#2b2b30', '#5a4a3a']
 /* Street furniture                                                    */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Painted steel: bright along the top where the sky reaches it, dull
+ * underneath. Two stops is enough to stop a pole reading as a line.
+ */
+function pole(
+  ctx: CanvasRenderingContext2D,
+  base: string,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number
+): CanvasGradient {
+  const c = parseColour(base)
+  const g = ctx.createLinearGradient(x0, y0, x1, y1)
+  g.addColorStop(0, toCss(blend(c, [246, 250, 255], 0.42)))
+  g.addColorStop(0.55, toCss(c))
+  g.addColorStop(1, toCss(blend(c, [20, 24, 34], 0.42)))
+  return g
+}
+
 export function drawFixture(
   ctx: CanvasRenderingContext2D,
   f: Fixture,
@@ -617,11 +637,16 @@ export function drawFixture(
   ctx.globalAlpha = alpha
   ctx.translate(p.sx, p.sy)
   ctx.scale(s, s)
+
+  // Everything in a playground stands on the ground, so everything in a
+  // playground gets something under it.
+  contactShadow(ctx, 0, 2, 44, 10, 0.3)
+
   const swing = Math.sin(t * 0.002 + f.x * 0.01)
 
   switch (f.kind) {
     case 'swings':
-      ctx.strokeStyle = '#5f6a72'
+      ctx.strokeStyle = pole(ctx, '#5f6a72', -46, -74, 46, 0)
       ctx.lineWidth = 5
       ctx.beginPath()
       ctx.moveTo(-46, 0)
@@ -641,7 +666,7 @@ export function drawFixture(
       }
       break
     case 'slide':
-      ctx.strokeStyle = '#5f6a72'
+      ctx.strokeStyle = pole(ctx, '#5f6a72', -34, -60, -26, 0)
       ctx.lineWidth = 4
       ctx.beginPath()
       ctx.moveTo(-30, 0)
