@@ -17,6 +17,7 @@ import {
   SPAWN_GRACE,
   fedForLevel,
   initialSnake,
+  VANISH_TOLL,
   levelOf,
   payout,
   type SnakeSave,
@@ -68,9 +69,10 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
     bitten: number
     found: number
   }>(null)
-  const [hud, setHud] = useState({ level: 1, fed: 0, dash: 1, eaten: 0, rank: 1, of: 9, toNext: 0, bitten: 0, pocket: 0 })
+  const [hud, setHud] = useState({ level: 1, fed: 0, dash: 1, eaten: 0, rank: 1, of: 9, toNext: 0, bitten: 0, pocket: 0, vanish: false })
 
   const [filter, setFilter] = useState<'all' | 'yours' | 'affordable'>('all')
+  const [denied, setDenied] = useState<string | null>(null)
   const owned = ownedSkins(save)
 
   const eatenRef = useRef(0)
@@ -84,7 +86,18 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
   function start() {
     const rng = Math.random
     const map = MAP_BY_KEY[saveRef.current.map] ?? MAPS[0]
-    const w = makeWorld(map, saveRef.current.skin ?? 'grass', rng)
+    const skin = saveRef.current.skin ?? 'grass'
+
+    // Nobody charges a toll every time it goes out. Taking it before the
+    // world is built means a refused payment cannot leave a run half
+    // started with a skin that was never paid for.
+    if (skin === 'nobody' && !spend(VANISH_TOLL)) {
+      setDenied(`Nobody costs ${VANISH_TOLL} 🪙 a run. You have ${coins}.`)
+      return
+    }
+    setDenied(null)
+
+    const w = makeWorld(map, skin, rng)
     w.snakes[0].safeUntil = performance.now() + SPAWN_GRACE
     worldRef.current = w
     eatenRef.current = 0
@@ -138,6 +151,10 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
       w.t = now
 
       const me = w.snakes[0]
+      if (w.startedAt === 0) w.startedAt = now
+
+      // Nobody is unseen for the whole run, not on a cycle.
+      me.unseen = me.pattern === 'vanish' ? 1 : 0
 
       /* --- steering ------------------------------------------------ */
       for (const s of w.snakes) {
@@ -232,6 +249,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
           toNext: Math.max(0, Math.min(1, (me.fed - from) / Math.max(1, need - from))),
           bitten: bittenRef.current,
           pocket: pocketRef.current,
+          vanish: me.pattern === 'vanish',
         })
       }
     }
@@ -310,6 +328,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
             <div style={S.track}>
               <div style={{ ...S.fill, width: `${Math.round(hud.toNext * 100)}%` }} />
             </div>
+            {hud.vanish && <span style={S.vanish}>unseen</span>}
             <span style={S.pocket}>🪙 {hud.pocket}</span>
             <span style={S.tally}>
               {hud.rank === 1 ? 'biggest in the arena' : `#${hud.rank} of ${hud.of}`}
@@ -445,6 +464,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
                           <span style={S.cardNote}>{k.blurb}</span>
                           <span style={S.cardMeta}>
                             {have ? (on ? 'worn' : 'yours') : `🪙 ${k.cost}`}
+                            {k.key === 'nobody' ? ` · ${VANISH_TOLL} 🪙 a run` : ''}
                           </span>
                         </button>
                       )
@@ -480,8 +500,11 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
           <span>{save.runs ?? 0} runs</span>
         </div>
 
+        {denied && <div style={S.denied}>{denied}</div>}
+
         <button style={S.go} onClick={start}>
           {result ? 'Go again' : 'Into the arena'}
+          {(save.skin ?? 'grass') === 'nobody' ? ` · ${VANISH_TOLL} 🪙` : ''}
         </button>
 
         <label style={S.musicRow}>
@@ -544,6 +567,9 @@ function SkinSwatch({ skin }: { skin: string }) {
             {k.pattern === 'metal' && (
               <ellipse cx={cx - 1} cy={5} rx="2.6" ry="1.2" fill="rgba(255,255,255,0.55)" />
             )}
+            {k.pattern === 'vanish' && (
+              <circle cx={cx} cy={7} r={6} fill={body(hue)} opacity={i < 2 ? 1 : 0.16} />
+            )}
             {k.pattern === 'glow' && (
               <circle cx={cx} cy={7} r={6} fill={`hsl(${hue},95%,70%)`} opacity={0.42} />
             )}
@@ -584,6 +610,14 @@ const S: Record<string, React.CSSProperties> = {
   fill: { height: '100%', background: '#7ff2a8' },
   tally: { fontSize: 12, opacity: 0.8 },
   pocket: { fontSize: 14, fontWeight: 700, color: '#f2c04a' },
+  vanish: {
+    fontSize: 12,
+    fontWeight: 700,
+    color: '#bfe4ff',
+    border: '1px solid rgba(191,228,255,0.4)',
+    borderRadius: 20,
+    padding: '1px 9px',
+  },
   hudBottom: {
     position: 'absolute',
     bottom: 12,
@@ -665,6 +699,13 @@ const S: Record<string, React.CSSProperties> = {
   },
   chipOn: { background: '#3fb972', color: '#06210f', borderColor: '#3fb972', fontWeight: 700 },
   cardBroke: { opacity: 0.42 },
+  denied: {
+    marginTop: 14,
+    padding: '9px 12px',
+    borderRadius: 9,
+    background: 'rgba(226,88,79,0.16)',
+    fontSize: 13,
+  },
   grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 },
   card: {
     textAlign: 'left',

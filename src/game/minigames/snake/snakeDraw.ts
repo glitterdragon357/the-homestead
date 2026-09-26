@@ -186,6 +186,17 @@ export function drawSnake(
 ) {
   const beads = segmentsOf(s)
   if (beads.length === 0) return
+
+  // Gone to everyone else, still perfectly clear to you.
+  //
+  // You keep most of your own opacity - enough to steer by without a
+  // moment's squinting - and only lose enough of it to tell you the skin
+  // is working. Every other snake in the arena gets nothing at all, and
+  // the ones being driven by the game stop reacting to you entirely.
+  const fade = s.unseen > 0 ? (s.player ? 1 - s.unseen * 0.38 : 1 - s.unseen) : 1
+  if (fade <= 0.02) return
+  const wasGlobal = ctx.globalAlpha
+  if (fade < 1) ctx.globalAlpha = wasGlobal * fade
   const girth = girthOf(s.fed) * cam.zoom
   const level = levelOf(s.fed)
 
@@ -322,6 +333,18 @@ export function drawSnake(
     ctx.fill()
   }
 
+  // While you are unseen, your own head wears a soft halo - so at a
+  // glance you can tell which state you are in without reading the HUD.
+  if (s.player && s.unseen > 0.15) {
+    const shimmer = ctx.createRadialGradient(h.sx, h.sy, hr * 0.5, h.sx, h.sy, hr * 2.6)
+    shimmer.addColorStop(0, `rgba(190,228,255,${(0.3 * s.unseen).toFixed(2)})`)
+    shimmer.addColorStop(1, 'rgba(190,228,255,0)')
+    ctx.fillStyle = shimmer
+    ctx.beginPath()
+    ctx.arc(h.sx, h.sy, hr * 2.6, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
   const head = ctx.createRadialGradient(h.sx - hr * 0.4, h.sy - hr * 0.45, hr * 0.1, h.sx, h.sy, hr)
   head.addColorStop(0, hsl(s.hue, 80, 76))
   head.addColorStop(0.6, hsl(s.hue, 74, 58))
@@ -371,5 +394,6 @@ export function drawSnake(
   }
   ctx.textAlign = 'start'
   ctx.textBaseline = 'alphabetic'
+  if (fade < 1) ctx.globalAlpha = wasGlobal
   void t
 }

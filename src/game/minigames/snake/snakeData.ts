@@ -708,6 +708,7 @@ export type Pattern =
   | 'twotone'
   | 'metal'
   | 'ghost'
+  | 'vanish'
 
 export interface Skin {
   key: string
@@ -824,12 +825,35 @@ export const SKINS: Skin[] = [
   { key: 'obsidian', name: 'Obsidian', blurb: 'Glass, from a volcano.', hue: 348, accent: 164, pattern: 'solid', family: 'Regalia', cost: 600 },
   { key: 'opal', name: 'Opal', blurb: 'Every colour, depending.', hue: 354, accent: 196, pattern: 'shift', family: 'Regalia', cost: 600 },
   { key: 'regalia', name: 'Regalia', blurb: 'Worn by someone in charge.', hue: 2, accent: 24, pattern: 'metal', family: 'Regalia', cost: 800 },
+  {
+    key: 'nobody',
+    name: 'Nobody',
+    blurb: 'Unseen the whole run. You can always see yourself; nothing else can.',
+    hue: 204,
+    accent: 204,
+    pattern: 'vanish',
+    family: 'Oddity',
+    cost: 1000,
+  },
 ]
 
 /** The order families appear in the picker. */
-export const SKIN_FAMILIES = ['Garden', 'Tidewater', 'Ember', 'Frost', 'Twilight', 'Sunbaked', 'Canopy', 'Forge', 'Voltage', 'Regalia']
+export const SKIN_FAMILIES = ['Oddity', 'Garden', 'Tidewater', 'Ember', 'Frost', 'Twilight', 'Sunbaked', 'Canopy', 'Forge', 'Voltage', 'Regalia']
 
 export const SKIN_BY_KEY: Record<string, Skin> = Object.fromEntries(SKINS.map((s) => [s.key, s]))
+
+/**
+ * Nobody is not on a timer. Wear it and you are unseen for the whole
+ * run, first second to last - you can always see yourself, and nothing
+ * else in the arena can see you at all.
+ *
+ * What it costs is money: a toll every single time you take it out,
+ * paid before the run starts. A run rarely earns that back, so it is
+ * something you spend a stack of coins on deliberately rather than a
+ * skin you settle into - which is the only reason permanent
+ * invisibility can sit in the same game as everything else.
+ */
+export const VANISH_TOLL = 750
 
 /** The ones that cost nothing, which everybody starts with. */
 export const FREE_SKINS = SKINS.filter((s) => s.cost === 0).map((s) => s.key)
@@ -903,8 +927,19 @@ export function fedForLevel(level: number): number {
   return 2 * (level - 1) * (level - 1)
 }
 
+/**
+ * Nothing is ever longer than a level-three snake.
+ *
+ * Levels carry on climbing - that is what decides who eats whom - but
+ * the body stops growing, because a hundred-bead snake takes up a whole
+ * screen and half a dozen of them turn the arena into a maze you cannot
+ * move through. What a high level looks like is a bigger head and a
+ * bigger number, not more rope.
+ */
+export const MAX_BODY_FED = 8
+
 export function lengthOf(fed: number): number {
-  return BASE_LENGTH + fed * GROW
+  return BASE_LENGTH + Math.min(fed, MAX_BODY_FED) * GROW
 }
 
 /** Bigger snakes are a shade slower. Not enough to make growing a punishment. */
@@ -968,8 +1003,22 @@ export function meet(myLevel: number, theirLevel: number, where: 'head' | 'body'
  * head. Null means there was not enough in front of the bite to go on
  * with, so the chase is over.
  */
-export function cutTo(bead: number): { fed: number } | null {
-  const left = (bead - BASE_LENGTH) / GROW
+/**
+ * What a snake is left with after a bite at `bead`, counting from the
+ * head. Null means there was not enough in front of the bite to go on
+ * with, so the chase is over.
+ *
+ * Now that length is capped, a bead index no longer maps back to a
+ * amount eaten - a level four snake and a level forty one are the same
+ * number of beads long. So a bite takes the same *fraction* of what the
+ * snake has as it takes of the snake's body: bitten halfway along, it
+ * keeps half its level's worth, whatever that level is.
+ */
+export function cutTo(bead: number, fed: number): { fed: number } | null {
+  const beads = Math.round(lengthOf(fed))
+  if (bead < 3 || beads <= 0) return null
+  const kept = Math.min(1, bead / beads)
+  const left = fed * kept - 1
   if (left < 0) return null
   return { fed: left }
 }
@@ -1004,6 +1053,8 @@ export interface Snake {
   accent: number
   /** Set briefly when a bite lands, so the flinch is visible. */
   bittenUntil: number
+  /** How unseen it is, 0 to 1. Only the vanishing skin moves this. */
+  unseen: number
 }
 
 /**
@@ -1070,7 +1121,7 @@ export function alongTrail(
 
 /** How fat a snake is drawn, which is also how fat it is to collide with. */
 export function girthOf(fed: number): number {
-  return 9 + Math.min(11, Math.sqrt(fed) * 1.1)
+  return 9 + Math.min(11, Math.sqrt(Math.min(fed, MAX_BODY_FED)) * 1.1)
 }
 
 /**

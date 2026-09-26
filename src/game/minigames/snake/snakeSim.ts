@@ -51,6 +51,8 @@ export interface World {
   map: MapSpec
   /** The earliest the next rival may appear, so they trickle in. */
   nextSpawnAt: number
+  /** When the run began. */
+  startedAt: number
 }
 
 /* ------------------------------------------------------------------ */
@@ -98,6 +100,7 @@ export function makeSnake(
     safeUntil: 0,
     pattern: look?.pattern ?? 'bands',
     accent: look?.accent ?? 0,
+    unseen: 0,
     bittenUntil: 0,
   }
 }
@@ -161,7 +164,7 @@ export function makeWorld(map: MapSpec, skinKey: string, rng: () => number): Wor
   for (let i = 0; i < map.pellets; i++) pellets.push(makePellet(rng, map))
   const coins: Coin[] = []
   for (let i = 0; i < COIN_COUNT; i++) coins.push(makeCoin(rng, map))
-  return { snakes, pellets, coins, t: 0, nextId: map.rivals + 1, map, nextSpawnAt: 0 }
+  return { snakes, pellets, coins, t: 0, nextId: map.rivals + 1, map, nextSpawnAt: 0, startedAt: 0 }
 }
 
 /* ------------------------------------------------------------------ */
@@ -180,6 +183,10 @@ export function steer(self: Snake, world: World): { heading: number; dash: boole
   let fleeing = false
   for (const other of world.snakes) {
     if (other.dead || other.id === self.id) continue
+    // Whatever is wearing Nobody is not there as far as this one is
+    // concerned - it will not run from it and will not chase it. It can
+    // still be bitten by it, which is the entire point.
+    if (other.unseen > 0.6) continue
     const d = Math.hypot(other.x - self.x, other.y - self.y)
     if (d > 420 || d < 0.001) continue
     const theirLevel = levelOf(other.fed)
@@ -192,11 +199,18 @@ export function steer(self: Snake, world: World): { heading: number; dash: boole
         dash = true
       }
     } else if (theirLevel < myLevel && d < 560) {
-      // Worth chasing, but never at the cost of ignoring a threat.
+      // Worth chasing, and worth more than grazing.
+      //
+      // This was weighted at 1.5 against a pellet's 1.1, which sounds
+      // like a preference and is not: the pull falls off with distance,
+      // so a snake three hundred units off pulled about a third as hard
+      // as the nearest pellet and nothing ever actually gave chase. A
+      // rival that can eat you should want to.
       const pull = (560 - d) / 560
-      wantX += ((other.x - self.x) / d) * pull * 1.5
-      wantY += ((other.y - self.y) / d) * pull * 1.5
-      if (d < 260) dash = true
+      const keen = 1 + Math.min(1.0, (myLevel - theirLevel) * 0.16)
+      wantX += ((other.x - self.x) / d) * pull * 1.9 * keen
+      wantY += ((other.y - self.y) / d) * pull * 1.9 * keen
+      if (d < 300) dash = true
     }
   }
 
@@ -375,7 +389,7 @@ export function collide(world: World, now: number): Outcome {
         out.eaten.push({ victim: a.id, by: b.id })
       } else if (verdict === 'cut') {
         const beads = bodies.get(b.id)!
-        const left = cutTo(bead)
+        const left = cutTo(bead, b.fed)
         if (!left) {
           // Bitten so far forward there is nothing in front of it.
           b.dead = true
