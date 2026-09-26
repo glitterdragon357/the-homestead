@@ -53,7 +53,7 @@ export function PetCareMinigame({ onExit }: MinigameProps) {
   saveRef.current = save
 
   const music = save.music !== false
-  useAmbientMusic(music)
+  useAmbientMusic(music, 'calm')
 
   const [chosen, setChosen] = useState<number | null>(null)
   const [sheet, setSheet] = useState<null | 'shop' | 'adopt'>(null)

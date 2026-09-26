@@ -5,7 +5,7 @@ import { usePurse } from '../../state/usePurse'
 import { GiftRow } from '../../economy/GiftRow'
 import { useAmbientMusic } from '../../audio/useAmbientMusic'
 import { finish } from '../../engine/polish'
-import { VIEW, drawArena, drawPellets, drawSnake, type Camera } from './snakeDraw'
+import { VIEW, drawArena, drawCoins, drawPellets, drawSnake, type Camera } from './snakeDraw'
 import {
   DASH_MAX,
   MAPS,
@@ -21,7 +21,9 @@ import {
   type SnakeSave,
 } from './snakeData'
 import {
+  collect,
   collide,
+  dropBounty,
   feed,
   makeWorld,
   moveSnake,
@@ -50,7 +52,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
   saveRef.current = save
 
   const music = save.music !== false
-  useAmbientMusic(music, 0.05)
+  useAmbientMusic(music, 'drive', 0.4)
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const worldRef = useRef<World | null>(null)
@@ -63,11 +65,13 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
     level: number
     eaten: number
     bitten: number
+    found: number
   }>(null)
-  const [hud, setHud] = useState({ level: 1, fed: 0, dash: 1, eaten: 0, rank: 1, of: 9, toNext: 0, bitten: 0 })
+  const [hud, setHud] = useState({ level: 1, fed: 0, dash: 1, eaten: 0, rank: 1, of: 9, toNext: 0, bitten: 0, pocket: 0 })
 
   const eatenRef = useRef(0)
   const bittenRef = useRef(0)
+  const pocketRef = useRef(0)
 
   /* ---------------------------------------------------------------- */
   /* A run                                                             */
@@ -81,6 +85,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
     worldRef.current = w
     eatenRef.current = 0
     bittenRef.current = 0
+    pocketRef.current = 0
     aimRef.current = null
     dashRef.current = false
     setResult(null)
@@ -92,7 +97,8 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
     if (!w) return
     const me = w.snakes[0]
     const level = levelOf(me.fed)
-    const pay = payout(level, eatenRef.current, me.fed)
+    const found = pocketRef.current
+    const pay = payout(level, eatenRef.current, me.fed) + found
     const bitten = bittenRef.current
     earn(pay)
     setSave((s) => ({
@@ -102,7 +108,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
       best: Math.max(s.best ?? 0, me.fed),
       bestLevel: Math.max(s.bestLevel ?? 1, level),
     }))
-    setResult({ pay, level, eaten: eatenRef.current, bitten })
+    setResult({ pay, level, eaten: eatenRef.current, bitten, found })
     setPlaying(false)
     worldRef.current = null
   }, [earn, setSave])
@@ -143,11 +149,17 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
       }
 
       feed(w, rng)
+      pocketRef.current += collect(w, rng)
 
       const hits = collide(w, now)
       for (const e of hits.eaten) {
         const victim = w.snakes.find((s) => s.id === e.victim)
-        if (victim) scatter(victim, w, rng)
+        if (victim) {
+          scatter(victim, w, rng)
+          // Anything that dies drops its purse, whoever killed it - so a
+          // fight between two rivals leaves something worth going for.
+          dropBounty(victim, w, rng)
+        }
         if (e.by === 0) eatenRef.current++
       }
       for (const bite of hits.bites) {
@@ -171,6 +183,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
 
       drawArena(ctx, cam, w.map)
       drawPellets(ctx, cam, w.pellets, now)
+      drawCoins(ctx, cam, w.coins, now)
 
       // Rivals first, then you, so your own head is never buried.
       const myLevel = levelOf(me.fed)
@@ -214,6 +227,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
           of: levels.length,
           toNext: Math.max(0, Math.min(1, (me.fed - from) / Math.max(1, need - from))),
           bitten: bittenRef.current,
+          pocket: pocketRef.current,
         })
       }
     }
@@ -292,6 +306,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
             <div style={S.track}>
               <div style={{ ...S.fill, width: `${Math.round(hud.toNext * 100)}%` }} />
             </div>
+            <span style={S.pocket}>🪙 {hud.pocket}</span>
             <span style={S.tally}>
               {hud.rank === 1 ? 'biggest in the arena' : `#${hud.rank} of ${hud.of}`}
               {hud.eaten > 0 ? ` · ${hud.eaten} eaten` : ''}
@@ -333,6 +348,9 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
                 : `Level ${result.level}.`}
             </strong>{' '}
             {result.pay} 🪙
+            {result.found > 0 && (
+              <span style={S.bitNote}> ({result.found} of it picked up in there)</span>
+            )}
             {result.bitten > 0 && (
               <span style={S.bitNote}>
                 {' '}
@@ -409,7 +427,10 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
               way up you, and when there is nothing left in front of the bite, that is that.
             </li>
           </ul>
-          <p style={S.note}>Pellets make you longer. Longer makes you higher.</p>
+          <p style={S.note}>
+            Pellets make you longer. Longer makes you higher. Coins are money - run them over,
+            and they keep whether you get out alive or not. Anything that dies drops its purse.
+          </p>
         </div>
 
         <div style={S.stats}>
@@ -506,6 +527,7 @@ const S: Record<string, React.CSSProperties> = {
   track: { flex: 1, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.16)', overflow: 'hidden' },
   fill: { height: '100%', background: '#7ff2a8' },
   tally: { fontSize: 12, opacity: 0.8 },
+  pocket: { fontSize: 14, fontWeight: 700, color: '#f2c04a' },
   hudBottom: {
     position: 'absolute',
     bottom: 12,

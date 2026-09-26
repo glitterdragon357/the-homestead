@@ -77,7 +77,7 @@ export function IronManMinigame({ onExit }: MinigameProps) {
   saveRef.current = save
 
   const music = save.music !== false
-  useAmbientMusic(music, 0.055)
+  useAmbientMusic(music, 'drive', 0.4)
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const runRef = useRef<Run | null>(null)

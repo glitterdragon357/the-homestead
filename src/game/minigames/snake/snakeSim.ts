@@ -8,6 +8,9 @@
 
 import {
   BASE_LENGTH,
+  COIN_COUNT,
+  COIN_VALUE,
+  bountyFor,
   DASH_DRAIN,
   DASH_FLOOR,
   DASH_MAX,
@@ -29,6 +32,7 @@ import {
   meet,
   segmentsOf,
   speedOf,
+  type Coin,
   type MapSpec,
   type Pattern,
   type Pellet,
@@ -38,9 +42,12 @@ import {
 export interface World {
   snakes: Snake[]
   pellets: Pellet[]
+  coins: Coin[]
   t: number
   nextId: number
   map: MapSpec
+  /** The earliest the next rival may appear, so they trickle in. */
+  nextSpawnAt: number
 }
 
 /* ------------------------------------------------------------------ */
@@ -100,6 +107,15 @@ function clearOf(
   return { x: 120 + rng() * (map.w - 240), y: 120 + rng() * (map.h - 240) }
 }
 
+export function makeCoin(rng: () => number, map: MapSpec, x?: number, y?: number, value = COIN_VALUE): Coin {
+  return {
+    x: x ?? 60 + rng() * (map.w - 120),
+    y: y ?? 60 + rng() * (map.h - 120),
+    value,
+    spin: rng() * Math.PI * 2,
+  }
+}
+
 export function makePellet(
   rng: () => number,
   map: MapSpec,
@@ -131,7 +147,9 @@ export function makeWorld(map: MapSpec, skinKey: string, rng: () => number): Wor
   }
   const pellets: Pellet[] = []
   for (let i = 0; i < map.pellets; i++) pellets.push(makePellet(rng, map))
-  return { snakes, pellets, t: 0, nextId: map.rivals + 1, map }
+  const coins: Coin[] = []
+  for (let i = 0; i < COIN_COUNT; i++) coins.push(makeCoin(rng, map))
+  return { snakes, pellets, coins, t: 0, nextId: map.rivals + 1, map, nextSpawnAt: 0 }
 }
 
 /* ------------------------------------------------------------------ */
@@ -401,6 +419,37 @@ export function scatter(s: Snake, world: World, rng: () => number) {
   }
 }
 
+/**
+ * Coins the player has run over. Only the player: see the note on `Coin`.
+ */
+export function collect(world: World, rng: () => number): number {
+  const me = world.snakes.find((s) => s.player)
+  if (!me || me.dead) return 0
+  let got = 0
+  const reach = HEAD_R + 10 + girthOf(me.fed) * 0.35
+  for (let i = world.coins.length - 1; i >= 0; i--) {
+    const c = world.coins[i]
+    if (Math.abs(c.x - me.x) > reach || Math.abs(c.y - me.y) > reach) continue
+    if (Math.hypot(c.x - me.x, c.y - me.y) > reach) continue
+    got += c.value
+    world.coins.splice(i, 1)
+  }
+  while (world.coins.length < COIN_COUNT) world.coins.push(makeCoin(rng, world.map))
+  return got
+}
+
+/** A snake you ate drops what it was worth, right where it died. */
+export function dropBounty(at: Snake, world: World, rng: () => number) {
+  const total = bountyFor(at.fed)
+  const lumps = Math.max(2, Math.min(7, Math.round(total / 6)))
+  const each = Math.max(1, Math.round(total / lumps))
+  for (let i = 0; i < lumps; i++) {
+    world.coins.push(
+      makeCoin(rng, world.map, at.x + (rng() - 0.5) * 90, at.y + (rng() - 0.5) * 90, each)
+    )
+  }
+}
+
 /** Heads eating pellets. Returns how many the player got. */
 export function feed(world: World, rng: () => number): number {
   let playerGot = 0
@@ -416,30 +465,67 @@ export function feed(world: World, rng: () => number): number {
       world.pellets.splice(i, 1)
     }
   }
-  // Keep the field stocked.
+  // Keep the field stocked - and capped. Every death scatters food, and
+  // with rivals arriving for ever that only ever goes one way: a long
+  // run reached seven and a half thousand pellets on the floor, all of
+  // them walked over every frame by every snake.
   while (world.pellets.length < world.map.pellets) world.pellets.push(makePellet(rng, world.map))
+  const ceiling = Math.round(world.map.pellets * 2.2)
+  if (world.pellets.length > ceiling) {
+    // Drop the oldest, which are the ones furthest from whatever is
+    // happening now.
+    world.pellets.splice(0, world.pellets.length - ceiling)
+  }
   return playerGot
 }
 
 /** Rivals that died are replaced, so the arena never empties out. */
 /**
- * Replace the rivals that died.
+ * Keep the arena full, for ever.
  *
- * New rivals are sized against the player rather than against a fixed
- * range, so the arena keeps pace: there is always something below you
- * worth chasing and something above you worth avoiding, whether you are
- * level two or level twenty.
+ * There is no roster. Rivals are spawned to hold a population, that
+ * population grows a little as you do, and a dead one is replaced by a
+ * new one within a second or so - so however long you last there is
+ * always something else coming.
+ *
+ * New arrivals are sized in three bands rather than off one random
+ * curve, because the curve alone drifted: once the player was large,
+ * everything that spawned was large with it and there was nothing left
+ * to hunt. Most arrivals are small, some are a match, and a few are
+ * bigger than you. That holds whether you are level two or level thirty.
  */
 export function restock(world: World, now: number, rng: () => number) {
   const player = world.snakes.find((s) => s.player)
+  const mine = player?.fed ?? 0
+
+  // The arena gets busier as you grow, up to a point.
+  const want = world.map.rivals + Math.min(8, Math.floor(levelOf(mine) / 2))
   const alive = world.snakes.filter((s) => !s.dead && !s.player).length
-  const bar = Math.max(18, (player?.fed ?? 0) * 1.25)
-  for (let i = alive; i < world.map.rivals; i++) {
-    const fed = Math.round(Math.pow(rng(), 1.9) * bar)
+
+  // Trickle them in rather than refilling the whole field at once, so a
+  // big kill does not instantly summon a crowd on top of you.
+  if (alive < want && now >= world.nextSpawnAt) {
+    const roll = rng()
+    let fed: number
+    if (roll < 0.55) {
+      // Prey. Always present, however big you get.
+      fed = Math.round(rng() * Math.max(6, mine * 0.45))
+    } else if (roll < 0.85) {
+      // A match, near enough that it is a bounce either way.
+      fed = Math.round(Math.max(4, mine * (0.8 + rng() * 0.4)))
+    } else {
+      // Something that can hurt you.
+      fed = Math.round(Math.max(14, mine * (1.4 + rng() * 0.8)))
+    }
+
     const spot = clearOf(player, rng, world.map)
     const s = makeSnake(world.nextId++, spot.x, spot.y, fed, false, rng)
     s.safeUntil = now + SPAWN_GRACE
     world.snakes.push(s)
+    // Faster when the field is thin, slower when it is nearly full.
+    const short = want - alive
+    world.nextSpawnAt = now + Math.max(120, 900 - short * 110)
   }
+
   world.snakes = world.snakes.filter((s) => !s.dead || s.player)
 }

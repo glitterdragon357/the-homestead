@@ -345,6 +345,29 @@ export interface Pellet {
   hue: number
 }
 
+/**
+ * A coin lying in the arena.
+ *
+ * Kept apart from pellets on purpose: pellets are food and change what
+ * you are, coins are money and leave the arena with you. Only the player
+ * picks them up - a rival quietly pocketing your coins would read as the
+ * game cheating.
+ */
+export interface Coin {
+  x: number
+  y: number
+  value: number
+  spin: number
+}
+
+/** How many lie about at once, and what a loose one is worth. */
+export const COIN_COUNT = 26
+export const COIN_VALUE = 3
+/** Dropped when you eat a snake, on top of what it was carrying. */
+export function bountyFor(fed: number): number {
+  return 4 + Math.round(fed * 0.35)
+}
+
 /* ------------------------------------------------------------------ */
 /* Saving                                                              */
 /* ------------------------------------------------------------------ */
@@ -372,9 +395,12 @@ export const initialSnake: SnakeSave = {
   map: 'pit',
 }
 
-/** What a finished run was worth. */
+/**
+ * What a finished run was worth, on top of the coins picked up along the
+ * way. Surviving longer and eating more both show up here.
+ */
 export function payout(level: number, eaten: number, fed: number): number {
-  return Math.round(level * 9 + eaten * 14 + fed * 0.7)
+  return Math.round(level * 11 + eaten * 18 + fed * 0.8)
 }
 
 /**

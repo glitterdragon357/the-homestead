@@ -7,7 +7,7 @@
  * a snake reading as a string of dots.
  */
 
-import { HEAD_R, girthOf, levelOf, segmentsOf, type MapSpec, type Pellet, type Snake } from './snakeData'
+import { HEAD_R, girthOf, levelOf, segmentsOf, type Coin, type MapSpec, type Pellet, type Snake } from './snakeData'
 
 export const VIEW = { width: 960, height: 640 }
 
@@ -105,6 +105,45 @@ export function drawPellets(ctx: CanvasRenderingContext2D, cam: Camera, pellets:
     ctx.beginPath()
     ctx.arc(s.sx, s.sy, r * 0.62, 0, Math.PI * 2)
     ctx.fill()
+  }
+}
+
+/**
+ * Coins. Drawn as a disc that turns edge-on and back, because a flat
+ * gold circle among a hundred glowing pellets does not catch the eye,
+ * and a turning one does.
+ */
+export function drawCoins(ctx: CanvasRenderingContext2D, cam: Camera, coins: Coin[], t: number) {
+  const pad = 40
+  for (const c of coins) {
+    const s = toScreen(cam, c.x, c.y)
+    if (s.sx < -pad || s.sx > VIEW.width + pad || s.sy < -pad || s.sy > VIEW.height + pad) continue
+    const r = (7 + Math.min(5, c.value * 0.28)) * cam.zoom
+    const turn = Math.abs(Math.cos(t * 0.003 + c.spin))
+
+    const halo = ctx.createRadialGradient(s.sx, s.sy, 0, s.sx, s.sy, r * 2.8)
+    halo.addColorStop(0, 'rgba(255,214,120,0.5)')
+    halo.addColorStop(1, 'rgba(255,190,90,0)')
+    ctx.fillStyle = halo
+    ctx.beginPath()
+    ctx.arc(s.sx, s.sy, r * 2.8, 0, Math.PI * 2)
+    ctx.fill()
+
+    const face = ctx.createLinearGradient(s.sx, s.sy - r, s.sx, s.sy + r)
+    face.addColorStop(0, '#fff3c4')
+    face.addColorStop(0.5, '#f2c04a')
+    face.addColorStop(1, '#b8801f')
+    ctx.fillStyle = face
+    ctx.beginPath()
+    ctx.ellipse(s.sx, s.sy, Math.max(0.6, r * turn), r, 0, 0, Math.PI * 2)
+    ctx.fill()
+    if (turn > 0.45) {
+      ctx.strokeStyle = 'rgba(255,248,214,0.8)'
+      ctx.lineWidth = Math.max(0.6, 1.2 * cam.zoom)
+      ctx.beginPath()
+      ctx.ellipse(s.sx, s.sy, Math.max(0.4, r * turn * 0.55), r * 0.58, 0, 0, Math.PI * 2)
+      ctx.stroke()
+    }
   }
 }
 
