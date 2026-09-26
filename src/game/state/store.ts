@@ -15,6 +15,7 @@ import { initialHorses } from '../minigames/horses/horseData'
 import { initialCity } from '../minigames/city/cityData'
 import { initialPets } from '../minigames/pets/petData'
 import { initialIron } from '../minigames/ironman/ironData'
+import { initialSnake } from '../minigames/snake/snakeData'
 import { saveKeysOf, shiftTimestamps } from './gameClock'
 import { TRADE_IDS } from '../economy/trades'
 
@@ -123,11 +124,11 @@ export const useHomesteadStore = create<HomesteadState>()(
       tiles: buildStarterMap(),
       player: { x: 0, y: 0 },
       activeMinigameId: null,
-      progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet(), doctor: initialDoctor(), salon: initialSalon(), ocean: initialOcean(), spa: initialSpa(), horses: initialHorses(), city: initialCity(), pets: initialPets(), ironman: initialIron() },
+      progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet(), doctor: initialDoctor(), salon: initialSalon(), ocean: initialOcean(), spa: initialSpa(), horses: initialHorses(), city: initialCity(), pets: initialPets(), ironman: initialIron(), snakedash: { ...initialSnake } },
       purses: startingPurses(),
       // Everything starts frozen; the first game you open is the first to run.
       pausedAt: Object.fromEntries(
-        Object.keys({ ...initialProgress(), pottery: 0, lumber: 0, fruit: 0, vet: 0, doctor: 0, salon: 0, ocean: 0, spa: 0, horses: 0, city: 0, pets: 0, ironman: 0 }).map((k) => [
+        Object.keys({ ...initialProgress(), pottery: 0, lumber: 0, fruit: 0, vet: 0, doctor: 0, salon: 0, ocean: 0, spa: 0, horses: 0, city: 0, pets: 0, ironman: 0, snakedash: 0 }).map((k) => [
           k,
           Date.now(),
         ])
@@ -256,7 +257,7 @@ export const useHomesteadStore = create<HomesteadState>()(
 
       resetSave: () =>
         set({
-          progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet(), doctor: initialDoctor(), salon: initialSalon(), ocean: initialOcean(), spa: initialSpa(), horses: initialHorses(), city: initialCity(), pets: initialPets(), ironman: initialIron() },
+          progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet(), doctor: initialDoctor(), salon: initialSalon(), ocean: initialOcean(), spa: initialSpa(), horses: initialHorses(), city: initialCity(), pets: initialPets(), ironman: initialIron(), snakedash: { ...initialSnake } },
           player: { x: 0, y: 0 },
           purses: startingPurses(),
           inventory: {},
@@ -266,7 +267,7 @@ export const useHomesteadStore = create<HomesteadState>()(
     }),
     {
       name: SAVE_KEY,
-      version: 12,
+      version: 13,
       storage: createJSONStorage(() => localStorage),
       // Runs before rehydration, so this captures the previous session's
       // save rather than anything this one has written.
@@ -373,6 +374,10 @@ export const useHomesteadStore = create<HomesteadState>()(
 
         // v11 -> v12: the workshop opens. Additive, as ever.
         if (progress.ironman === undefined) progress.ironman = initialIron()
+
+        // v12 -> v13: Snake Dash. Additive - its own save, its own purse,
+        // and it reads nothing that came before it.
+        if (progress.snakedash === undefined) progress.snakedash = { ...initialSnake }
 
         return { ...state, progress, purses, pausedAt }
       },

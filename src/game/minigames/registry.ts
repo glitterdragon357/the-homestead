@@ -23,6 +23,7 @@ import { cityPending, type CitySave } from './city/cityData'
 import { horsesPending, type HorseSave } from './horses/horseData'
 import { SpaMinigame } from './spa/SpaMinigame'
 import { spaPending, type SpaSave } from './spa/spaData'
+import { SnakeDashMinigame } from './snake/SnakeDashMinigame'
 import { SalonMinigame } from './salon/SalonMinigame'
 import { salonPending, type SalonSave } from './salon/salonData'
 
@@ -172,6 +173,13 @@ export const MINIGAME_REGISTRY: Record<string, MinigameDefinition> = {
     description: 'Dive the shelf: hunt fish, or just go and see what is down there.',
     icon: '\u{1F93F}',
     component: OceanMinigame,
+  },
+  snakedash: {
+    id: 'snakedash',
+    name: 'Snake Dash',
+    description: 'Grow on pellets, eat anything below your level, dodge anything above it.',
+    icon: '\u{1F40D}',
+    component: SnakeDashMinigame,
   },
   pets: {
     id: 'pets',

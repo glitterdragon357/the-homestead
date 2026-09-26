@@ -43,6 +43,7 @@ const PLACEMENTS: Placement[] = [
   { x: 6, y: 4, type: 'grass', label: 'Wild Country', icon: '\u{1F40E}', minigameId: 'horses' },
   { x: 7, y: 1, type: 'building', label: 'The City', icon: '\u{1F3D9}\uFE0F', minigameId: 'city' },
   { x: 1, y: 3, type: 'building', label: 'The Workshop', icon: '\u{1F9BE}', minigameId: 'ironman' },
+  { x: 2, y: 1, type: 'grass', label: 'The Pit', icon: '\u{1F40D}', minigameId: 'snakedash' },
 ]
 
 /**

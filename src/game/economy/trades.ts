@@ -26,6 +26,7 @@ export const TRADES: Trade[] = [
   { id: 'ironman', label: 'Iron Man Life', icon: '🦾' },
   { id: 'spa', label: 'Day Spa', icon: '💅' },
   { id: 'horses', label: 'Wild Horses', icon: '🐎' },
+  { id: 'snakedash', label: 'Snake Dash', icon: '🐍' },
 ]
 
 export const TRADE_IDS = TRADES.map((t) => t.id)
