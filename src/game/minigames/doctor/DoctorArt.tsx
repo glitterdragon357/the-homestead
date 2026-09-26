@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { REMEDY_BY_ID } from './doctorData'
+import { ArtDefs, LIFT } from '../../art/Shading'
 
 /**
  * Patients and remedies, in the same 64x48 box as the other sets.
@@ -121,7 +122,8 @@ export function FaceArt({ face, size = 44 }: { face: number; size?: number }) {
       aria-label="patient"
       style={{ display: 'block', maxWidth: '100%', height: 'auto' }}
     >
-      {person(look)}
+      <ArtDefs />
+      <g filter={`url(#${LIFT})`}>{person(look)}</g>
     </svg>
   )
 }
@@ -138,7 +140,8 @@ export function RemedyArt({ id, size = 36 }: { id: string; size?: number }) {
       aria-label={r?.label ?? id}
       style={{ display: 'block', maxWidth: '100%', height: 'auto' }}
     >
-      {draw ? draw(r!.tint) : bottle('#9aa6b0')}
+      <ArtDefs />
+      <g filter={`url(#${LIFT})`}>{draw ? draw(r!.tint) : bottle('#9aa6b0')}</g>
     </svg>
   )
 }

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { FarmArt } from '../farm/FarmArt'
 import { TREATMENT_BY_ID } from './vetData'
+import { ArtDefs, LIFT } from '../../art/Shading'
 
 /**
  * Patients and medicines, in the same 64x48 box as the other sets.
@@ -143,7 +144,8 @@ export function PatientArt({ animal, size = 44 }: { animal: string; size?: numbe
       aria-label={animal}
       style={{ display: 'block', maxWidth: '100%', height: 'auto' }}
     >
-      {extra}
+      <ArtDefs />
+      <g filter={`url(#${LIFT})`}>{extra}</g>
     </svg>
   )
 }
@@ -160,7 +162,8 @@ export function TreatmentArt({ id, size = 38 }: { id: string; size?: number }) {
       aria-label={t?.label ?? id}
       style={{ display: 'block', maxWidth: '100%', height: 'auto' }}
     >
-      {draw ? draw(t!.tint) : bottle('#9aa6b0')}
+      <ArtDefs />
+      <g filter={`url(#${LIFT})`}>{draw ? draw(t!.tint) : bottle('#9aa6b0')}</g>
     </svg>
   )
 }

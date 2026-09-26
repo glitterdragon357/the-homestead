@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { ArtDefs, LIFT } from '../../art/Shading'
 
 /**
  * Clay and pottery art, drawn into the same 64x48 box as the farm and
@@ -148,7 +149,8 @@ export function PotteryArt({ subject, size = 40 }: { subject: string; size?: num
       aria-label={subject}
       style={{ display: 'block', maxWidth: '100%', height: 'auto' }}
     >
-      {ART[subject] ?? GENERIC}
+      <ArtDefs />
+      <g filter={`url(#${LIFT})`}>{ART[subject] ?? GENERIC}</g>
     </svg>
   )
 }

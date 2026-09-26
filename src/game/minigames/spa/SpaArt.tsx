@@ -6,6 +6,7 @@ import {
   SHADOWS,
   type Client,
 } from './spaData'
+import { ArtDefs, LIFT } from '../../art/Shading'
 
 /**
  * The client, drawn in layers.
@@ -489,8 +490,15 @@ export function Person({
       aria-label={`${client.name}, made over`}
       style={{ display: 'block', maxWidth: '100%', height: 'auto' }}
     >
-      <ellipse cx="60" cy={ANKLE_Y + 18} rx="34" ry="5" fill="#000" opacity={0.13} />
+      <ArtDefs />
+      {/* A soft patch on the floor rather than a hard oval. */}
+      <ellipse cx="60" cy={ANKLE_Y + 18} rx="38" ry="6.4" fill="#2b2318" opacity={0.08} />
+      <ellipse cx="60" cy={ANKLE_Y + 18} rx="26" ry="4.4" fill="#2b2318" opacity={0.1} />
+      <ellipse cx="60" cy={ANKLE_Y + 17.4} rx="14" ry="2.8" fill="#2b2318" opacity={0.12} />
 
+      {/* One filter over the whole figure, so every flat panel of her -
+          skin, hair, cloth - comes out with some roundness on it. */}
+      <g filter={`url(#${LIFT})`}>
       {hairBack(look.hair, dye.hex, dye.shade)}
 
       {/* legs */}
@@ -575,6 +583,7 @@ export function Person({
 
       {hairFront(look.hair, dye.hex, dye.shade, frizzy)}
       {extra && extra.key !== 'none' && extraArt(extra.art, extra.hex, extra.accent)}
+      </g>
     </svg>
   )
 }
@@ -674,7 +683,8 @@ export function SpaTool({ tool, size = 44 }: { tool: string; size?: number }) {
       aria-label={tool}
       style={{ display: 'block', maxWidth: '100%', height: 'auto' }}
     >
-      {TOOLS[tool] ?? TOOLS.facial}
+      <ArtDefs />
+      <g filter={`url(#${LIFT})`}>{TOOLS[tool] ?? TOOLS.facial}</g>
     </svg>
   )
 }

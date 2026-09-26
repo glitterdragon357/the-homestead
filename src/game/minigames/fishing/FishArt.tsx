@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { ArtDefs, LIFT } from '../../art/Shading'
 
 /**
  * Hand-drawn SVG portraits for each species, keyed by name.
@@ -321,7 +322,8 @@ export function FishArt({
       // the container has, which matters at the larger catch-screen size.
       style={{ display: 'block', maxWidth: '100%', height: 'auto' }}
     >
-      {ART[species] ?? GENERIC}
+      <ArtDefs />
+      <g filter={`url(#${LIFT})`}>{ART[species] ?? GENERIC}</g>
     </svg>
   )
 }

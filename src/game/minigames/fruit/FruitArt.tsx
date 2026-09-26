@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { RECIPES } from './fruitData'
+import { ArtDefs, LIFT } from '../../art/Shading'
 
 /**
  * Fruit and baking art, in the same 64x48 box as the other sets.
@@ -270,7 +271,8 @@ export function FruitArt({ subject, size = 40 }: { subject: string; size?: numbe
       aria-label={subject}
       style={{ display: 'block', maxWidth: '100%', height: 'auto' }}
     >
-      {ART[subject] ?? GENERIC}
+      <ArtDefs />
+      <g filter={`url(#${LIFT})`}>{ART[subject] ?? GENERIC}</g>
     </svg>
   )
 }

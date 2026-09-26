@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { ArtDefs, LIFT } from '../../art/Shading'
 
 /**
  * Salon pets and tools, in the same 64x48 box as the other sets.
@@ -171,7 +172,8 @@ export function SalonArt({ subject, size = 44 }: { subject: string; size?: numbe
       aria-label={subject}
       style={{ display: 'block', maxWidth: '100%', height: 'auto' }}
     >
-      {ART[subject] ?? PETS.dog}
+      <ArtDefs />
+      <g filter={`url(#${LIFT})`}>{ART[subject] ?? PETS.dog}</g>
     </svg>
   )
 }

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { LIFT } from '../../art/Shading'
 import type { SlotKey, SpeciesKey } from './petData'
 
 /**
@@ -47,8 +48,14 @@ export function PetBody({
       </>
     )
 
+  // A soft patch rather than a hard ellipse: an animal standing on a
+  // floor does not have a crisp oval under it.
   const shade = (
-    <ellipse cx="40" cy="55" rx="24" ry="3.4" fill="#000" opacity={0.14} />
+    <>
+      <ellipse cx="40" cy="55" rx="26" ry="4.2" fill="#2b2318" opacity={0.1} />
+      <ellipse cx="40" cy="55" rx="17" ry="2.8" fill="#2b2318" opacity={0.14} />
+      <ellipse cx="40" cy="54.6" rx="9" ry="1.8" fill="#2b2318" opacity={0.16} />
+    </>
   )
 
   const bodies: Record<SpeciesKey, ReactNode> = {
@@ -190,7 +197,8 @@ export function PetBody({
     ),
   }
 
-  return <>{bodies[species]}</>
+  // One filter over the whole animal rounds every flat fill in it.
+  return <g filter={`url(#${LIFT})`}>{bodies[species]}</g>
 }
 
 /* ------------------------------------------------------------------ */
@@ -198,6 +206,10 @@ export function PetBody({
 /* ------------------------------------------------------------------ */
 
 export function SlotArt({ slot, tier }: { slot: SlotKey; tier: number }) {
+  return <g filter={`url(#${LIFT})`}>{slotShape(slot, tier)}</g>
+}
+
+function slotShape(slot: SlotKey, tier: number) {
   const posh = tier >= 2
   const mid = tier >= 1
 

@@ -6,6 +6,7 @@ import { GiftRow } from '../../economy/GiftRow'
 import { panel } from '../farm/farmStyles'
 import { useAmbientMusic } from '../../audio/useAmbientMusic'
 import { PetBody, SlotArt } from './PetArt'
+import { ArtDefs } from '../../art/Shading'
 import {
   FLOOR,
   NEEDS,
@@ -229,6 +230,7 @@ export function PetCareMinigame({ onExit }: MinigameProps) {
       <GiftRow from="pets" />
 
       <svg viewBox={`0 0 ${ROOM.w} ${ROOM.h}`} style={S.room} role="img" aria-label="the pet room">
+        <ArtDefs />
         {/* wall and floor */}
         <rect x="0" y="0" width={ROOM.w} height="190" fill="#e0d5bd" />
         <rect x="0" y="0" width={ROOM.w} height="14" fill="#c9bb9c" />
@@ -393,6 +395,7 @@ export function PetCareMinigame({ onExit }: MinigameProps) {
             return (
               <div key={slot.key} style={S.buyRow}>
                 <svg viewBox="-40 -60 80 74" width="52" height="48" style={{ flexShrink: 0 }}>
+                  <ArtDefs />
                   <SlotArt slot={slot.key} tier={owned} />
                 </svg>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -434,6 +437,7 @@ export function PetCareMinigame({ onExit }: MinigameProps) {
             return (
               <div key={s.key} style={S.buyRow}>
                 <svg viewBox="0 0 80 62" width="58" height="45" style={{ flexShrink: 0 }}>
+                  <ArtDefs />
                   <PetBody species={s.key} coat={s.coats[0]} trim={s.trim} />
                 </svg>
                 <div style={{ flex: 1, minWidth: 0 }}>
