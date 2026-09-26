@@ -80,6 +80,25 @@ export function drawArena(ctx: CanvasRenderingContext2D, cam: Camera, map: MapSp
   // The wall, which you can slide along but not leave.
   const tl = toScreen(cam, 0, 0)
   const br = toScreen(cam, map.w, map.h)
+
+  // Black out everything beyond it.
+  //
+  // The narrow arenas are thinner than the viewport, so both walls are
+  // on screen at once and the grid used to carry straight on past them -
+  // which makes the playable ground impossible to pick out from the
+  // nothing beside it.
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'
+  if (tl.sx > 0) ctx.fillRect(0, 0, tl.sx, VIEW.height)
+  if (br.sx < VIEW.width) ctx.fillRect(br.sx, 0, VIEW.width - br.sx, VIEW.height)
+  if (tl.sy > 0) ctx.fillRect(Math.max(0, tl.sx), 0, Math.min(VIEW.width, br.sx) - Math.max(0, tl.sx), tl.sy)
+  if (br.sy < VIEW.height) {
+    ctx.fillRect(
+      Math.max(0, tl.sx),
+      br.sy,
+      Math.min(VIEW.width, br.sx) - Math.max(0, tl.sx),
+      VIEW.height - br.sy
+    )
+  }
   ctx.strokeStyle = `rgba(${map.wall},0.55)`
   ctx.lineWidth = 4
   ctx.strokeRect(tl.sx, tl.sy, br.sx - tl.sx, br.sy - tl.sy)
