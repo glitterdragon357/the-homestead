@@ -14,12 +14,13 @@ import {
   fillQuad,
   hash,
   horizonY,
+  mix,
   project as projectPoint,
   projectPoly,
   type Camera,
   type Projected,
 } from '../../engine/firstPerson'
-import { contactShadow } from '../../engine/polish'
+import { SUN, contactShadow, faceAO, litFill, textureFace } from '../../engine/polish'
 import {
   BLOCK,
   GROUND,
@@ -50,11 +51,14 @@ const VIEWPORT = { width: VIEW.width, height: VIEW.height }
 function face(
   ctx: CanvasRenderingContext2D,
   cam: Camera,
-  pts: [number, number, number][]
+  pts: [number, number, number][],
+  surface?: { texture?: number; ao?: number }
 ): boolean {
   const poly = projectPoly(cam, pts, VIEWPORT)
   if (!poly) return false
   fillPoly(ctx, poly)
+  if (surface?.texture) textureFace(ctx, poly, surface.texture)
+  if (surface?.ao) faceAO(ctx, poly, surface.ao)
   return true
 }
 
@@ -213,13 +217,13 @@ export function drawGround(ctx: CanvasRenderingContext2D, cam: Camera, sight: nu
         // Each corner sits at its own height, so the kerb is a real step
         // up from the road rather than a change of colour.
         ctx.globalAlpha = k
-        ctx.fillStyle = groundColour(x + G / 2, z + G / 2)
+        ctx.fillStyle = litFill(groundColour(x + G / 2, z + G / 2), 0, -1, 0, 0.62)
         face(ctx, cam, [
           [x, groundHeightAt(x, z), z],
           [x + G, groundHeightAt(x + G, z), z],
           [x + G, groundHeightAt(x + G, z + G), z + G],
           [x, groundHeightAt(x, z + G), z + G],
-        ])
+        ], { texture: d < 700 ? 0.16 : 0 })
 
         // A dashed white line down the middle of the tarmac.
         if (G <= 110 && isRoad(x + G / 2, z + G / 2) && d < 900) {
@@ -269,6 +273,62 @@ function shade(hex: string, mul: number): string {
  * One building. Only the faces turned towards you are drawn, so you can
  * fly right up to a wall and it stays a wall.
  */
+/**
+ * The patch of ground a building keeps the sun off.
+ *
+ * Both the footprint and the footprint cast out along the light lie flat
+ * on the ground, so the whole shadow is one ground polygon: take the
+ * convex hull of those eight points and fill it once. Filling it once is
+ * the point - drawing the pieces separately makes the overlaps darker
+ * and the shadow comes out looking like several shadows.
+ */
+export function drawBuildingShadow(
+  ctx: CanvasRenderingContext2D,
+  b: Building,
+  cam: Camera,
+  sight: number
+) {
+  const d = Math.hypot(b.x - cam.x, b.z - cam.z)
+  const k = clarity(d, sight)
+  if (k <= 0.03) return
+
+  // Where the top of the building lands when the light is done with it.
+  const reach = b.height / -SUN.y
+  const ox = -SUN.x * reach
+  const oz = -SUN.z * reach
+  const base: [number, number][] = [
+    [b.x - b.hw, b.z - b.hd],
+    [b.x + b.hw, b.z - b.hd],
+    [b.x + b.hw, b.z + b.hd],
+    [b.x - b.hw, b.z + b.hd],
+  ]
+  const pts = [...base, ...base.map(([x, z]) => [x + ox, z + oz] as [number, number])]
+
+  // Monotone chain, which is plenty for eight points.
+  pts.sort((p, q) => p[0] - q[0] || p[1] - q[1])
+  const cross = (o: number[], a: number[], c: number[]) =>
+    (a[0] - o[0]) * (c[1] - o[1]) - (a[1] - o[1]) * (c[0] - o[0])
+  const half = (list: [number, number][]) => {
+    const out: [number, number][] = []
+    for (const p of list) {
+      while (out.length >= 2 && cross(out[out.length - 2], out[out.length - 1], p) <= 0) out.pop()
+      out.push(p)
+    }
+    out.pop()
+    return out
+  }
+  const hull = [...half(pts), ...half([...pts].reverse())]
+  if (hull.length < 3) return
+
+  const poly = projectPoly(cam, hull.map(([x, z]) => [x, GROUND - 0.6, z] as [number, number, number]), VIEWPORT)
+  if (!poly) return
+  ctx.save()
+  ctx.globalAlpha = k * 0.3
+  ctx.fillStyle = '#131722'
+  fillPoly(ctx, poly)
+  ctx.restore()
+}
+
 export function drawBuilding(
   ctx: CanvasRenderingContext2D,
   b: Building,
@@ -297,24 +357,37 @@ export function drawBuilding(
     const mz = (z1 + z2) / 2
     if ((cam.x - mx) * nx + (cam.z - mz) * nz <= 0) continue
 
-    // Light from one bearing, so the corners of a block read.
-    const lit = 0.78 + 0.22 * (nx * 0.7 + nz * -0.7)
-    ctx.fillStyle = shade(b.wall, lit)
+    // Lambert against the one sun, so the corners of a block read and the
+    // side in shadow is lit by the sky rather than by nothing.
+    ctx.fillStyle = litFill(b.wall, nx, 0, nz)
     if (!face(ctx, cam, [
       [x1, GROUND, z1],
       [x2, GROUND, z2],
       [x2, top, z2],
       [x1, top, z1],
-    ])) continue
+    ], { texture: d < 2400 ? 0.24 : 0, ao: 0.42 })) continue
+    const lit = 0.46 + 0.54 * Math.max(0, nx * SUN.x + nz * SUN.z)
 
     // Windows, but only near enough to be worth the arithmetic.
     if (d < 1600) {
       const wide = Math.hypot(x2 - x1, z2 - z1)
       const cols = Math.max(1, Math.round(wide / 46))
       const rows = Math.max(1, Math.floor(b.height / 58))
-      ctx.fillStyle = shade(b.wall, lit * 0.52)
+      const dark = shade(b.wall, lit * 0.34)
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
+          // Glass, not painted-on rectangles: most panes hold a cold
+          // reflection of the sky, a few are lit from inside, and the
+          // ones facing the sun catch it flat on.
+          const g = hash(b.x * 0.07 + b.z * 0.11 + r * 3.7 + c * 1.9)
+          ctx.fillStyle =
+            g > 0.88
+              ? '#f6e0a6'
+              : g > 0.74
+                ? mix('#2d3a4a', '#8fb4d6', 0.15 + lit * 0.55)
+                : g > 0.3
+                  ? mix('#28313d', '#6d8fae', 0.1 + lit * 0.38)
+                  : dark
           const u0 = (c + 0.28) / cols
           const u1 = (c + 0.72) / cols
           const y0 = GROUND - 34 - (r + 0.66) * (b.height / rows)
@@ -334,13 +407,13 @@ export function drawBuilding(
   // Roof, if you are above it.
   if (cam.y < top) {
     {
-      ctx.fillStyle = b.roof
+      ctx.fillStyle = litFill(b.roof, 0, -1, 0)
       face(ctx, cam, [
         [b.x - b.hw, top, b.z - b.hd],
         [b.x + b.hw, top, b.z - b.hd],
         [b.x + b.hw, top, b.z + b.hd],
         [b.x - b.hw, top, b.z + b.hd],
-      ])
+      ], { texture: 0.2 })
       // A bit of clutter so roofs are not blank lids.
       const hv = hash(b.x * 0.01 + b.z * 0.013)
       if (hv > 0.4) {

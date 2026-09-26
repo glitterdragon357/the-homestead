@@ -5,6 +5,7 @@ import { clarity, forwardOf, type Camera } from '../../engine/firstPerson'
 import { finish } from '../../engine/polish'
 import {
   drawBuilding,
+  drawBuildingShadow,
   drawCar,
   drawFixture,
   drawGround,
@@ -644,6 +645,9 @@ export function CityMinigame({ onExit }: MinigameProps) {
         (a, b) =>
           Math.hypot(b.x - cam.x, b.z - cam.z) - Math.hypot(a.x - cam.x, a.z - cam.z)
       )
+      // Every shadow goes down before any building does, so a tower can
+      // lie across the street and across its neighbour's footings.
+      for (const b of near) drawBuildingShadow(ctx!, b, cam, sight)
       for (const b of near) drawBuilding(ctx!, b, cam, sight, true)
 
       // Traffic, sorted with the buildings so nothing sits on the wrong
