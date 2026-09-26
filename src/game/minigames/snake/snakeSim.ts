@@ -66,7 +66,7 @@ export function makeSnake(
   fed: number,
   player: boolean,
   rng: () => number,
-  look?: { hue: number; pattern: Pattern; accent?: number },
+  look?: { hue: number; pattern: Pattern; accent?: number; sat?: number },
   map?: MapSpec
 ): Snake {
   const heading = rng() * Math.PI * 2
@@ -100,6 +100,7 @@ export function makeSnake(
     safeUntil: 0,
     pattern: look?.pattern ?? 'bands',
     accent: look?.accent ?? 0,
+    sat: look?.sat ?? 72,
     unseen: 0,
     bittenUntil: 0,
   }
@@ -149,7 +150,7 @@ export function makePellet(
 export function makeWorld(map: MapSpec, skinKey: string, rng: () => number): World {
   const skin = SKIN_BY_KEY[skinKey] ?? SKIN_BY_KEY.grass
   const snakes: Snake[] = [
-    makeSnake(0, map.w / 2, map.h / 2, START_FED, true, rng, { hue: skin.hue, pattern: skin.pattern, accent: skin.accent }, map),
+    makeSnake(0, map.w / 2, map.h / 2, START_FED, true, rng, { hue: skin.hue, pattern: skin.pattern, accent: skin.accent, sat: skin.sat ?? 72 }, map),
   ]
   const hues = rivalHues(skin.hue)
   for (let i = 1; i <= map.rivals; i++) {

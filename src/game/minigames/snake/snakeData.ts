@@ -709,6 +709,16 @@ export type Pattern =
   | 'metal'
   | 'ghost'
   | 'vanish'
+  // Textures: motifs with a shape of their own, rather than a colour
+  // laid over the body.
+  | 'skull'
+  | 'bones'
+  | 'scales'
+  | 'spikes'
+  | 'eyes'
+  | 'stitch'
+  | 'chevron'
+  | 'web'
 
 export interface Skin {
   key: string
@@ -720,6 +730,11 @@ export interface Skin {
   pattern: Pattern
   /** Which set it belongs to, for grouping them in the picker. */
   family: string
+  /**
+   * How saturated the body is. Bone and stone need to sit near grey, and
+   * the default of 72 makes everything look like a sweet.
+   */
+  sat?: number
   /** Nothing to pay for the first few. */
   cost: number
 }
@@ -825,6 +840,26 @@ export const SKINS: Skin[] = [
   { key: 'obsidian', name: 'Obsidian', blurb: 'Glass, from a volcano.', hue: 348, accent: 164, pattern: 'solid', family: 'Regalia', cost: 600 },
   { key: 'opal', name: 'Opal', blurb: 'Every colour, depending.', hue: 354, accent: 196, pattern: 'shift', family: 'Regalia', cost: 600 },
   { key: 'regalia', name: 'Regalia', blurb: 'Worn by someone in charge.', hue: 2, accent: 24, pattern: 'metal', family: 'Regalia', cost: 800 },
+  /* -- Remains: bone, and what is left of things ------------------- */
+  { key: 'skull', name: 'Skull', blurb: 'A row of small skulls down the spine.', hue: 44, accent: 30, sat: 16, pattern: 'skull', family: 'Remains', cost: 260 },
+  { key: 'ribcage', name: 'Ribcage', blurb: 'Ribs, paired off all the way along.', hue: 40, accent: 28, sat: 14, pattern: 'bones', family: 'Remains', cost: 260 },
+  { key: 'ossuary', name: 'Ossuary', blurb: 'Stacked, sorted and stacked again.', hue: 36, accent: 24, sat: 20, pattern: 'skull', family: 'Remains', cost: 380 },
+  { key: 'marrow', name: 'Marrow', blurb: 'Pale outside, red where it counts.', hue: 20, accent: 2, sat: 34, pattern: 'bones', family: 'Remains', cost: 380 },
+  { key: 'fossil', name: 'Fossil', blurb: 'Cracked stone with something in it.', hue: 28, accent: 20, sat: 12, pattern: 'web', family: 'Remains', cost: 460 },
+  { key: 'wishbone', name: 'Wishbone', blurb: 'Someone got the long half.', hue: 48, accent: 36, sat: 22, pattern: 'bones', family: 'Remains', cost: 460 },
+  { key: 'carrion', name: 'Carrion', blurb: 'Stitched back together, badly.', hue: 96, accent: 8, sat: 26, pattern: 'stitch', family: 'Remains', cost: 560 },
+  { key: 'revenant', name: 'Revenant', blurb: 'Eyes down both sides. None of them blink.', hue: 268, accent: 52, sat: 40, pattern: 'eyes', family: 'Remains', cost: 680 },
+  { key: 'gravebound', name: 'Gravebound', blurb: 'Skulls, and earth worked into the gaps.', hue: 24, accent: 12, sat: 24, pattern: 'skull', family: 'Remains', cost: 680 },
+  { key: 'reliquary', name: 'Reliquary', blurb: 'Bone under gold plate.', hue: 46, accent: 44, sat: 54, pattern: 'scales', family: 'Remains', cost: 900 },
+
+  /* -- Hide: what animals are actually covered in ------------------- */
+  { key: 'scaled', name: 'Scaled', blurb: 'Proper overlapping scales, at last.', hue: 138, accent: 108, sat: 58, pattern: 'scales', family: 'Hide', cost: 200 },
+  { key: 'quilled', name: 'Quilled', blurb: 'Spines along the back. Think twice.', hue: 30, accent: 14, sat: 52, pattern: 'spikes', family: 'Hide', cost: 200 },
+  { key: 'chevron', name: 'Chevron', blurb: 'Arrows, all pointing where you are going.', hue: 210, accent: 190, sat: 60, pattern: 'chevron', family: 'Hide', cost: 320 },
+  { key: 'basilisk', name: 'Basilisk', blurb: 'Eyespots, to be looked at rather than looked for.', hue: 84, accent: 48, sat: 62, pattern: 'eyes', family: 'Hide', cost: 440 },
+  { key: 'patchwork', name: 'Patchwork', blurb: 'Several snakes, sewn into one.', hue: 300, accent: 40, sat: 54, pattern: 'stitch', family: 'Hide', cost: 440 },
+  { key: 'adder', name: 'Adder', blurb: 'The zigzag that means leave it alone.', hue: 54, accent: 20, sat: 48, pattern: 'chevron', family: 'Hide', cost: 560 },
+
   {
     key: 'nobody',
     name: 'Nobody',
@@ -838,7 +873,7 @@ export const SKINS: Skin[] = [
 ]
 
 /** The order families appear in the picker. */
-export const SKIN_FAMILIES = ['Oddity', 'Garden', 'Tidewater', 'Ember', 'Frost', 'Twilight', 'Sunbaked', 'Canopy', 'Forge', 'Voltage', 'Regalia']
+export const SKIN_FAMILIES = ['Oddity', 'Remains', 'Hide', 'Garden', 'Tidewater', 'Ember', 'Frost', 'Twilight', 'Sunbaked', 'Canopy', 'Forge', 'Voltage', 'Regalia']
 
 export const SKIN_BY_KEY: Record<string, Skin> = Object.fromEntries(SKINS.map((s) => [s.key, s]))
 
@@ -848,12 +883,17 @@ export const SKIN_BY_KEY: Record<string, Skin> = Object.fromEntries(SKINS.map((s
  * else in the arena can see you at all.
  *
  * What it costs is money: a toll every single time you take it out,
- * paid before the run starts. A run rarely earns that back, so it is
- * something you spend a stack of coins on deliberately rather than a
- * skin you settle into - which is the only reason permanent
- * invisibility can sit in the same game as everything else.
+ * paid before the run starts.
+ *
+ * The toll has to be larger than the run is worth, or it is not a cost
+ * at all - it is an investment, and there is no reason ever to play
+ * without it. Measured over natural runs to death, wearing this earns a
+ * median of about 2600 against a normal skin's 80, because almost
+ * nothing the arena does to you works if it cannot find you. So the
+ * toll sits above that: a typical run in it loses money, and only a
+ * genuinely long one comes out ahead.
  */
-export const VANISH_TOLL = 750
+export const VANISH_TOLL = 3000
 
 /** The ones that cost nothing, which everybody starts with. */
 export const FREE_SKINS = SKINS.filter((s) => s.cost === 0).map((s) => s.key)
@@ -1051,6 +1091,8 @@ export interface Snake {
   pattern: Pattern
   /** The marking colour, for the two-tone patterns. */
   accent: number
+  /** Body saturation, 0 for bone-grey through 80 for a bright coat. */
+  sat: number
   /** Set briefly when a bite lands, so the flinch is visible. */
   bittenUntil: number
   /** How unseen it is, 0 to 1. Only the vanishing skin moves this. */

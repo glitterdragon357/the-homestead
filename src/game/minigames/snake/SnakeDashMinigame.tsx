@@ -529,7 +529,8 @@ function SkinSwatch({ skin }: { skin: string }) {
   const k = SKIN_BY_KEY[skin]
   if (!k) return null
   const beads = [0, 1, 2, 3, 4]
-  const body = (h: number) => `hsl(${h},72%,54%)`
+  const sat = k.sat ?? 72
+  const body = (h: number) => `hsl(${h},${sat}%,54%)`
   return (
     <svg width="48" height="14" viewBox="0 0 48 14" aria-hidden style={{ flexShrink: 0 }}>
       {beads.map((i) => {
@@ -566,6 +567,63 @@ function SkinSwatch({ skin }: { skin: string }) {
             )}
             {k.pattern === 'metal' && (
               <ellipse cx={cx - 1} cy={5} rx="2.6" ry="1.2" fill="rgba(255,255,255,0.55)" />
+            )}
+            {k.pattern === 'skull' && i % 2 === 0 && (
+              <>
+                <circle cx={cx} cy={6} r={3} fill="#ece4d6" />
+                <circle cx={cx - 1.1} cy={5.6} r={0.8} fill="#201a16" />
+                <circle cx={cx + 1.1} cy={5.6} r={0.8} fill="#201a16" />
+              </>
+            )}
+            {k.pattern === 'bones' && (
+              <path
+                d={`M${cx} 4 q3 2 2.6 5 M${cx} 4 q-3 2 -2.6 5`}
+                stroke="#ece4d6"
+                strokeWidth="1.2"
+                fill="none"
+                strokeLinecap="round"
+              />
+            )}
+            {k.pattern === 'scales' && (
+              <path
+                d={`M${cx - 4} 8 a3 3 0 0 1 4 0 a3 3 0 0 1 4 0`}
+                stroke={`hsl(${k.accent},46%,34%)`}
+                strokeWidth="1.1"
+                fill="none"
+              />
+            )}
+            {k.pattern === 'spikes' && i % 2 === 0 && (
+              <path d={`M${cx - 2.6} 7 L${cx} 1 L${cx + 2.6} 7 Z`} fill={`hsl(${k.accent},34%,74%)`} />
+            )}
+            {k.pattern === 'eyes' && i % 2 === 0 && (
+              <>
+                <circle cx={cx} cy={7} r={2.4} fill={`hsl(${k.accent},62%,80%)`} />
+                <circle cx={cx} cy={7} r={1.1} fill="#151020" />
+              </>
+            )}
+            {k.pattern === 'stitch' && i % 2 === 0 && (
+              <path
+                d={`M${cx - 1.5} 4 h3 M${cx - 1.5} 7 h3 M${cx - 1.5} 10 h3`}
+                stroke="#ece4d6"
+                strokeWidth="0.9"
+              />
+            )}
+            {k.pattern === 'chevron' && i % 2 === 0 && (
+              <path
+                d={`M${cx - 3} 9 L${cx} 4.5 L${cx + 3} 9`}
+                stroke={`hsl(${k.accent},58%,34%)`}
+                strokeWidth="1.4"
+                fill="none"
+                strokeLinejoin="round"
+              />
+            )}
+            {k.pattern === 'web' && (
+              <path
+                d={`M${cx} 7 l3 -2.5 M${cx} 7 l-3 1.5 M${cx} 7 l1 3`}
+                stroke="#ddd6cb"
+                strokeWidth="0.7"
+                fill="none"
+              />
             )}
             {k.pattern === 'vanish' && (
               <circle cx={cx} cy={7} r={6} fill={body(hue)} opacity={i < 2 ? 1 : 0.16} />

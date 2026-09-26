@@ -228,10 +228,11 @@ export function drawSnake(
     const wasAlpha = ctx.globalAlpha
     if (s.pattern === 'ghost') ctx.globalAlpha = wasAlpha * 0.55
 
+    const sat = s.sat
     const body = ctx.createRadialGradient(p.sx - r * 0.4, p.sy - r * 0.45, r * 0.1, p.sx, p.sy, r)
-    body.addColorStop(0, hsl(hue, 78, light + 22))
-    body.addColorStop(0.55, hsl(hue, 72, light))
-    body.addColorStop(1, hsl(hue, 68, light - 26))
+    body.addColorStop(0, hsl(hue, sat + 6, light + 22))
+    body.addColorStop(0.55, hsl(hue, sat, light))
+    body.addColorStop(1, hsl(hue, sat - 4, light - 26))
     ctx.fillStyle = body
     ctx.beginPath()
     ctx.arc(p.sx, p.sy, r, 0, Math.PI * 2)
@@ -309,8 +310,114 @@ export function drawSnake(
           break
         }
         case 'ghost':
-          // Nothing added; the body itself is drawn faint. See below.
+        case 'vanish':
+          // Nothing added; the body itself is drawn faint. See above.
           break
+
+        /* --- textures: motifs with a shape of their own ------------- */
+        case 'skull': {
+          if (i % 3 !== 0) break
+          const k = r * 0.62
+          ctx.fillStyle = hsl(a, 24, 92, 0.92)
+          ctx.beginPath()
+          ctx.arc(p.sx, p.sy - k * 0.12, k * 0.62, Math.PI, 0)
+          ctx.rect(p.sx - k * 0.42, p.sy - k * 0.12, k * 0.84, k * 0.5)
+          ctx.fill()
+          ctx.fillStyle = 'rgba(20,16,14,0.9)'
+          for (const side of [-1, 1]) {
+            ctx.beginPath()
+            ctx.arc(p.sx + side * k * 0.26, p.sy - k * 0.14, k * 0.17, 0, Math.PI * 2)
+            ctx.fill()
+          }
+          ctx.fillRect(p.sx - k * 0.08, p.sy + k * 0.1, k * 0.16, k * 0.22)
+          break
+        }
+        case 'bones': {
+          if (i % 2 !== 0) break
+          // A pair of ribs, curving back from the spine.
+          ctx.strokeStyle = hsl(a, 22, 90, 0.85)
+          ctx.lineWidth = Math.max(0.8, r * 0.2)
+          ctx.lineCap = 'round'
+          for (const side of [-1, 1]) {
+            ctx.beginPath()
+            ctx.moveTo(p.sx, p.sy - r * 0.1)
+            ctx.quadraticCurveTo(p.sx + side * r * 0.5, p.sy, p.sx + side * r * 0.62, p.sy + r * 0.5)
+            ctx.stroke()
+          }
+          break
+        }
+        case 'scales': {
+          // Two staggered rows of overlapping arcs.
+          ctx.strokeStyle = hsl(a, 46, light - 22, 0.75)
+          ctx.lineWidth = Math.max(0.7, r * 0.16)
+          for (const side of [-1, 0, 1]) {
+            ctx.beginPath()
+            ctx.arc(p.sx + side * r * 0.5, p.sy + (i % 2 ? r * 0.18 : -r * 0.18), r * 0.4, Math.PI * 0.15, Math.PI * 0.85)
+            ctx.stroke()
+          }
+          break
+        }
+        case 'spikes': {
+          if (i % 2 !== 0) break
+          ctx.fillStyle = hsl(a, 34, light + 26, 0.9)
+          ctx.beginPath()
+          ctx.moveTo(p.sx - r * 0.34, p.sy)
+          ctx.lineTo(p.sx, p.sy - r * 1.22)
+          ctx.lineTo(p.sx + r * 0.34, p.sy)
+          ctx.closePath()
+          ctx.fill()
+          break
+        }
+        case 'eyes': {
+          if (i % 4 !== 0) break
+          for (const side of [-1, 1]) {
+            const ex = p.sx + side * r * 0.42
+            ctx.fillStyle = hsl(a, 62, 82, 0.95)
+            dot(ctx, ex, p.sy, r * 0.34)
+            ctx.fillStyle = 'rgba(16,12,20,0.92)'
+            dot(ctx, ex, p.sy, r * 0.17)
+          }
+          break
+        }
+        case 'stitch': {
+          // Seams across the body, with the thread showing.
+          if (i % 3 !== 0) break
+          ctx.strokeStyle = hsl(a, 30, 86, 0.8)
+          ctx.lineWidth = Math.max(0.6, r * 0.13)
+          for (let k = -2; k <= 2; k++) {
+            ctx.beginPath()
+            ctx.moveTo(p.sx - r * 0.2, p.sy + (k * r) / 3)
+            ctx.lineTo(p.sx + r * 0.2, p.sy + (k * r) / 3)
+            ctx.stroke()
+          }
+          break
+        }
+        case 'chevron': {
+          if (i % 2 !== 0) break
+          ctx.strokeStyle = hsl(a, 58, light - 24, 0.85)
+          ctx.lineWidth = Math.max(0.8, r * 0.24)
+          ctx.lineJoin = 'round'
+          ctx.beginPath()
+          ctx.moveTo(p.sx - r * 0.6, p.sy + r * 0.34)
+          ctx.lineTo(p.sx, p.sy - r * 0.3)
+          ctx.lineTo(p.sx + r * 0.6, p.sy + r * 0.34)
+          ctx.stroke()
+          break
+        }
+        case 'web': {
+          // Cracks, fixed per bead so they do not crawl.
+          const seed = (i * 2246822519) % 5
+          ctx.strokeStyle = hsl(a, 18, 84, 0.6)
+          ctx.lineWidth = Math.max(0.5, r * 0.1)
+          ctx.beginPath()
+          for (let k = 0; k < 3; k++) {
+            const ang = ((seed + k) / 3) * Math.PI * 2
+            ctx.moveTo(p.sx, p.sy)
+            ctx.lineTo(p.sx + Math.cos(ang) * r * 0.8, p.sy + Math.sin(ang) * r * 0.8)
+          }
+          ctx.stroke()
+          break
+        }
         default:
           break
       }
