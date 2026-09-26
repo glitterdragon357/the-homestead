@@ -516,6 +516,66 @@ export function drawSnake(
           ctx.stroke()
           break
         }
+        /* --- live textures: these move of their own accord --------- */
+        case 'fire': {
+          // Flame tongues leaning back along the body, each bead on its
+          // own phase so the fire crawls rather than pulsing as one.
+          const beat = t * 0.012 + i * 0.7
+          const lick = 0.65 + Math.sin(beat) * 0.35 + Math.sin(beat * 2.3) * 0.18
+          const tall = r * (1.1 + lick * 1.5)
+          const flame = ctx.createLinearGradient(p.sx, p.sy + r * 0.3, p.sx, p.sy - tall)
+          flame.addColorStop(0, hsl(hue, 95, 58, 0.85))
+          flame.addColorStop(0.45, hsl(hue + 18, 98, 66, 0.7))
+          flame.addColorStop(1, hsl(hue + 34, 100, 88, 0))
+          ctx.fillStyle = flame
+          ctx.beginPath()
+          ctx.moveTo(p.sx - r * 0.62, p.sy + r * 0.2)
+          ctx.quadraticCurveTo(p.sx - r * 0.3, p.sy - tall * 0.55, p.sx + Math.sin(beat) * r * 0.4, p.sy - tall)
+          ctx.quadraticCurveTo(p.sx + r * 0.42, p.sy - tall * 0.5, p.sx + r * 0.62, p.sy + r * 0.2)
+          ctx.closePath()
+          ctx.fill()
+          // An ember at the base, so the body itself looks hot.
+          ctx.fillStyle = hsl(hue + 10, 100, 70, 0.4 + lick * 0.3)
+          dot(ctx, p.sx, p.sy, r * 0.5)
+          break
+        }
+        case 'ice': {
+          // Spikes that grow and break off, on a slow cycle per bead.
+          const cycle = (t * 0.0012 + i * 0.13) % 1
+          const grow = cycle < 0.82 ? cycle / 0.82 : 1 - (cycle - 0.82) / 0.18
+          const len = r * (0.5 + grow * 1.5)
+          ctx.fillStyle = hsl(a, 62, 88, 0.5 + grow * 0.4)
+          for (const side of [-1, 1]) {
+            ctx.beginPath()
+            ctx.moveTo(p.sx + side * r * 0.2, p.sy - r * 0.2)
+            ctx.lineTo(p.sx + side * (r * 0.4 + len), p.sy - len * 0.5)
+            ctx.lineTo(p.sx + side * r * 0.3, p.sy + r * 0.35)
+            ctx.closePath()
+            ctx.fill()
+          }
+          // A cold sheen on the body underneath.
+          ctx.fillStyle = 'rgba(226,246,255,0.26)'
+          ctx.beginPath()
+          ctx.ellipse(p.sx - r * 0.2, p.sy - r * 0.3, r * 0.42, r * 0.2, -0.5, 0, Math.PI * 2)
+          ctx.fill()
+          break
+        }
+        case 'water': {
+          // Bands running down the body. The phase depends on the bead
+          // index, so the flow travels head to tail as time passes
+          // rather than every bead brightening together.
+          const flow = (i * 0.28 - t * 0.0045) % 1
+          const wave = (flow + 1) % 1
+          const bright = Math.pow(Math.sin(wave * Math.PI), 2)
+          ctx.fillStyle = hsl(a, 82, 62 + bright * 30, 0.2 + bright * 0.6)
+          dot(ctx, p.sx, p.sy, r * (0.5 + bright * 0.45))
+          ctx.strokeStyle = `rgba(232,250,255,${(0.16 + bright * 0.5).toFixed(2)})`
+          ctx.lineWidth = Math.max(0.6, r * 0.14)
+          ctx.beginPath()
+          ctx.arc(p.sx, p.sy, r * 0.74, Math.PI * 0.1, Math.PI * 0.9)
+          ctx.stroke()
+          break
+        }
         case 'web': {
           // Cracks, fixed per bead so they do not crawl.
           const seed = (i * 2246822519) % 5

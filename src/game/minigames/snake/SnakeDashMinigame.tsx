@@ -21,6 +21,10 @@ import {
   fedForLevel,
   initialSnake,
   VANISH_TOLL,
+  IDLE_STOP,
+  RUN_LIMIT,
+  winnerBonus,
+  type Ending,
   levelOf,
   payout,
   type SnakeSave,
@@ -74,8 +78,10 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
     bitten: number
     found: number
     nips: number
+    how: Ending
+    won: boolean
   }>(null)
-  const [hud, setHud] = useState({ level: 1, fed: 0, dash: 1, eaten: 0, rank: 1, of: 9, toNext: 0, bitten: 0, pocket: 0, vanish: false })
+  const [hud, setHud] = useState({ level: 1, fed: 0, dash: 1, eaten: 0, rank: 1, of: 9, toNext: 0, bitten: 0, pocket: 0, vanish: false, left: RUN_LIMIT, idle: IDLE_STOP })
 
   const [filter, setFilter] = useState<'all' | 'yours' | 'affordable'>('all')
   const [denied, setDenied] = useState<string | null>(null)
@@ -86,6 +92,9 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
   const bittenRef = useRef(0)
   const pocketRef = useRef(0)
   const nipsRef = useRef(0)
+  const activeRef = useRef(0)
+  const lastPointRef = useRef<{ x: number; y: number } | null>(null)
+  const endingRef = useRef<Ending>('eaten')
 
   /* ---------------------------------------------------------------- */
   /* A run                                                             */
@@ -114,6 +123,9 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
     bittenRef.current = 0
     pocketRef.current = 0
     nipsRef.current = 0
+    activeRef.current = performance.now()
+    lastPointRef.current = null
+    endingRef.current = 'eaten'
     aimRef.current = null
     dashRef.current = false
     setResult(null)
@@ -126,7 +138,15 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
     const me = w.snakes[0]
     const level = levelOf(me.fed)
     const found = pocketRef.current
-    const pay = payout(level, eatenRef.current, me.fed) + found
+    const how = endingRef.current
+
+    // Biggest in the arena when the clock ran out is a win. Being eaten
+    // or wandering off is not, however big you were.
+    const biggest = w.snakes.every((s) => s.dead || s.player || levelOf(s.fed) <= level)
+    const won = how === 'time' && biggest && !me.dead
+
+    const pay =
+      payout(level, eatenRef.current, me.fed) + found + (won ? winnerBonus(level) : 0)
     const bitten = bittenRef.current
     earn(pay)
     setSave((s) => ({
@@ -135,8 +155,9 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
       eaten: (s.eaten ?? 0) + eatenRef.current,
       best: Math.max(s.best ?? 0, me.fed),
       bestLevel: Math.max(s.bestLevel ?? 1, level),
+      wins: (s.wins ?? 0) + (won ? 1 : 0),
     }))
-    setResult({ pay, level, eaten: eatenRef.current, bitten, found, nips: nipsRef.current })
+    setResult({ pay, level, eaten: eatenRef.current, bitten, found, nips: nipsRef.current, how, won })
     setPlaying(false)
     worldRef.current = null
   }, [earn, setSave])
@@ -205,6 +226,21 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
       }
 
       if (me.dead) {
+        endingRef.current = 'eaten'
+        end()
+        return
+      }
+
+      // Left sitting? Hand the run back with everything still on it.
+      if (now - activeRef.current > IDLE_STOP) {
+        endingRef.current = 'idle'
+        end()
+        return
+      }
+
+      // Nothing runs longer than ten minutes.
+      if (now - w.startedAt > RUN_LIMIT) {
+        endingRef.current = 'time'
         end()
         return
       }
@@ -266,6 +302,8 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
           bitten: bittenRef.current,
           pocket: pocketRef.current,
           vanish: me.pattern === 'vanish',
+          left: Math.max(0, RUN_LIMIT - (now - w.startedAt)),
+          idle: Math.max(0, IDLE_STOP - (now - activeRef.current)),
         })
       }
     }
@@ -281,6 +319,19 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
   const aimAt = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const w = worldRef.current
     if (!w) return
+
+    // Only a pointer that actually went somewhere counts as playing.
+    //
+    // A cursor left sitting on the window still produces a stream of
+    // pointermove events - a thousand of them in twenty seconds, over an
+    // animating canvas - so treating any move as activity meant the idle
+    // rule could never fire. Resting your mouse on the page is not
+    // playing, and this is what tells the difference.
+    const was = lastPointRef.current
+    if (!was || Math.abs(e.clientX - was.x) > 2 || Math.abs(e.clientY - was.y) > 2) {
+      activeRef.current = performance.now()
+      lastPointRef.current = { x: e.clientX, y: e.clientY }
+    }
     const me = w.snakes[0]
     const box = e.currentTarget.getBoundingClientRect()
     const px = ((e.clientX - box.left) / box.width) * VIEW.width
@@ -302,17 +353,28 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
         e.preventDefault()
         dashRef.current = true
       }
+      activeRef.current = performance.now()
       if (e.key === 'Escape' && !worldRef.current) onExit()
     }
     const keyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') dashRef.current = false
     }
+    const back = () => {
+      // A hidden tab does not animate, so its clock never advances. What
+      // must not happen is the run ending the instant you look at it
+      // again because the timer had been sitting idle all along.
+      if (!document.hidden) activeRef.current = performance.now()
+    }
+    document.addEventListener('visibilitychange', back)
+    window.addEventListener('focus', back)
     window.addEventListener('pointerup', up)
     window.addEventListener('pointercancel', up)
     window.addEventListener('blur', up)
     window.addEventListener('keydown', key)
     window.addEventListener('keyup', keyUp)
     return () => {
+      document.removeEventListener('visibilitychange', back)
+      window.removeEventListener('focus', back)
       window.removeEventListener('pointerup', up)
       window.removeEventListener('pointercancel', up)
       window.removeEventListener('blur', up)
@@ -345,12 +407,21 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
               <div style={{ ...S.fill, width: `${Math.round(hud.toNext * 100)}%` }} />
             </div>
             {hud.vanish && <span style={S.vanish}>unseen</span>}
+            <span style={{ ...S.clock, color: hud.left < 60_000 ? '#ffb4a2' : 'rgba(234,242,255,0.65)' }}>
+              {Math.floor(hud.left / 60000)}:{String(Math.floor((hud.left % 60000) / 1000)).padStart(2, '0')}
+            </span>
             <span style={S.pocket}>🪙 {hud.pocket}</span>
             <span style={S.tally}>
               {hud.rank === 1 ? 'biggest in the arena' : `#${hud.rank} of ${hud.of}`}
               {hud.eaten > 0 ? ` · ${hud.eaten} eaten` : ''}
             </span>
           </div>
+
+          {hud.idle < 10_000 && (
+            <div style={S.idleWarn}>
+              Still there? Ending in {Math.ceil(hud.idle / 1000)} - your loot is safe either way.
+            </div>
+          )}
 
           <div style={S.hudBottom}>
             <span style={S.hint}>point where you want to go · hold to dash</span>
@@ -381,6 +452,13 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
 
         {result && (
           <div style={S.result}>
+            {result.won && <span style={S.won}>Winner</span>}
+            {result.how === 'time' && !result.won && (
+              <span style={S.ended}>Ten minutes up — something in there was bigger.</span>
+            )}
+            {result.how === 'idle' && (
+              <span style={S.ended}>You left it a while. Run handed back, loot and all.</span>
+            )}
             <strong>
               {result.eaten > 0
                 ? `Level ${result.level}, and ${result.eaten} snake${result.eaten === 1 ? '' : 's'} eaten.`
@@ -576,6 +654,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
           <span>Best level {save.bestLevel ?? 1}</span>
           <span>{save.eaten ?? 0} eaten all told</span>
           <span>{save.runs ?? 0} runs</span>
+          <span>{save.wins ?? 0} won on the clock</span>
         </div>
 
         {denied && <div style={S.denied}>{denied}</div>}
@@ -746,6 +825,33 @@ const S: Record<string, React.CSSProperties> = {
   fill: { height: '100%', background: '#7ff2a8' },
   tally: { fontSize: 12, opacity: 0.8 },
   pocket: { fontSize: 14, fontWeight: 700, color: '#f2c04a' },
+  clock: { fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums' },
+  idleWarn: {
+    position: 'absolute',
+    top: '42%',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    fontSize: 15,
+    fontWeight: 700,
+    color: '#ffe6b4',
+    textShadow: '0 2px 12px rgba(0,0,0,0.8)',
+    pointerEvents: 'none',
+    fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+  },
+  won: {
+    display: 'inline-block',
+    marginRight: 8,
+    padding: '2px 10px',
+    borderRadius: 20,
+    background: '#f2c04a',
+    color: '#2b2008',
+    fontWeight: 800,
+    fontSize: 12,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  ended: { display: 'block', fontSize: 12, opacity: 0.72, marginBottom: 4 },
   vanish: {
     fontSize: 12,
     fontWeight: 700,

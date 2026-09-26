@@ -719,6 +719,11 @@ export type Pattern =
   | 'stitch'
   | 'chevron'
   | 'web'
+  // Live textures: these move of their own accord rather than sitting
+  // still on the body.
+  | 'fire'
+  | 'ice'
+  | 'water'
 
 export interface Skin {
   key: string
@@ -852,6 +857,17 @@ export const SKINS: Skin[] = [
   { key: 'gravebound', name: 'Gravebound', blurb: 'Skulls, and earth worked into the gaps.', hue: 24, accent: 12, sat: 24, pattern: 'skull', family: 'Remains', cost: 680 },
   { key: 'reliquary', name: 'Reliquary', blurb: 'Bone under gold plate.', hue: 46, accent: 44, sat: 54, pattern: 'scales', family: 'Remains', cost: 900 },
 
+  /* -- Elements: textures that move on their own -------------------- */
+  { key: 'bonfire', name: 'Bonfire', blurb: 'Actually burning. The flames lean back as you go.', hue: 24, accent: 48, sat: 92, pattern: 'fire', family: 'Elements', cost: 520 },
+  { key: 'hearthlight', name: 'Hearthlight', blurb: 'Low and orange and warm all the way along.', hue: 16, accent: 40, sat: 84, pattern: 'fire', family: 'Elements', cost: 620 },
+  { key: 'brimstone', name: 'Brimstone', blurb: 'Green fire, which is worse.', hue: 96, accent: 66, sat: 90, pattern: 'fire', family: 'Elements', cost: 880 },
+  { key: 'hoarfrost', name: 'Hoarfrost', blurb: 'Spines of ice, growing and cracking off.', hue: 194, accent: 205, sat: 46, pattern: 'ice', family: 'Elements', cost: 520 },
+  { key: 'icicle', name: 'Icicle', blurb: 'Long cold spikes down both sides.', hue: 202, accent: 214, sat: 52, pattern: 'ice', family: 'Elements', cost: 620 },
+  { key: 'coldsnap', name: 'Coldsnap', blurb: 'The ice keeps reforming wherever it breaks.', hue: 186, accent: 198, sat: 58, pattern: 'ice', family: 'Elements', cost: 880 },
+  { key: 'riptide', name: 'Riptide', blurb: 'Water running along it, the wrong way.', hue: 198, accent: 186, sat: 70, pattern: 'water', family: 'Elements', cost: 520 },
+  { key: 'meltwater', name: 'Meltwater', blurb: 'Clear and cold and always moving.', hue: 182, accent: 168, sat: 62, pattern: 'water', family: 'Elements', cost: 620 },
+  { key: 'springhead', name: 'Springhead', blurb: 'It flows out of the head and down the body.', hue: 168, accent: 152, sat: 74, pattern: 'water', family: 'Elements', cost: 880 },
+
   /* -- Hide: what animals are actually covered in ------------------- */
   { key: 'scaled', name: 'Scaled', blurb: 'Proper overlapping scales, at last.', hue: 138, accent: 108, sat: 58, pattern: 'scales', family: 'Hide', cost: 200 },
   { key: 'quilled', name: 'Quilled', blurb: 'Spines along the back. Think twice.', hue: 30, accent: 14, sat: 52, pattern: 'spikes', family: 'Hide', cost: 200 },
@@ -873,7 +889,7 @@ export const SKINS: Skin[] = [
 ]
 
 /** The order families appear in the picker. */
-export const SKIN_FAMILIES = ['Oddity', 'Remains', 'Hide', 'Garden', 'Tidewater', 'Ember', 'Frost', 'Twilight', 'Sunbaked', 'Canopy', 'Forge', 'Voltage', 'Regalia']
+export const SKIN_FAMILIES = ['Oddity', 'Elements', 'Remains', 'Hide', 'Garden', 'Tidewater', 'Ember', 'Frost', 'Twilight', 'Sunbaked', 'Canopy', 'Forge', 'Voltage', 'Regalia']
 
 export const SKIN_BY_KEY: Record<string, Skin> = Object.fromEntries(SKINS.map((s) => [s.key, s]))
 
@@ -894,6 +910,34 @@ export const SKIN_BY_KEY: Record<string, Skin> = Object.fromEntries(SKINS.map((s
  * genuinely long one comes out ahead.
  */
 export const VANISH_TOLL = 3000
+
+/* ------------------------------------------------------------------ */
+/* When a run ends by itself                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Leave it sitting for half a minute and the run ends itself.
+ *
+ * Everything you picked up is yours - the coins off the floor, the
+ * payout for the level you reached, all of it. It is not a punishment,
+ * it is a tidy-up: a snake left parked in a busy arena is going to be
+ * eaten by something eventually, and losing a good run to having walked
+ * off for a cup of tea would be a rotten way to lose it.
+ */
+export const IDLE_STOP = 30_000
+
+/** Nothing runs longer than ten minutes. */
+export const RUN_LIMIT = 600_000
+
+/**
+ * Finishing on the clock as the biggest thing in the arena is a win, and
+ * pays like one.
+ */
+export function winnerBonus(level: number): number {
+  return 500 + level * 40
+}
+
+export type Ending = 'eaten' | 'idle' | 'time'
 
 /** The ones that cost nothing, which everybody starts with. */
 export const FREE_SKINS = SKINS.filter((s) => s.cost === 0).map((s) => s.key)
@@ -1345,6 +1389,8 @@ export interface SnakeSave {
   /** What is swimming along with you, and what has been bought. */
   companion: string | null
   companions: string[]
+  /** Runs finished on the clock as the biggest in the arena. */
+  wins: number
 }
 
 export const initialSnake: SnakeSave = {
@@ -1357,6 +1403,7 @@ export const initialSnake: SnakeSave = {
   map: 'pit',
   companion: null,
   companions: [],
+  wins: 0,
 }
 
 /**
@@ -1366,6 +1413,8 @@ export const initialSnake: SnakeSave = {
 export function payout(level: number, eaten: number, fed: number): number {
   return Math.round(level * 11 + eaten * 18 + fed * 0.8)
 }
+
+
 
 /**
  * Rival colours, chosen to leave a wide gap around the player's green.
