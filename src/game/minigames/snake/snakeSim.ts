@@ -26,7 +26,10 @@ import {
   START_FED,
   SPAWN_GRACE,
   TURN_RATE,
+  gainFrom,
   girthOf,
+  inArena,
+  wallGap,
   cutTo,
   levelOf,
   meet,
@@ -61,13 +64,21 @@ export function makeSnake(
   fed: number,
   player: boolean,
   rng: () => number,
-  look?: { hue: number; pattern: Pattern }
+  look?: { hue: number; pattern: Pattern },
+  map?: MapSpec
 ): Snake {
   const heading = rng() * Math.PI * 2
   const trail: { x: number; y: number }[] = []
+  const pad = wallGap(fed)
   // Lay the starting body out behind the head, or it unfolds from a dot.
+  //
+  // Every bead is held inside the arena. Laying it out unclamped put the
+  // whole body of anything spawning near a wall and facing away from it
+  // outside the barrier, where it could still be bitten and still bite.
   for (let i = 0; i < BASE_LENGTH + fed * GROW + 4; i++) {
-    trail.push({ x: x - Math.cos(heading) * i * SEGMENT, y: y - Math.sin(heading) * i * SEGMENT })
+    const bx = x - Math.cos(heading) * i * SEGMENT
+    const by = y - Math.sin(heading) * i * SEGMENT
+    trail.push(map ? inArena(bx, by, pad, map) : { x: bx, y: by })
   }
   return {
     id,
@@ -134,16 +145,13 @@ export function makePellet(
 export function makeWorld(map: MapSpec, skinKey: string, rng: () => number): World {
   const skin = SKIN_BY_KEY[skinKey] ?? SKIN_BY_KEY.grass
   const snakes: Snake[] = [
-    makeSnake(0, map.w / 2, map.h / 2, START_FED, true, rng, { hue: skin.hue, pattern: skin.pattern }),
+    makeSnake(0, map.w / 2, map.h / 2, START_FED, true, rng, { hue: skin.hue, pattern: skin.pattern }, map),
   ]
   for (let i = 1; i <= map.rivals; i++) {
-    // Mostly small, a few middling. Starting them spread over the whole
-    // range meant spawning at level 1 among level sevens, which is not a
-    // game - it is an ambush, and ninety-seven runs in a hundred ended
-    // inside thirteen seconds.
-    const fed = Math.round(Math.pow(rng(), 2.4) * 24)
+    // Everyone opens at level one, you included. Whatever is big later
+    // got that way in front of you.
     const spot = clearOf(snakes[0], rng, map)
-    snakes.push(makeSnake(i, spot.x, spot.y, fed, false, rng))
+    snakes.push(makeSnake(i, spot.x, spot.y, START_FED, false, rng, undefined, map))
   }
   const pellets: Pellet[] = []
   for (let i = 0; i < map.pellets; i++) pellets.push(makePellet(rng, map))
@@ -253,10 +261,11 @@ export function moveSnake(
   s.y += Math.sin(s.heading) * speed * dt
 
   // The wall stops you rather than killing you. Dying to scenery in a
-  // game about eating other snakes is a bad way to lose.
-  const r = girthOf(s.fed) * 0.5
-  s.x = Math.max(r, Math.min(map.w - r, s.x))
-  s.y = Math.max(r, Math.min(map.h - r, s.y))
+  // game about eating other snakes is a bad way to lose. Nothing crosses
+  // it, though - not the head, not a bounce, not a dash into the corner.
+  const held = inArena(s.x, s.y, wallGap(s.fed), map)
+  s.x = held.x
+  s.y = held.y
 
   // Record the trail, but only once we have actually gone somewhere.
   const head = s.trail[0]
@@ -354,11 +363,11 @@ export function collide(world: World, now: number): Outcome {
 
       if (verdict === 'eat') {
         b.dead = true
-        a.fed += Math.round(b.fed * 0.5) + 4
+        a.fed += gainFrom(b.fed, a.fed)
         out.eaten.push({ victim: b.id, by: a.id })
       } else if (verdict === 'die') {
         a.dead = true
-        b.fed += Math.round(a.fed * 0.5) + 4
+        b.fed += gainFrom(a.fed, b.fed)
         out.eaten.push({ victim: a.id, by: b.id })
       } else if (verdict === 'cut') {
         const beads = bodies.get(b.id)!
@@ -366,14 +375,14 @@ export function collide(world: World, now: number): Outcome {
         if (!left) {
           // Bitten so far forward there is nothing in front of it.
           b.dead = true
-          a.fed += Math.round(b.fed * 0.5) + 4
+          a.fed += gainFrom(b.fed, a.fed)
           out.eaten.push({ victim: b.id, by: a.id })
         } else {
           const lost = b.fed - left.fed
           b.fed = left.fed
-          // The biter gets a share of what came off, so working up a big
-          // snake from the tail is worth doing rather than merely tidy.
-          a.fed += Math.max(1, Math.round(lost * 0.4))
+          // The biter gets a share of what came off, on the same
+          // diminishing terms as a kill.
+          a.fed += Math.max(1, Math.round(gainFrom(lost, a.fed) * 0.8))
           // Shove the bitten one clear, so one bite is one bite and not
           // the same contact resolving again on the very next tick.
           bounce(b, a, now)
@@ -505,21 +514,12 @@ export function restock(world: World, now: number, rng: () => number) {
   // Trickle them in rather than refilling the whole field at once, so a
   // big kill does not instantly summon a crowd on top of you.
   if (alive < want && now >= world.nextSpawnAt) {
-    const roll = rng()
-    let fed: number
-    if (roll < 0.55) {
-      // Prey. Always present, however big you get.
-      fed = Math.round(rng() * Math.max(6, mine * 0.45))
-    } else if (roll < 0.85) {
-      // A match, near enough that it is a bounce either way.
-      fed = Math.round(Math.max(4, mine * (0.8 + rng() * 0.4)))
-    } else {
-      // Something that can hurt you.
-      fed = Math.round(Math.max(14, mine * (1.4 + rng() * 0.8)))
-    }
-
+    // Everything arrives at level one and earns whatever it gets from
+    // there. Nothing is handed a size - a big snake in here is one that
+    // has been alive a while and eaten well, which is the only reason it
+    // should ever be frightening.
     const spot = clearOf(player, rng, world.map)
-    const s = makeSnake(world.nextId++, spot.x, spot.y, fed, false, rng)
+    const s = makeSnake(world.nextId++, spot.x, spot.y, START_FED, false, rng, undefined, world.map)
     s.safeUntil = now + SPAWN_GRACE
     world.snakes.push(s)
     // Faster when the field is thin, slower when it is nearly full.

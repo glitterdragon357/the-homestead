@@ -155,8 +155,12 @@ export const HEAD_R = 11
 export const PELLET_COUNT = 260
 /** How many rivals share the arena with you. */
 export const RIVALS = 8
-/** You do not start as the smallest thing in the arena. */
-export const START_FED = 4
+/**
+ * What everything starts with. Zero, so `levelOf` reads 1 - every snake
+ * in the arena, player and rival alike, opens at level one and grows
+ * from there.
+ */
+export const START_FED = 0
 
 /** How long a snake is untouchable after it appears. */
 export const SPAWN_GRACE = 4000
@@ -196,6 +200,24 @@ export function speedOf(fed: number, dashing: boolean): number {
 /* ------------------------------------------------------------------ */
 /* Meeting another snake                                               */
 /* ------------------------------------------------------------------ */
+
+/**
+ * What eating something is actually worth.
+ *
+ * Half of what the victim had, but scaled by how big it was compared to
+ * you. A flat share compounds: with everything starting at level one,
+ * whichever snake got the first few kills snowballed to level sixty
+ * inside eighty seconds while the rest of the arena sat around eleven,
+ * and nothing could ever catch it.
+ *
+ * Diminishing returns fix it without changing any rule the player has to
+ * understand. Eating something your own size is worth what it always
+ * was; a giant hoovering up level ones gets almost nothing for it.
+ */
+export function gainFrom(victimFed: number, myFed: number): number {
+  const ratio = Math.min(1, victimFed / Math.max(1, myFed))
+  return Math.max(1, Math.round((victimFed * 0.5 + 4) * Math.max(0.16, ratio)))
+}
 
 export type Meeting = 'eat' | 'die' | 'cut' | 'bounce'
 
@@ -331,6 +353,30 @@ export function alongTrail(
 /** How fat a snake is drawn, which is also how fat it is to collide with. */
 export function girthOf(fed: number): number {
   return 9 + Math.min(11, Math.sqrt(fed) * 1.1)
+}
+
+/**
+ * How far a snake's centre must stay from the wall.
+ *
+ * The head is drawn a good deal bigger than the body is wide, so keeping
+ * the body clear is not enough - clamping on girth alone let heads sit
+ * half over the barrier.
+ */
+export function wallGap(fed: number): number {
+  return Math.max(girthOf(fed) * 0.5, HEAD_R * (0.85 + Math.min(0.75, fed / 220))) + 2
+}
+
+/** Hold a point inside the arena, whatever is being placed. */
+export function inArena(
+  x: number,
+  y: number,
+  pad: number,
+  map: { w: number; h: number }
+): { x: number; y: number } {
+  return {
+    x: Math.max(pad, Math.min(map.w - pad, x)),
+    y: Math.max(pad, Math.min(map.h - pad, y)),
+  }
 }
 
 /* ------------------------------------------------------------------ */
