@@ -277,7 +277,13 @@ export function IronManMinigame({ onExit }: MinigameProps) {
         drawReticle(ctx, run.aimX, run.aimY, reachOf(saveRef.current), now > run.nextShot)
       }
 
-      finishFrame(ctx, VIEW, { vignette: 0.52, grain: 0.05 })
+      finishFrame(ctx, VIEW, {
+        vignette: 0.52,
+        grain: 0.05,
+        bloom: 0.62,
+        bloomSpread: 7,
+        grade: { warm: '#ffc98a', cool: '#222c52', strength: 0.2 },
+      })
 
       if (now - hudAt > 100) {
         hudAt = now

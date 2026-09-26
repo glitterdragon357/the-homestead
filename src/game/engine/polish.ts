@@ -108,8 +108,19 @@ export function grain(ctx: CanvasRenderingContext2D, view: Frame, amount = 0.045
 export function finish(
   ctx: CanvasRenderingContext2D,
   view: Frame,
-  opts: { vignette?: number; grain?: number } = {}
+  opts: {
+    vignette?: number
+    grain?: number
+    bloom?: number
+    bloomSpread?: number
+    grade?: { warm?: string; cool?: string; strength?: number } | false
+  } = {}
 ) {
+  // Order matters. Bloom reads the frame, so it goes before anything that
+  // paints over the top of it; the grade sits on the graded-up result;
+  // the vignette and the grain are lens and film, and come last.
+  if (opts.bloom !== 0) bloom(ctx, view, opts.bloom ?? 0.42, opts.bloomSpread ?? 5)
+  if (opts.grade !== false) grade(ctx, view, opts.grade ?? {})
   vignette(ctx, view, opts.vignette ?? 0.42)
   grain(ctx, view, opts.grain ?? 0.045)
 }
@@ -283,5 +294,90 @@ export function faceAO(ctx: CanvasRenderingContext2D, poly: Poly, strength = 0.3
   g.addColorStop(1, 'rgba(18,20,26,0)')
   ctx.fillStyle = g
   ctx.fillRect(x0, y0, x1 - x0, y1 - y0)
+  ctx.restore()
+}
+
+/* ------------------------------------------------------------------ */
+/* Post                                                                */
+/* ------------------------------------------------------------------ */
+
+let buffer: HTMLCanvasElement | null = null
+
+/** A quarter-size scratch canvas, reused between frames. */
+function scratch(w: number, h: number): HTMLCanvasElement | null {
+  const sw = Math.max(1, Math.round(w / 4))
+  const sh = Math.max(1, Math.round(h / 4))
+  if (!buffer) buffer = document.createElement('canvas')
+  if (buffer.width !== sw || buffer.height !== sh) {
+    buffer.width = sw
+    buffer.height = sh
+  }
+  return buffer
+}
+
+/**
+ * Bloom: bright things bleeding into the air around them.
+ *
+ * Real cameras and real eyes both do this, and it is most of why a lit
+ * window at dusk looks lit rather than merely pale. There is no shader
+ * here to threshold with, but drawing an image onto itself with
+ * `multiply` squares it - darks collapse toward nothing, brights barely
+ * move - so two of those gives a serviceable highlight pass for the
+ * price of a couple of blits.
+ *
+ * Everything happens at quarter resolution, which is free blur as well
+ * as cheap, and the whole pass costs well under a millisecond.
+ */
+export function bloom(ctx: CanvasRenderingContext2D, view: Frame, amount = 0.5, spread = 5) {
+  const small = scratch(view.width, view.height)
+  if (!small) return
+  const sc = small.getContext('2d')
+  if (!sc) return
+
+  sc.globalCompositeOperation = 'source-over'
+  sc.globalAlpha = 1
+  sc.clearRect(0, 0, small.width, small.height)
+  sc.drawImage(ctx.canvas, 0, 0, small.width, small.height)
+
+  // Square it twice: what is left is the highlights.
+  sc.globalCompositeOperation = 'multiply'
+  sc.drawImage(small, 0, 0)
+  sc.drawImage(small, 0, 0)
+  sc.globalCompositeOperation = 'source-over'
+
+  ctx.save()
+  ctx.globalCompositeOperation = 'lighter'
+  ctx.globalAlpha = amount
+  ctx.filter = `blur(${spread}px)`
+  ctx.drawImage(small, 0, 0, view.width, view.height)
+  ctx.filter = 'none'
+  ctx.restore()
+}
+
+/**
+ * A grade over the finished frame.
+ *
+ * Split-toning - warm in the highlights, cool in the shadows - is the
+ * oldest trick in colour film and it is a large part of why a game still
+ * looks photographed after the lighting is right. `overlay` does both at
+ * once: it lifts what is already bright toward the warm colour and
+ * pushes what is already dark toward the cool one.
+ */
+export function grade(
+  ctx: CanvasRenderingContext2D,
+  view: Frame,
+  opts: { warm?: string; cool?: string; strength?: number } = {}
+) {
+  const warm = opts.warm ?? '#ffd9a0'
+  const cool = opts.cool ?? '#2a3a5c'
+  const strength = opts.strength ?? 0.16
+  const g = ctx.createLinearGradient(0, 0, 0, view.height)
+  g.addColorStop(0, warm)
+  g.addColorStop(1, cool)
+  ctx.save()
+  ctx.globalCompositeOperation = 'overlay'
+  ctx.globalAlpha = strength
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, view.width, view.height)
   ctx.restore()
 }

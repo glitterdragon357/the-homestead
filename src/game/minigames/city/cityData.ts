@@ -100,10 +100,25 @@ export interface Building {
   doorX: number
   doorZ: number
   key: string
+  /**
+   * Setbacks: above `at` (a fraction of the height) the footprint shrinks
+   * to `hw`/`hd` of the one below.
+   *
+   * The base is always the widest part, so walking into a building still
+   * only has to test the ground footprint - collision does not need to
+   * know any of this.
+   */
+  tiers: { at: number; hw: number; hd: number }[]
+  /** A curtain wall of glass instead of punched windows. */
+  glass: boolean
+  /** A water tower on the roof, the way half of Manhattan has. */
+  tank: boolean
 }
 
 const WALLS = ['#9a8c7a', '#8a7f74', '#a89478', '#7f8a90', '#8f7d72', '#a09a8c', '#6f7a82']
 const ROOFS = ['#4a4a52', '#5a4a42', '#3f4a52', '#54504a']
+/** Tints for the glass towers - the frame colour, not the reflection. */
+const GLASS = ['#3d4c5c', '#34424f', '#44525e', '#2f3f4e']
 
 /** The buildings on one block, worked out from where the block is. */
 export function buildingsIn(bx: number, bz: number): Building[] {
@@ -129,19 +144,40 @@ export function buildingsIn(bx: number, bz: number): Building[] {
       const height = 180 + Math.pow(tall, 2.4) * 900
       const which = hash2(cx, cz, 17)
       const interior = which > 0.55 ? INTERIOR_KEYS[Math.floor(which * 997) % INTERIOR_KEYS.length] : null
+      // Massing. A short building is a box; anything with real height
+      // steps back as it rises, which is what the zoning that shaped
+      // Manhattan actually required and why that skyline looks the way
+      // it does. Very tall ones step twice.
+      const shape = hash2(cx, cz, 29)
+      const tiers: { at: number; hw: number; hd: number }[] = []
+      if (height > 430 && shape > 0.3) {
+        tiers.push({ at: 0.5 + shape * 0.16, hw: 0.76, hd: 0.78 })
+        if (height > 760 && shape > 0.62) {
+          tiers.push({ at: 0.82, hw: 0.56, hd: 0.58 })
+        }
+      }
+
+      const glass = height > 560 && hash2(cx, cz, 31) > 0.55
+
       out.push({
         x: cx,
         z: cz,
         hw,
         hd,
         height,
-        wall: WALLS[Math.floor(hash2(cx, cz, 19) * WALLS.length)],
+        wall: glass
+          ? GLASS[Math.floor(hash2(cx, cz, 37) * GLASS.length)]
+          : WALLS[Math.floor(hash2(cx, cz, 19) * WALLS.length)],
         roof: ROOFS[Math.floor(hash2(cx, cz, 23) * ROOFS.length)],
         interior,
         // The door faces the nearest street.
         doorX: cx,
         doorZ: cz - hd - 6,
         key: `${bx}:${bz}:${i}:${j}`,
+        tiers,
+        glass,
+        // Low and mid-rise brick, not the glass towers.
+        tank: !glass && height < 620 && hash2(cx, cz, 41) > 0.45,
       })
     }
   }

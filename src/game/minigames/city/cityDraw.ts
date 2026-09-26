@@ -328,6 +328,218 @@ export function drawBuildingShadow(
   ctx.restore()
 }
 
+/**
+ * One box of a building: four walls, the ones facing you, with whatever
+ * skin the building wears.
+ *
+ * Split out because a building is no longer a single box - it steps back
+ * as it rises, and each step is another one of these.
+ */
+function drawStorey(
+  ctx: CanvasRenderingContext2D,
+  b: Building,
+  cam: Camera,
+  hw: number,
+  hd: number,
+  yBottom: number,
+  yTop: number,
+  d: number,
+  skyTop: string,
+  skyLow: string
+) {
+  const walls: [number, number, number, number, number, number][] = [
+    [b.x - hw, b.z - hd, b.x + hw, b.z - hd, 0, -1],
+    [b.x + hw, b.z + hd, b.x - hw, b.z + hd, 0, 1],
+    [b.x - hw, b.z + hd, b.x - hw, b.z - hd, -1, 0],
+    [b.x + hw, b.z - hd, b.x + hw, b.z + hd, 1, 0],
+  ]
+
+  for (const [x1, z1, x2, z2, nx, nz] of walls) {
+    // Facing away from you? Then it is the far side and you cannot see it.
+    const mx = (x1 + x2) / 2
+    const mz = (z1 + z2) / 2
+    if ((cam.x - mx) * nx + (cam.z - mz) * nz <= 0) continue
+    const lit = Math.max(0, nx * SUN.x + nz * SUN.z)
+
+    const poly = projectPoly(cam, [
+      [x1, yBottom, z1],
+      [x2, yBottom, z2],
+      [x2, yTop, z2],
+      [x1, yTop, z1],
+    ], VIEWPORT)
+    if (!poly) continue
+
+    if (b.glass) {
+      // A curtain wall does not have a colour of its own worth speaking
+      // of - it has the sky in it. Bright where it takes the top of the
+      // sky, darker lower down where it is reflecting the street, and
+      // brighter still on the face the sun is actually on.
+      const yHi = Math.min(...poly.map((q) => q.sy))
+      const yLo = Math.max(...poly.map((q) => q.sy))
+      const sheet = ctx.createLinearGradient(0, yHi, 0, yLo)
+      sheet.addColorStop(0, mix(skyTop, '#ffffff', lit * 0.34))
+      sheet.addColorStop(0.42, mix(skyLow, b.wall, 0.5))
+      sheet.addColorStop(1, mix(b.wall, '#0b1119', 0.62))
+      ctx.fillStyle = sheet
+      fillPoly(ctx, poly)
+      faceAO(ctx, poly, 0.3)
+    } else {
+      ctx.fillStyle = litFill(b.wall, nx, 0, nz)
+      fillPoly(ctx, poly)
+      faceAO(ctx, poly, 0.42)
+    }
+
+    if (d > 2000) continue
+
+    const wide = Math.hypot(x2 - x1, z2 - z1)
+    const rows = Math.max(1, Math.floor((yBottom - yTop) / 58))
+
+    if (b.glass) {
+      // Mullions: the grid of the frame, and a lit floor here and there.
+      ctx.fillStyle = 'rgba(16,22,30,0.34)'
+      for (let r = 1; r < rows; r++) {
+        const y = yBottom - (r * (yBottom - yTop)) / rows
+        face(ctx, cam, [
+          [x1, y, z1],
+          [x2, y, z2],
+          [x2, y + 3, z2],
+          [x1, y + 3, z1],
+        ])
+      }
+      const cols = Math.max(1, Math.round(wide / 40))
+      for (let r = 0; r < rows; r++) {
+        if (hash(b.x * 0.09 + b.z * 0.13 + r * 5.3) < 0.82) continue
+        const y0 = yBottom - (r + 0.85) * ((yBottom - yTop) / rows)
+        const y1 = yBottom - (r + 0.2) * ((yBottom - yTop) / rows)
+        const c0 = Math.floor(hash(b.x + r * 3.1) * cols)
+        const u0 = c0 / cols
+        const u1 = Math.min(1, (c0 + 1 + Math.floor(hash(b.z + r) * 2)) / cols)
+        ctx.fillStyle = 'rgba(255,214,150,0.5)'
+        face(ctx, cam, [
+          [x1 + (x2 - x1) * u0, y0, z1 + (z2 - z1) * u0],
+          [x1 + (x2 - x1) * u1, y0, z1 + (z2 - z1) * u1],
+          [x1 + (x2 - x1) * u1, y1, z1 + (z2 - z1) * u1],
+          [x1 + (x2 - x1) * u0, y1, z1 + (z2 - z1) * u0],
+        ])
+      }
+      continue
+    }
+
+    // Punched windows in a masonry wall.
+    const cols = Math.max(1, Math.round(wide / 46))
+    const dark = shade(b.wall, (0.46 + 0.54 * lit) * 0.34)
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        // Glass, not painted-on rectangles: most panes hold a cold
+        // reflection of the sky, a few are lit from inside, and the
+        // ones facing the sun catch it flat on.
+        const g = hash(b.x * 0.07 + b.z * 0.11 + r * 3.7 + c * 1.9 + yTop * 0.003)
+        ctx.fillStyle =
+          g > 0.88
+            ? '#f6e0a6'
+            : g > 0.74
+              ? mix('#2d3a4a', '#8fb4d6', 0.15 + lit * 0.55)
+              : g > 0.3
+                ? mix('#28313d', '#6d8fae', 0.1 + lit * 0.38)
+                : dark
+        const u0 = (c + 0.28) / cols
+        const u1 = (c + 0.72) / cols
+        const y0 = yBottom - 34 - (r + 0.66) * ((yBottom - yTop) / rows)
+        const y1 = yBottom - 34 - (r + 0.2) * ((yBottom - yTop) / rows)
+        if (y1 > yBottom - 20) continue
+        face(ctx, cam, [
+          [x1 + (x2 - x1) * u0, y0, z1 + (z2 - z1) * u0],
+          [x1 + (x2 - x1) * u1, y0, z1 + (z2 - z1) * u1],
+          [x1 + (x2 - x1) * u1, y1, z1 + (z2 - z1) * u1],
+          [x1 + (x2 - x1) * u0, y1, z1 + (z2 - z1) * u0],
+        ])
+      }
+    }
+  }
+}
+
+/** The lip that sits proud of the wall where one tier stops. */
+function drawCornice(
+  ctx: CanvasRenderingContext2D,
+  b: Building,
+  cam: Camera,
+  hw: number,
+  hd: number,
+  y: number
+) {
+  const over = 7
+  ctx.fillStyle = litFill(b.roof, 0, -1, 0, 0.55)
+  face(ctx, cam, [
+    [b.x - hw - over, y, b.z - hd - over],
+    [b.x + hw + over, y, b.z - hd - over],
+    [b.x + hw + over, y, b.z + hd + over],
+    [b.x - hw - over, y, b.z + hd + over],
+  ])
+  // The underside of the lip, which is the bit that reads as a ledge.
+  ctx.fillStyle = litFill(b.roof, 0, 0, -1, 0.3)
+  face(ctx, cam, [
+    [b.x - hw - over, y, b.z - hd - over],
+    [b.x + hw + over, y, b.z - hd - over],
+    [b.x + hw + over, y + 9, b.z - hd - over],
+    [b.x - hw - over, y + 9, b.z - hd - over],
+  ])
+}
+
+/** A timber water tank on legs. There is one of these on every other roof. */
+function drawTank(
+  ctx: CanvasRenderingContext2D,
+  b: Building,
+  cam: Camera,
+  hw: number,
+  hd: number,
+  top: number
+) {
+  const tx = b.x + hw * 0.35
+  const tz = b.z - hd * 0.3
+  const r = Math.min(26, hw * 0.34)
+  const legs = 22
+  const body = 46
+
+  ctx.strokeStyle = 'rgba(48,40,34,0.9)'
+  for (const [ox, oz] of [[-r, -r], [r, -r], [-r, r], [r, r]] as const) {
+    const foot = project(cam, tx + ox * 0.7, top, tz + oz * 0.7)
+    const head = project(cam, tx + ox * 0.7, top - legs, tz + oz * 0.7)
+    if (!foot || !head) continue
+    ctx.lineWidth = Math.max(0.8, 4 * foot.scale)
+    ctx.beginPath()
+    ctx.moveTo(foot.sx, foot.sy)
+    ctx.lineTo(head.sx, head.sy)
+    ctx.stroke()
+  }
+
+  // Four staves round the tank, so it turns with you.
+  for (const [p, q, nx, nz] of [
+    [[-r, -r], [r, -r], 0, -1],
+    [[r, r], [-r, r], 0, 1],
+    [[-r, r], [-r, -r], -1, 0],
+    [[r, -r], [r, r], 1, 0],
+  ] as [number[], number[], number, number][]) {
+    const mx = tx + (p[0] + q[0]) / 2
+    const mz = tz + (p[1] + q[1]) / 2
+    if ((cam.x - mx) * nx + (cam.z - mz) * nz <= 0) continue
+    ctx.fillStyle = litFill('#7a5a3c', nx, 0, nz, 0.5)
+    face(ctx, cam, [
+      [tx + p[0], top - legs, tz + p[1]],
+      [tx + q[0], top - legs, tz + q[1]],
+      [tx + q[0], top - legs - body, tz + q[1]],
+      [tx + p[0], top - legs - body, tz + p[1]],
+    ])
+  }
+  // The conical lid.
+  ctx.fillStyle = litFill('#4a3a2c', 0, -1, 0, 0.55)
+  face(ctx, cam, [
+    [tx - r, top - legs - body, tz - r],
+    [tx + r, top - legs - body, tz - r],
+    [tx + r, top - legs - body, tz + r],
+    [tx - r, top - legs - body, tz + r],
+  ])
+}
+
 export function drawBuilding(
   ctx: CanvasRenderingContext2D,
   b: Building,
@@ -335,100 +547,84 @@ export function drawBuilding(
   sight: number,
   showDoor: boolean
 ) {
-  const top = GROUND - b.height
   const d = Math.hypot(b.x - cam.x, b.z - cam.z)
   const k = clarity(d, sight)
   if (k <= 0.02) return
 
-  // The four walls, as [corner a, corner b, which way it faces].
-  const walls: [number, number, number, number, number, number][] = [
-    [b.x - b.hw, b.z - b.hd, b.x + b.hw, b.z - b.hd, 0, -1],
-    [b.x + b.hw, b.z + b.hd, b.x - b.hw, b.z + b.hd, 0, 1],
-    [b.x - b.hw, b.z + b.hd, b.x - b.hw, b.z - b.hd, -1, 0],
-    [b.x + b.hw, b.z - b.hd, b.x + b.hw, b.z + b.hd, 1, 0],
-  ]
-
   ctx.save()
   ctx.globalAlpha = k
-  for (const [x1, z1, x2, z2, nx, nz] of walls) {
-    // Facing away from you? Then it is the far side and you cannot see it.
-    const mx = (x1 + x2) / 2
-    const mz = (z1 + z2) / 2
-    if ((cam.x - mx) * nx + (cam.z - mz) * nz <= 0) continue
 
-    // Lambert against the one sun, so the corners of a block read and the
-    // side in shadow is lit by the sky rather than by nothing.
-    ctx.fillStyle = litFill(b.wall, nx, 0, nz)
-    if (!face(ctx, cam, [
-      [x1, GROUND, z1],
-      [x2, GROUND, z2],
-      [x2, top, z2],
-      [x1, top, z1],
-    ], { ao: 0.42 })) continue
-    const lit = 0.46 + 0.54 * Math.max(0, nx * SUN.x + nz * SUN.z)
+  // The sky this building is standing in, for anything reflective.
+  // Deliberately deeper than the actual sky. Glass reflects a fraction
+  // of what hits it, not all of it, and a curtain wall the same value as
+  // the sky behind it stops reading as a building at all.
+  const skyTop = '#4d7aa8'
+  const skyLow = '#8aa6b4'
 
-    // Windows, but only near enough to be worth the arithmetic.
-    if (d < 1600) {
-      const wide = Math.hypot(x2 - x1, z2 - z1)
-      const cols = Math.max(1, Math.round(wide / 46))
-      const rows = Math.max(1, Math.floor(b.height / 58))
-      const dark = shade(b.wall, lit * 0.34)
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          // Glass, not painted-on rectangles: most panes hold a cold
-          // reflection of the sky, a few are lit from inside, and the
-          // ones facing the sun catch it flat on.
-          const g = hash(b.x * 0.07 + b.z * 0.11 + r * 3.7 + c * 1.9)
-          ctx.fillStyle =
-            g > 0.88
-              ? '#f6e0a6'
-              : g > 0.74
-                ? mix('#2d3a4a', '#8fb4d6', 0.15 + lit * 0.55)
-                : g > 0.3
-                  ? mix('#28313d', '#6d8fae', 0.1 + lit * 0.38)
-                  : dark
-          const u0 = (c + 0.28) / cols
-          const u1 = (c + 0.72) / cols
-          const y0 = GROUND - 34 - (r + 0.66) * (b.height / rows)
-          const y1 = GROUND - 34 - (r + 0.2) * (b.height / rows)
-          if (y1 > GROUND - 20) continue
-          face(ctx, cam, [
-            [x1 + (x2 - x1) * u0, y0, z1 + (z2 - z1) * u0],
-            [x1 + (x2 - x1) * u1, y0, z1 + (z2 - z1) * u1],
-            [x1 + (x2 - x1) * u1, y1, z1 + (z2 - z1) * u1],
-            [x1 + (x2 - x1) * u0, y1, z1 + (z2 - z1) * u0],
-          ])
-        }
-      }
+  // Bottom tier up: each step is narrower than the one under it.
+  let hw = b.hw
+  let hd = b.hd
+  let fromFrac = 0
+  const steps = [...b.tiers, { at: 1, hw: 1, hd: 1 }]
+  for (let i = 0; i < steps.length; i++) {
+    const toFrac = steps[i].at
+    const yBottom = GROUND - b.height * fromFrac
+    const yTop = GROUND - b.height * toFrac
+    drawStorey(ctx, b, cam, hw, hd, yBottom, yTop, d, skyTop, skyLow)
+    // A ledge wherever it steps in, and at the very top.
+    if (d < 2600) drawCornice(ctx, b, cam, hw, hd, yTop)
+    if (i < b.tiers.length) {
+      hw *= b.tiers[i].hw
+      hd *= b.tiers[i].hd
     }
+    fromFrac = toFrac
   }
+
+  const top = GROUND - b.height
 
   // Roof, if you are above it.
   if (cam.y < top) {
-    {
-      ctx.fillStyle = litFill(b.roof, 0, -1, 0)
+    ctx.fillStyle = litFill(b.roof, 0, -1, 0)
+    face(ctx, cam, [
+      [b.x - hw, top, b.z - hd],
+      [b.x + hw, top, b.z - hd],
+      [b.x + hw, top, b.z + hd],
+      [b.x - hw, top, b.z + hd],
+    ])
+  }
+  // Plant and vents, so a roof is not a blank lid. Only where there is
+  // no tank, or the two end up on top of each other.
+  if (cam.y < top && !b.tank) {
+    const hv = hash(b.x * 0.01 + b.z * 0.013)
+    if (hv > 0.4) {
+      const bx = b.x + (hv - 0.5) * hw
+      const bz = b.z + (hash(b.z * 0.017) - 0.5) * hd
+      const boxTop = top - 40
+      ctx.fillStyle = litFill(b.roof, 0, -1, 0, 0.6)
       face(ctx, cam, [
-        [b.x - b.hw, top, b.z - b.hd],
-        [b.x + b.hw, top, b.z - b.hd],
-        [b.x + b.hw, top, b.z + b.hd],
-        [b.x - b.hw, top, b.z + b.hd],
+        [bx - 26, boxTop, bz - 26],
+        [bx + 26, boxTop, bz - 26],
+        [bx + 26, boxTop, bz + 26],
+        [bx - 26, boxTop, bz + 26],
       ])
-      // A bit of clutter so roofs are not blank lids.
-      const hv = hash(b.x * 0.01 + b.z * 0.013)
-      if (hv > 0.4) {
-        const bx = b.x + (hv - 0.5) * b.hw
-        const bz = b.z + (hash(b.z * 0.017) - 0.5) * b.hd
-        const boxTop = top - 40
-        ctx.fillStyle = shade(b.roof, 1.25)
+      for (const [nx, nz, p, q] of [
+        [0, -1, [-26, -26], [26, -26]],
+        [1, 0, [26, -26], [26, 26]],
+      ] as [number, number, number[], number[]][]) {
+        const mx = bx + (p[0] + q[0]) / 2
+        const mz = bz + (p[1] + q[1]) / 2
+        if ((cam.x - mx) * nx + (cam.z - mz) * nz <= 0) continue
+        ctx.fillStyle = litFill(b.roof, nx, 0, nz, 0.45)
         face(ctx, cam, [
-          [bx - 26, boxTop, bz - 26],
-          [bx + 26, boxTop, bz - 26],
-          [bx + 26, boxTop, bz + 26],
-          [bx - 26, boxTop, bz + 26],
+          [bx + p[0], boxTop, bz + p[1]],
+          [bx + q[0], boxTop, bz + q[1]],
+          [bx + q[0], top, bz + q[1]],
+          [bx + p[0], top, bz + p[1]],
         ])
       }
     }
   }
+  if (b.tank && d < 2600) drawTank(ctx, b, cam, hw, hd, top)
 
   // The door, so you can tell what you can get into.
   if (showDoor && b.interior && d < 1400) {

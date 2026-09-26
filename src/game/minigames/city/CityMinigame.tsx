@@ -631,7 +631,12 @@ export function CityMinigame({ onExit }: MinigameProps) {
           ctx!.stroke()
         }
         ctx!.restore()
-        finish(ctx!, VIEW, { vignette: 0.46, grain: 0.05 })
+        finish(ctx!, VIEW, {
+          vignette: 0.46,
+          grain: 0.05,
+          bloom: 0.26,
+          grade: { warm: '#ffe6c0', cool: '#2b3450', strength: 0.14 },
+        })
         return
       }
 
@@ -717,7 +722,13 @@ export function CityMinigame({ onExit }: MinigameProps) {
       }
       ctx!.restore()
 
-      finish(ctx!, VIEW, { vignette: 0.4, grain: 0.044 })
+      finish(ctx!, VIEW, {
+        vignette: 0.4,
+        grain: 0.044,
+        bloom: 0.2,
+        bloomSpread: 4,
+        grade: { warm: '#ffe2b0', cool: '#1d2742', strength: 0.2 },
+      })
     }
 
     raf = requestAnimationFrame(frame)

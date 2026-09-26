@@ -691,7 +691,15 @@ export function OceanMinigame({ onExit }: MinigameProps) {
 
       if (mix < 0.9) drawCrosshair(ctx!, w)
 
-      finish(ctx!, VIEW, { vignette: 0.5, grain: 0.05 })
+      finish(ctx!, VIEW, {
+        vignette: 0.5,
+        grain: 0.05,
+        bloom: 0.34,
+        bloomSpread: 6,
+        // Cool the whole thing rather than split-toning it: under water
+        // the warm end of the spectrum is the first thing to go.
+        grade: { warm: '#bfe6ff', cool: '#0d2b4a', strength: 0.18 },
+      })
     }
 
     function drawCrosshair(ctx: CanvasRenderingContext2D, w: World) {

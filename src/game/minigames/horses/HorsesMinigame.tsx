@@ -912,7 +912,13 @@ export function HorsesMinigame({ onExit }: MinigameProps) {
       }
       ctx!.restore()
 
-      finish(ctx!, VIEW, { vignette: 0.38, grain: 0.042 })
+      finish(ctx!, VIEW, {
+        vignette: 0.38,
+        grain: 0.042,
+        bloom: 0.22,
+        bloomSpread: 4,
+        grade: { warm: '#ffe6b4', cool: '#33415e', strength: 0.13 },
+      })
     }
 
     raf = requestAnimationFrame(frame)
