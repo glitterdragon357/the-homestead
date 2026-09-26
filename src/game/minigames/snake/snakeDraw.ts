@@ -173,6 +173,118 @@ export function drawCoins(ctx: CanvasRenderingContext2D, cam: Camera, coins: Coi
   }
 }
 
+/**
+ * The companion, and the line of its nip.
+ *
+ * Drawn after the snakes so it is never buried under one, and with a
+ * flash out to whatever it just bit - without that the nip is invisible
+ * and the thing looks like an ornament.
+ */
+export function drawFriend(
+  ctx: CanvasRenderingContext2D,
+  cam: Camera,
+  f: {
+    spec: { hue: number; art: string; cost: number }
+    x: number
+    y: number
+    dartUntil: number
+    targetId: number | null
+  },
+  snakes: { id: number; x: number; y: number; dead: boolean }[],
+  t: number
+) {
+  const p = toScreen(cam, f.x, f.y)
+  const r = Math.max(4, (7 + Math.min(7, f.spec.cost / 900)) * cam.zoom)
+  const hue = f.spec.hue
+
+  // The nip itself, or it is an ornament.
+  if (t < f.dartUntil && f.targetId !== null) {
+    const target = snakes.find((s) => s.id === f.targetId && !s.dead)
+    if (target) {
+      const q = toScreen(cam, target.x, target.y)
+      ctx.strokeStyle = hsl(hue, 90, 76, 0.75)
+      ctx.lineWidth = Math.max(1, 2.4 * cam.zoom)
+      ctx.beginPath()
+      ctx.moveTo(p.sx, p.sy)
+      ctx.lineTo(q.sx, q.sy)
+      ctx.stroke()
+      const pop = ctx.createRadialGradient(q.sx, q.sy, 0, q.sx, q.sy, r * 2.4)
+      pop.addColorStop(0, hsl(hue, 95, 84, 0.85))
+      pop.addColorStop(1, hsl(hue, 95, 70, 0))
+      ctx.fillStyle = pop
+      ctx.beginPath()
+      ctx.arc(q.sx, q.sy, r * 2.4, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+
+  const glow = ctx.createRadialGradient(p.sx, p.sy, 0, p.sx, p.sy, r * 2.6)
+  glow.addColorStop(0, hsl(hue, 90, 70, 0.4))
+  glow.addColorStop(1, hsl(hue, 90, 60, 0))
+  ctx.fillStyle = glow
+  ctx.beginPath()
+  ctx.arc(p.sx, p.sy, r * 2.6, 0, Math.PI * 2)
+  ctx.fill()
+
+  const wag = Math.sin(t * 0.012) * 0.5
+  ctx.save()
+  ctx.translate(p.sx, p.sy)
+  const bodyFill = ctx.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.1, 0, 0, r)
+  bodyFill.addColorStop(0, hsl(hue, 82, 76))
+  bodyFill.addColorStop(1, hsl(hue, 76, 44))
+  ctx.fillStyle = bodyFill
+
+  if (f.spec.art === 'fish') {
+    ctx.beginPath()
+    ctx.ellipse(0, 0, r, r * 0.62, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.beginPath()
+    ctx.moveTo(-r * 0.85, 0)
+    ctx.lineTo(-r * 1.7, -r * 0.55 + wag * r)
+    ctx.lineTo(-r * 1.7, r * 0.55 + wag * r)
+    ctx.closePath()
+    ctx.fill()
+  } else if (f.spec.art === 'bird') {
+    ctx.beginPath()
+    ctx.ellipse(0, 0, r * 0.8, r * 0.6, 0, 0, Math.PI * 2)
+    ctx.fill()
+    for (const side of [-1, 1]) {
+      ctx.beginPath()
+      ctx.moveTo(0, 0)
+      ctx.quadraticCurveTo(-r * 0.5, side * (r * 1.1 + wag * r * 0.4), -r * 1.5, side * r * 0.5)
+      ctx.quadraticCurveTo(-r * 0.6, side * r * 0.4, 0, 0)
+      ctx.fill()
+    }
+    ctx.fillStyle = hsl(hue, 90, 86)
+    ctx.beginPath()
+    ctx.moveTo(r * 0.7, 0)
+    ctx.lineTo(r * 1.4, -r * 0.14)
+    ctx.lineTo(r * 0.7, r * 0.24)
+    ctx.closePath()
+    ctx.fill()
+  } else {
+    ctx.beginPath()
+    ctx.ellipse(0, 0, r * 1.1, r * 0.55, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(r * 0.9, -r * 0.1, r * 0.46, 0, Math.PI * 2)
+    ctx.fill()
+    for (const side of [-1, 1]) {
+      ctx.beginPath()
+      ctx.moveTo(r * 0.78, -r * 0.42)
+      ctx.lineTo(r * 0.98 + side * r * 0.12, -r * 0.88)
+      ctx.lineTo(r * 1.16, -r * 0.36)
+      ctx.closePath()
+      ctx.fill()
+    }
+  }
+  ctx.fillStyle = '#12161c'
+  ctx.beginPath()
+  ctx.arc(r * 0.55, -r * 0.14, r * 0.14, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+}
+
 /* ------------------------------------------------------------------ */
 /* Snakes                                                              */
 /* ------------------------------------------------------------------ */

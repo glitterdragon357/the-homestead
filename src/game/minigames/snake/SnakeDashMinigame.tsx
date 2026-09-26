@@ -5,11 +5,14 @@ import { usePurse } from '../../state/usePurse'
 import { GiftRow } from '../../economy/GiftRow'
 import { useAmbientMusic } from '../../audio/useAmbientMusic'
 import { finish } from '../../engine/polish'
-import { VIEW, drawArena, drawCoins, drawPellets, drawSnake, type Camera } from './snakeDraw'
+import { VIEW, drawArena, drawCoins, drawFriend, drawPellets, drawSnake, type Camera } from './snakeDraw'
 import {
   DASH_MAX,
+  COMPANIONS,
+  COMPANION_BY_KEY,
   MAPS,
   MAP_BY_KEY,
+  nipOf,
   SKINS,
   SKIN_BY_KEY,
   SKIN_FAMILIES,
@@ -27,6 +30,8 @@ import {
   collide,
   dropBounty,
   feed,
+  makeFriend,
+  nip,
   makeWorld,
   moveSnake,
   restock,
@@ -68,16 +73,19 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
     eaten: number
     bitten: number
     found: number
+    nips: number
   }>(null)
   const [hud, setHud] = useState({ level: 1, fed: 0, dash: 1, eaten: 0, rank: 1, of: 9, toNext: 0, bitten: 0, pocket: 0, vanish: false })
 
   const [filter, setFilter] = useState<'all' | 'yours' | 'affordable'>('all')
   const [denied, setDenied] = useState<string | null>(null)
   const owned = ownedSkins(save)
+  const kennel = save.companions ?? []
 
   const eatenRef = useRef(0)
   const bittenRef = useRef(0)
   const pocketRef = useRef(0)
+  const nipsRef = useRef(0)
 
   /* ---------------------------------------------------------------- */
   /* A run                                                             */
@@ -98,11 +106,13 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
     setDenied(null)
 
     const w = makeWorld(map, skin, rng)
+    w.friend = makeFriend(saveRef.current.companion ?? null, w.snakes[0].x, w.snakes[0].y)
     w.snakes[0].safeUntil = performance.now() + SPAWN_GRACE
     worldRef.current = w
     eatenRef.current = 0
     bittenRef.current = 0
     pocketRef.current = 0
+    nipsRef.current = 0
     aimRef.current = null
     dashRef.current = false
     setResult(null)
@@ -125,7 +135,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
       best: Math.max(s.best ?? 0, me.fed),
       bestLevel: Math.max(s.bestLevel ?? 1, level),
     }))
-    setResult({ pay, level, eaten: eatenRef.current, bitten, found })
+    setResult({ pay, level, eaten: eatenRef.current, bitten, found, nips: nipsRef.current })
     setPlaying(false)
     worldRef.current = null
   }, [earn, setSave])
@@ -171,6 +181,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
 
       feed(w, rng)
       pocketRef.current += collect(w, rng)
+      if (nip(w, now, dt)) nipsRef.current++
 
       const hits = collide(w, now)
       for (const e of hits.eaten) {
@@ -214,6 +225,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
         drawSnake(ctx, cam, s, now, their < myLevel ? 'prey' : their > myLevel ? 'danger' : 'peer')
       }
       drawSnake(ctx, cam, me, now, 'self')
+      if (w.friend) drawFriend(ctx, cam, w.friend, w.snakes, now)
 
       // A ring while you cannot be touched, so the grace is visible.
       if (now < me.safeUntil) {
@@ -371,6 +383,13 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
                 : `Level ${result.level}.`}
             </strong>{' '}
             {result.pay} 🪙
+            {result.nips > 0 && (
+              <span style={S.bitNote}>
+                {' '}
+                · {COMPANION_BY_KEY[save.companion ?? '']?.name ?? 'Your companion'} nipped{' '}
+                {result.nips} times
+              </span>
+            )}
             {result.found > 0 && (
               <span style={S.bitNote}> ({result.found} of it picked up in there)</span>
             )}
@@ -401,6 +420,56 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
                     <span style={S.cardNote}>{m.blurb}</span>
                     <span style={S.cardMeta}>
                       {m.w}×{m.h} · {m.rivals} rivals
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div style={S.sectionHead}>
+            <p style={S.rulesHead}>Companion</p>
+            <span style={S.filters}>
+              {save.companion && (
+                <button
+                  style={S.chip}
+                  onClick={() => setSave((v) => ({ ...v, companion: null }))}
+                >
+                  send it home
+                </button>
+              )}
+            </span>
+          </div>
+          <div style={S.scroller}>
+            <div style={S.grid}>
+              {COMPANIONS.map((c) => {
+                const have = kennel.includes(c.key)
+                const on = save.companion === c.key
+                return (
+                  <button
+                    key={c.key}
+                    style={{
+                      ...S.card,
+                      ...(on ? S.cardOn : null),
+                      ...(!have && c.cost > coins ? S.cardBroke : null),
+                    }}
+                    onClick={() => {
+                      if (have) {
+                        setSave((v) => ({ ...v, companion: on ? null : c.key }))
+                        return
+                      }
+                      if (!spend(c.cost)) return
+                      setSave((v) => ({
+                        ...v,
+                        companion: c.key,
+                        companions: [...(v.companions ?? []), c.key],
+                      }))
+                    }}
+                  >
+                    <span style={S.cardName}>{c.name}</span>
+                    <span style={S.cardNote}>{c.blurb}</span>
+                    <span style={S.cardMeta}>
+                      {have ? (on ? 'with you' : 'in the kennel') : `🪙 ${c.cost}`} · nips {nipOf(c.cost)}
                     </span>
                   </button>
                 )
@@ -491,6 +560,11 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
           <p style={S.note}>
             Pellets make you longer. Longer makes you higher. Coins are money - run them over,
             and they keep whether you get out alive or not. Anything that dies drops its purse.
+          </p>
+          <p style={S.note}>
+            A companion swims with you and takes pieces out of whatever comes near, however big
+            it is - but it never lands the last bite. Chewing something down to a size you can
+            swallow is what it is for. The dearer it is, the more it takes.
           </p>
         </div>
 

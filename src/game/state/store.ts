@@ -267,7 +267,7 @@ export const useHomesteadStore = create<HomesteadState>()(
     }),
     {
       name: SAVE_KEY,
-      version: 14,
+      version: 15,
       storage: createJSONStorage(() => localStorage),
       // Runs before rehydration, so this captures the previous session's
       // save rather than anything this one has written.
@@ -387,6 +387,10 @@ export const useHomesteadStore = create<HomesteadState>()(
           if (snake.skin === undefined) snake.skin = initialSnake.skin
           if (snake.map === undefined) snake.map = initialSnake.map
           snake.skins = [...new Set([...initialSnake.skins, ...((snake.skins as string[]) ?? [])])]
+          // v14 -> v15: companions. A save from before them has neither a
+          // kennel nor one out with it.
+          if (snake.companion === undefined) snake.companion = null
+          if (snake.companions === undefined) snake.companions = []
         }
 
         return { ...state, progress, purses, pausedAt }

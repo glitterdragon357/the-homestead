@@ -1226,6 +1226,64 @@ export function bountyFor(fed: number): number {
 }
 
 /* ------------------------------------------------------------------ */
+/* Companions                                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Something that swims along with you and takes pieces out of anything
+ * that gets close.
+ *
+ * What it costs is the only number: the nip it takes, how far it will
+ * range to take it, and how often it can, are all worked out from the
+ * price. So a dearer companion is a stronger one by construction rather
+ * than by my remembering to keep a table in step.
+ *
+ * A nip never finishes anything. It can chew a snake all the way down
+ * to level one and leave it there - which is the point of bringing one,
+ * because it lets you cut something bigger than you down to a size you
+ * can actually swallow - but the last bite is yours to take.
+ */
+export interface Companion {
+  key: string
+  name: string
+  blurb: string
+  cost: number
+  /** Body and trim, for drawing it. */
+  hue: number
+  art: 'fish' | 'bird' | 'beast'
+}
+
+export const COMPANIONS: Companion[] = [
+  { key: 'minnow', name: 'Minnow', blurb: 'Barely a nibble, but it never stops.', cost: 300, hue: 190, art: 'fish' },
+  { key: 'pikelet', name: 'Pikelet', blurb: 'A small pike with big opinions.', cost: 600, hue: 150, art: 'fish' },
+  { key: 'ferret', name: 'Ferret', blurb: 'Quick, and it holds on.', cost: 1000, hue: 34, art: 'beast' },
+  { key: 'magpie', name: 'Magpie', blurb: 'Takes a piece of everything it passes.', cost: 1500, hue: 220, art: 'bird' },
+  { key: 'shrike', name: 'Shrike', blurb: 'Hunts far further out than it looks.', cost: 2200, hue: 12, art: 'bird' },
+  { key: 'barracuda', name: 'Barracuda', blurb: 'One pass, and a good deal is missing.', cost: 3200, hue: 200, art: 'fish' },
+  { key: 'wolverine', name: 'Wolverine', blurb: 'Picks fights with things far above its level.', cost: 4500, hue: 28, art: 'beast' },
+  { key: 'gyrfalcon', name: 'Gyrfalcon', blurb: 'The dearest thing in the arena, and it shows.', cost: 6500, hue: 48, art: 'bird' },
+]
+
+export const COMPANION_BY_KEY: Record<string, Companion> = Object.fromEntries(
+  COMPANIONS.map((c) => [c.key, c])
+)
+
+/** How much a nip takes, in the same units a pellet feeds you. */
+export function nipOf(cost: number): number {
+  return Math.max(2, Math.round(cost / 85))
+}
+
+/** How far it will range from you to take one. */
+export function reachOf(cost: number): number {
+  return 86 + cost / 60
+}
+
+/** How long it needs between nips, in milliseconds. */
+export function restOf(cost: number): number {
+  return Math.max(800, 1700 - cost / 8)
+}
+
+/* ------------------------------------------------------------------ */
 /* Saving                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -1240,6 +1298,9 @@ export interface SnakeSave {
   skins: string[]
   /** The map last played. */
   map: string
+  /** What is swimming along with you, and what has been bought. */
+  companion: string | null
+  companions: string[]
 }
 
 export const initialSnake: SnakeSave = {
@@ -1250,6 +1311,8 @@ export const initialSnake: SnakeSave = {
   skin: 'grass',
   skins: [...FREE_SKINS],
   map: 'pit',
+  companion: null,
+  companions: [],
 }
 
 /**
