@@ -7,6 +7,7 @@
  */
 
 import { FLOOR_Y, THINGS, VIEW, type ThingKind } from './ironData'
+import { blend, parseColour, toCss } from '../../engine/polish'
 
 export interface Thing {
   kind: ThingKind
@@ -17,6 +18,32 @@ export interface Thing {
   /** Ticks up so things bob and flames flicker. */
   seed: number
   dead: boolean
+}
+
+/**
+ * A plate of painted metal, lit from up and to the left.
+ *
+ * Flat red is what made the suit look like a sticker. Armour reads as
+ * armour when one edge catches the light, the middle holds the actual
+ * colour, and the far edge falls away almost to black - and when the
+ * whole thing carries a little of the sky it is flying through.
+ */
+function plate(
+  ctx: CanvasRenderingContext2D,
+  base: string,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number
+): CanvasGradient {
+  const c = parseColour(base)
+  const g = ctx.createLinearGradient(x0, y0, x1, y1)
+  g.addColorStop(0, toCss(blend(c, [255, 246, 228], 0.5)))
+  g.addColorStop(0.28, toCss(blend(c, [255, 246, 228], 0.16)))
+  g.addColorStop(0.58, toCss(c))
+  g.addColorStop(0.85, toCss(blend(c, [22, 16, 26], 0.42)))
+  g.addColorStop(1, toCss(blend(c, [96, 128, 176], 0.3)))
+  return g
 }
 
 function hash(n: number): number {
@@ -30,63 +57,133 @@ function hash(n: number): number {
 
 export function drawSky(ctx: CanvasRenderingContext2D, t: number) {
   const g = ctx.createLinearGradient(0, 0, 0, FLOOR_Y)
-  g.addColorStop(0, '#1b2440')
-  g.addColorStop(0.45, '#42406b')
-  g.addColorStop(0.8, '#a05f6a')
-  g.addColorStop(1, '#e09a63')
+  g.addColorStop(0, '#141c33')
+  g.addColorStop(0.32, '#31355c')
+  g.addColorStop(0.62, '#6d4f6e')
+  g.addColorStop(0.84, '#b86c60')
+  g.addColorStop(1, '#eba765')
   ctx.fillStyle = g
   ctx.fillRect(0, 0, VIEW.width, FLOOR_Y)
 
-  // A low sun, and cloud bars across it.
-  ctx.globalAlpha = 0.85
-  ctx.fillStyle = '#f2c27a'
+  const sx = 760
+  const sy = 366
+
+  // The sun, and the air around it lit by the sun. The bloom is the part
+  // that matters - a disc on its own is a sticker on the sky.
+  const bloom = ctx.createRadialGradient(sx, sy, 10, sx, sy, 300)
+  bloom.addColorStop(0, 'rgba(255,224,164,0.55)')
+  bloom.addColorStop(0.3, 'rgba(240,160,110,0.2)')
+  bloom.addColorStop(1, 'rgba(240,150,110,0)')
+  ctx.fillStyle = bloom
+  ctx.fillRect(0, 0, VIEW.width, FLOOR_Y)
+
+  ctx.globalAlpha = 0.95
+  const disc = ctx.createRadialGradient(sx, sy, 2, sx, sy, 46)
+  disc.addColorStop(0, '#fff6dd')
+  disc.addColorStop(0.7, '#f7c884')
+  disc.addColorStop(1, 'rgba(246,190,126,0)')
+  ctx.fillStyle = disc
   ctx.beginPath()
-  ctx.arc(760, 366, 46, 0, Math.PI * 2)
+  ctx.arc(sx, sy, 46, 0, Math.PI * 2)
   ctx.fill()
-  ctx.globalAlpha = 0.28
-  ctx.fillStyle = '#2b2438'
-  for (let i = 0; i < 5; i++) {
-    const y = 300 + i * 26 + Math.sin(t * 0.0002 + i) * 4
-    ctx.fillRect(0, y, VIEW.width, 7)
+
+  // Cloud bars. They are underlit near the sun and dark away from it,
+  // which is the whole reason a sunset looks like a sunset.
+  for (let i = 0; i < 7; i++) {
+    const y = 284 + i * 22 + Math.sin(t * 0.0002 + i) * 4
+    const h = 5 + (i % 3) * 3
+    const drift = (t * 0.004 * (0.3 + i * 0.09)) % (VIEW.width + 400)
+    const cx = VIEW.width + 200 - drift
+    const bar = ctx.createLinearGradient(cx - 420, 0, cx + 120, 0)
+    bar.addColorStop(0, 'rgba(38,30,52,0)')
+    bar.addColorStop(0.3, `rgba(46,34,56,${(0.42 - i * 0.03).toFixed(2)})`)
+    bar.addColorStop(0.72, `rgba(226,146,104,${(0.3 - i * 0.03).toFixed(2)})`)
+    bar.addColorStop(1, 'rgba(240,180,120,0)')
+    ctx.fillStyle = bar
+    ctx.beginPath()
+    ctx.ellipse(cx - 150, y, 280, h, 0, 0, Math.PI * 2)
+    ctx.fill()
   }
   ctx.globalAlpha = 1
 }
 
-/** Three ranks of buildings, each sliding past at its own rate. */
+/**
+ * Four ranks of buildings, each sliding past at its own rate.
+ *
+ * Depth here is not just parallax. A near building is dark and sharp; a
+ * far one is washed toward the colour of the air between you and it, and
+ * a layer of that air is laid down between every rank. That wash is what
+ * turns a row of rectangles into a distance.
+ */
 export function drawCity(ctx: CanvasRenderingContext2D, scroll: number) {
   const ranks: [number, number, string, number][] = [
-    [0.22, 150, '#2b2f४6'.replace('४', '4'), 0.55],
-    [0.45, 210, '#242838', 0.8],
-    [0.85, 300, '#181b26', 1],
+    [0.14, 120, '#4a4668', 0.5],
+    [0.28, 165, '#38375a', 0.62],
+    [0.52, 225, '#272a42', 0.8],
+    [0.9, 310, '#14172099'.slice(0, 7), 1],
   ]
-  for (const [rate, tall, colour, alpha] of ranks) {
+  for (const [rate, tall, colour, haze] of ranks) {
     const off = scroll * rate
     const W = 120
-    ctx.globalAlpha = alpha
-    ctx.fillStyle = colour
     const first = Math.floor(off / W) - 1
     for (let i = first; i < first + VIEW.width / W + 3; i++) {
       const h = tall * (0.5 + hash(i * (rate + 1)) * 0.8)
       const x = i * W - off
       const w = W * (0.62 + hash(i * 3.3) * 0.3)
-      ctx.fillRect(x, FLOOR_Y - h, w, h)
-      // Lit windows, a few of them.
-      if (rate > 0.4) {
-        ctx.globalAlpha = alpha * 0.5
-        ctx.fillStyle = '#f2c27a'
-        for (let r = 0; r < Math.floor(h / 34); r++) {
-          for (let c = 0; c < 3; c++) {
-            if (hash(i * 31 + r * 7 + c) < 0.55) continue
-            ctx.fillRect(x + 10 + c * (w / 3), FLOOR_Y - h + 14 + r * 34, 9, 12)
+      const topY = FLOOR_Y - h
+
+      // The face of the building: lighter where the sky reaches the top
+      // of it, and close to black down where the street is.
+      const c = parseColour(colour)
+      const face = ctx.createLinearGradient(0, topY, 0, FLOOR_Y)
+      face.addColorStop(0, toCss(blend(c, [180, 150, 170], 0.3)))
+      face.addColorStop(0.45, toCss(c))
+      face.addColorStop(1, toCss(blend(c, [8, 9, 14], 0.55)))
+      ctx.fillStyle = face
+      ctx.fillRect(x, topY, w, h)
+
+      // One lit edge, the side the sun is still on.
+      ctx.fillStyle = toCss(blend(c, [255, 200, 150], 0.3))
+      ctx.fillRect(x + w - 2.5, topY, 2.5, h)
+      ctx.fillStyle = toCss(blend(c, [255, 214, 170], 0.42))
+      ctx.fillRect(x, topY, w, 2)
+
+      if (rate > 0.2) {
+        const rows = Math.floor(h / 34)
+        for (let r = 0; r < rows; r++) {
+          for (let c2 = 0; c2 < 3; c2++) {
+            const roll = hash(i * 31 + r * 7 + c2)
+            if (roll < 0.5) continue
+            const wx = x + 10 + c2 * (w / 3)
+            const wy = FLOOR_Y - h + 14 + r * 34
+            const warm = roll > 0.78
+            // A lit window throws a little light onto its own wall.
+            if (warm && rate > 0.4) {
+              const spill = ctx.createRadialGradient(wx + 4.5, wy + 6, 1, wx + 4.5, wy + 6, 18)
+              spill.addColorStop(0, 'rgba(255,206,130,0.32)')
+              spill.addColorStop(1, 'rgba(255,206,130,0)')
+              ctx.fillStyle = spill
+              ctx.fillRect(wx - 14, wy - 12, 37, 36)
+            }
+            ctx.fillStyle = warm ? '#ffd693' : toCss(blend(c, [120, 152, 190], 0.34))
+            ctx.fillRect(wx, wy, 9, 12)
           }
         }
-        ctx.globalAlpha = alpha
-        ctx.fillStyle = colour
       }
     }
+
+    // The air in front of this rank.
+    if (haze < 1) {
+      ctx.fillStyle = `rgba(122,104,124,${(1 - haze) * 0.5})`
+      ctx.fillRect(0, 0, VIEW.width, FLOOR_Y)
+    }
   }
-  ctx.globalAlpha = 1
-  ctx.fillStyle = '#10131b'
+
+  // The street, too far down to make out, and the haze sitting on it.
+  const road = ctx.createLinearGradient(0, FLOOR_Y, 0, VIEW.height)
+  road.addColorStop(0, '#2a2433')
+  road.addColorStop(1, '#0b0d13')
+  ctx.fillStyle = road
   ctx.fillRect(0, FLOOR_Y, VIEW.width, VIEW.height - FLOOR_Y)
 }
 
@@ -113,6 +210,14 @@ export function drawSuit(
   // Thruster flames first, so the suit sits over them.
   if (thrusting) {
     const flick = 1 + Math.sin(t * 0.04) * 0.25
+    // The air the thrusters are heating, before the flames themselves.
+    const wash = ctx.createRadialGradient(-22, 10, 4, -22, 10, 46)
+    wash.addColorStop(0, 'rgba(158,214,255,0.26)')
+    wash.addColorStop(1, 'rgba(120,180,255,0)')
+    ctx.fillStyle = wash
+    ctx.beginPath()
+    ctx.arc(-22, 10, 46, 0, Math.PI * 2)
+    ctx.fill()
     for (const [fx, fy] of [[-16, 20], [-4, 22], [-24, 2], [-24, -8]]) {
       const grad = ctx.createLinearGradient(fx, fy, fx - 34 * flick, fy + 6)
       grad.addColorStop(0, '#dff4ff')
@@ -129,7 +234,7 @@ export function drawSuit(
   }
 
   // legs, trailing behind in flight
-  ctx.strokeStyle = red
+  ctx.strokeStyle = plate(ctx, red, -4, 2, -20, 26)
   ctx.lineWidth = 9
   ctx.lineCap = 'round'
   ctx.beginPath()
@@ -138,7 +243,7 @@ export function drawSuit(
   ctx.moveTo(2, 10)
   ctx.lineTo(-10, 24)
   ctx.stroke()
-  ctx.strokeStyle = gold
+  ctx.strokeStyle = plate(ctx, gold, -14, 14, -22, 28)
   ctx.lineWidth = 5
   ctx.beginPath()
   ctx.moveTo(-14, 17)
@@ -148,7 +253,7 @@ export function drawSuit(
   ctx.stroke()
 
   // torso
-  ctx.fillStyle = red
+  ctx.fillStyle = plate(ctx, red, -14, -20, 12, 14)
   ctx.beginPath()
   ctx.moveTo(-16, -12)
   ctx.quadraticCurveTo(0, -20, 14, -10)
@@ -156,12 +261,22 @@ export function drawSuit(
   ctx.quadraticCurveTo(-10, 14, -16, -12)
   ctx.closePath()
   ctx.fill()
-  ctx.fillStyle = gold
+  ctx.fillStyle = plate(ctx, gold, -12, -15, 10, 3)
   ctx.beginPath()
   ctx.ellipse(-2, -6, 13, 9, 0, 0, Math.PI * 2)
   ctx.fill()
 
-  // arc reactor
+  // The arc reactor, and the light it throws on everything near it.
+  ctx.globalAlpha = 0.3
+  const spill = ctx.createRadialGradient(-2, -6, 2, -2, -6, 21)
+  spill.addColorStop(0, 'rgba(168,228,255,0.7)')
+  spill.addColorStop(1, 'rgba(120,200,255,0)')
+  ctx.fillStyle = spill
+  ctx.beginPath()
+  ctx.arc(-2, -6, 21, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.globalAlpha = 1
+
   const glow = ctx.createRadialGradient(-2, -6, 1, -2, -6, 13)
   glow.addColorStop(0, '#ffffff')
   glow.addColorStop(0.35, '#a8e4ff')
@@ -176,13 +291,13 @@ export function drawSuit(
   ctx.fill()
 
   // arm forward, palm open
-  ctx.strokeStyle = red
+  ctx.strokeStyle = plate(ctx, red, 6, -10, 26, 5)
   ctx.lineWidth = 8
   ctx.beginPath()
   ctx.moveTo(6, -6)
   ctx.lineTo(24, 0)
   ctx.stroke()
-  ctx.fillStyle = gold
+  ctx.fillStyle = plate(ctx, gold, 22, -5, 32, 7)
   ctx.beginPath()
   ctx.arc(27, 1, 5.6, 0, Math.PI * 2)
   ctx.fill()
@@ -192,7 +307,7 @@ export function drawSuit(
   ctx.fill()
 
   // helmet
-  ctx.fillStyle = red
+  ctx.fillStyle = plate(ctx, red, 8, -23, 26, -3)
   ctx.beginPath()
   ctx.moveTo(6, -14)
   ctx.quadraticCurveTo(22, -22, 26, -12)
@@ -200,7 +315,7 @@ export function drawSuit(
   ctx.quadraticCurveTo(6, -6, 6, -14)
   ctx.closePath()
   ctx.fill()
-  ctx.fillStyle = gold
+  ctx.fillStyle = plate(ctx, gold, 10, -23, 24, -9)
   ctx.beginPath()
   ctx.moveTo(10, -16)
   ctx.quadraticCurveTo(20, -22, 25, -14)
@@ -208,9 +323,24 @@ export function drawSuit(
   ctx.quadraticCurveTo(16, -14, 10, -12)
   ctx.closePath()
   ctx.fill()
-  // the eyes
-  ctx.fillStyle = '#dff4ff'
+  // The eyes, lit from inside.
+  const eye = ctx.createLinearGradient(15, -13, 23, -10)
+  eye.addColorStop(0, '#ffffff')
+  eye.addColorStop(1, '#8fd8ff')
+  ctx.fillStyle = eye
   ctx.fillRect(15, -13, 8, 3)
+  ctx.globalAlpha = 0.5
+  ctx.fillStyle = '#9fe0ff'
+  ctx.fillRect(14, -14.5, 10, 6)
+  ctx.globalAlpha = 1
+
+  // A cold rim down the back, where the sky gets behind the armour.
+  ctx.strokeStyle = 'rgba(150,190,240,0.5)'
+  ctx.lineWidth = 1.4
+  ctx.beginPath()
+  ctx.moveTo(-16, -12)
+  ctx.quadraticCurveTo(0, -20, 14, -10)
+  ctx.stroke()
 
   ctx.restore()
 }
