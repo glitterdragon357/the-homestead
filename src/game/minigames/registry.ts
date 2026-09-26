@@ -24,6 +24,7 @@ import { horsesPending, type HorseSave } from './horses/horseData'
 import { SpaMinigame } from './spa/SpaMinigame'
 import { spaPending, type SpaSave } from './spa/spaData'
 import { SnakeDashMinigame } from './snake/SnakeDashMinigame'
+import { JigsawMinigame } from './jigsaw/JigsawMinigame'
 import { SalonMinigame } from './salon/SalonMinigame'
 import { salonPending, type SalonSave } from './salon/salonData'
 
@@ -173,6 +174,13 @@ export const MINIGAME_REGISTRY: Record<string, MinigameDefinition> = {
     description: 'Dive the shelf: hunt fish, or just go and see what is down there.',
     icon: '\u{1F93F}',
     component: OceanMinigame,
+  },
+  jigsaw: {
+    id: 'jigsaw',
+    name: 'Jigsaw',
+    description: 'A picture cut up and tipped out. Drag the pieces back where they belong.',
+    icon: '\u{1F9E9}',
+    component: JigsawMinigame,
   },
   snakedash: {
     id: 'snakedash',

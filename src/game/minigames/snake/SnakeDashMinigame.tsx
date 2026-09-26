@@ -939,7 +939,7 @@ const S: Record<string, React.CSSProperties> = {
     color: 'rgba(230,238,252,0.65)',
     cursor: 'pointer',
   },
-  chipOn: { background: '#3fb972', color: '#06210f', borderColor: '#3fb972', fontWeight: 700 },
+  chipOn: { background: '#3fb972', color: '#06210f', border: '1px solid #3fb972', fontWeight: 700 },
   cardBroke: { opacity: 0.42 },
   denied: {
     marginTop: 14,
@@ -962,7 +962,7 @@ const S: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     font: 'inherit',
   },
-  cardOn: { borderColor: '#3fb972', background: 'rgba(63,185,114,0.16)' },
+  cardOn: { border: '1px solid #3fb972', background: 'rgba(63,185,114,0.16)' },
   cardName: { fontWeight: 700, fontSize: 13 },
   cardNote: { fontSize: 11, opacity: 0.66, lineHeight: 1.35 },
   cardMeta: { fontSize: 11, opacity: 0.5 },
