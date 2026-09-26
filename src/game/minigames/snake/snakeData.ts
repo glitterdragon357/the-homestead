@@ -1097,6 +1097,8 @@ export interface Snake {
   bittenUntil: number
   /** How unseen it is, 0 to 1. Only the vanishing skin moves this. */
   unseen: number
+  /** What is swimming along with this snake, if anything. */
+  friend: Friend | null
 }
 
 /**
@@ -1267,6 +1269,48 @@ export const COMPANIONS: Companion[] = [
 export const COMPANION_BY_KEY: Record<string, Companion> = Object.fromEntries(
   COMPANIONS.map((c) => [c.key, c])
 )
+
+/** A companion out in the arena, belonging to somebody. */
+export interface Friend {
+  spec: Companion
+  x: number
+  y: number
+  /** The earliest it can nip again. */
+  restUntil: number
+  /** Who it is going for, and until when the dart is drawn. */
+  targetId: number | null
+  dartUntil: number
+}
+
+/**
+ * What a rival turns up with.
+ *
+ * Matched against whatever you brought, because a companion is only
+ * unfair if you are the only one who has one. Bring nothing and the
+ * arena mostly brings nothing; bring a falcon and you will meet snakes
+ * with real company.
+ *
+ * But matched well below you, and only on about a third of them. The
+ * first attempt drew rivals from the whole range up to your own, which
+ * made buying a better companion actively worse: there is one of you
+ * and ten of them, so arming the arena to your level means facing five
+ * of your equals at once. A Gyrfalcon owner was reaching level three
+ * where a Minnow owner reached seven. Paying more has to help.
+ */
+export function rivalCompanion(yourCost: number, roll: number, pick: number): string | null {
+  // Smoothly in proportion to what you spent, not a step the moment you
+  // own anything. Stepping straight to a third made the cheapest
+  // companion a trap: 300 coins bought you a four-point nip and doubled
+  // the number of armed rivals, and owners of one came out worse than
+  // people who brought nothing at all.
+  const chance = 0.16 + Math.min(0.16, (yourCost / 6500) * 0.16)
+  if (roll > chance) return null
+  const ceiling = yourCost > 0 ? Math.max(600, yourCost * 0.45) : 800
+  const pool = COMPANIONS.filter((c) => c.cost <= ceiling)
+  if (pool.length === 0) return null
+  const i = Math.min(pool.length - 1, Math.floor(Math.pow(pick, 1.7) * pool.length))
+  return pool[i].key
+}
 
 /** How much a nip takes, in the same units a pellet feeds you. */
 export function nipOf(cost: number): number {

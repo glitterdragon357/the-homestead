@@ -31,7 +31,7 @@ import {
   dropBounty,
   feed,
   makeFriend,
-  nip,
+  nipAll,
   makeWorld,
   moveSnake,
   restock,
@@ -105,8 +105,9 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
     }
     setDenied(null)
 
-    const w = makeWorld(map, skin, rng)
-    w.friend = makeFriend(saveRef.current.companion ?? null, w.snakes[0].x, w.snakes[0].y)
+    const yours = COMPANION_BY_KEY[saveRef.current.companion ?? '']
+    const w = makeWorld(map, skin, rng, yours?.cost ?? 0)
+    w.snakes[0].friend = makeFriend(yours?.key ?? null, w.snakes[0].x, w.snakes[0].y)
     w.snakes[0].safeUntil = performance.now() + SPAWN_GRACE
     worldRef.current = w
     eatenRef.current = 0
@@ -181,7 +182,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
 
       feed(w, rng)
       pocketRef.current += collect(w, rng)
-      if (nip(w, now, dt)) nipsRef.current++
+      for (const n of nipAll(w, now, dt)) if (n.owner === 0) nipsRef.current++
 
       const hits = collide(w, now)
       for (const e of hits.eaten) {
@@ -225,7 +226,10 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
         drawSnake(ctx, cam, s, now, their < myLevel ? 'prey' : their > myLevel ? 'danger' : 'peer')
       }
       drawSnake(ctx, cam, me, now, 'self')
-      if (w.friend) drawFriend(ctx, cam, w.friend, w.snakes, now)
+      // Every companion in the arena, over the snakes so none is buried.
+      for (const s of w.snakes) {
+        if (!s.dead && s.friend) drawFriend(ctx, cam, s.friend, w.snakes, now)
+      }
 
       // A ring while you cannot be touched, so the grace is visible.
       if (now < me.safeUntil) {

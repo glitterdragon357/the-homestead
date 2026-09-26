@@ -10,6 +10,7 @@ import {
   BASE_LENGTH,
   COMPANION_BY_KEY,
   nipOf,
+  rivalCompanion,
   reachOf,
   restOf,
   COIN_COUNT,
@@ -40,7 +41,7 @@ import {
   segmentsOf,
   speedOf,
   type Coin,
-  type Companion,
+  type Friend,
   type MapSpec,
   type Pattern,
   type Pellet,
@@ -58,19 +59,6 @@ export interface World {
   nextSpawnAt: number
   /** When the run began. */
   startedAt: number
-  /** What is swimming along with you, if anything. */
-  friend: Friend | null
-}
-
-export interface Friend {
-  spec: Companion
-  x: number
-  y: number
-  /** The earliest it can nip again. */
-  restUntil: number
-  /** Who it is going for, and until when the dart is drawn. */
-  targetId: number | null
-  dartUntil: number
 }
 
 /* ------------------------------------------------------------------ */
@@ -120,6 +108,7 @@ export function makeSnake(
     accent: look?.accent ?? 0,
     sat: look?.sat ?? 72,
     unseen: 0,
+    friend: null,
     bittenUntil: 0,
   }
 }
@@ -172,53 +161,68 @@ export function makeFriend(key: string | null, x: number, y: number): Friend | n
 }
 
 /**
- * The companion swims after you and takes a piece out of whatever is
- * nearest, whatever size it is.
+ * Every companion in the arena, not just yours.
  *
- * Deliberately blind to level: chewing something far bigger than you
- * down to where you can eat it is the whole reason to own one. What it
- * will not do is land the last bite - a nip can leave a snake at level
- * one and no lower, so the kill stays yours.
+ * Each one trails its owner and takes a piece out of the nearest snake
+ * that is not its owner - so rival companions chew on you, on each
+ * other, and on their owners' rivals, which is the only way having one
+ * is fair rather than a licence.
+ *
+ * A nip is deliberately blind to level: chewing something far bigger
+ * down to where it can be eaten is the whole reason to keep one. What
+ * none of them will ever do is land the last bite. This function has no
+ * way to mark a snake dead - it clamps at nothing and stops - so a
+ * companion can leave something at level one and no lower.
  */
-export function nip(world: World, now: number, dt: number): { victim: number; took: number } | null {
-  const f = world.friend
-  const me = world.snakes.find((s) => s.player)
-  if (!f || !me || me.dead) return null
+export function nipAll(world: World, now: number, dt: number): { owner: number; took: number }[] {
+  const out: { owner: number; took: number }[] = []
+  for (const owner of world.snakes) {
+    const f = owner.friend
+    if (!f || owner.dead) continue
 
-  // Trail the head, a little behind and off to one side.
-  const want = {
-    x: me.x - Math.cos(me.heading) * 46 + Math.cos(now * 0.0016) * 26,
-    y: me.y - Math.sin(me.heading) * 46 + Math.sin(now * 0.0016) * 26,
-  }
-  f.x += (want.x - f.x) * Math.min(1, dt * 6)
-  f.y += (want.y - f.y) * Math.min(1, dt * 6)
-
-  if (now < f.restUntil) return null
-
-  const reach = reachOf(f.spec.cost)
-  let best: Snake | null = null
-  let bestD = reach
-  for (const other of world.snakes) {
-    if (other.dead || other.player) continue
-    const d = Math.hypot(other.x - f.x, other.y - f.y)
-    if (d < bestD) {
-      bestD = d
-      best = other
+    // Trail the head, a little behind and off to one side.
+    const want = {
+      x: owner.x - Math.cos(owner.heading) * 46 + Math.cos(now * 0.0016 + owner.id) * 26,
+      y: owner.y - Math.sin(owner.heading) * 46 + Math.sin(now * 0.0016 + owner.id) * 26,
     }
-  }
-  if (!best) return null
+    f.x += (want.x - f.x) * Math.min(1, dt * 6)
+    f.y += (want.y - f.y) * Math.min(1, dt * 6)
 
-  const took = Math.min(nipOf(f.spec.cost), best.fed)
-  f.restUntil = now + restOf(f.spec.cost)
-  f.targetId = best.id
-  f.dartUntil = now + 220
-  if (took <= 0) return null
-  best.fed = Math.max(0, best.fed - took)
-  best.bittenUntil = now + 200
-  return { victim: best.id, took }
+    if (now < f.restUntil) continue
+
+    const reach = reachOf(f.spec.cost)
+    let best: Snake | null = null
+    let bestD = reach
+    for (const other of world.snakes) {
+      if (other.dead || other.id === owner.id) continue
+      // Nothing can pick on what it cannot see.
+      if (other.unseen > 0.6) continue
+      const d = Math.hypot(other.x - f.x, other.y - f.y)
+      if (d < bestD) {
+        bestD = d
+        best = other
+      }
+    }
+    if (!best) continue
+
+    const took = Math.min(nipOf(f.spec.cost), best.fed)
+    f.restUntil = now + restOf(f.spec.cost)
+    f.targetId = best.id
+    f.dartUntil = now + 220
+    if (took <= 0) continue
+    best.fed = Math.max(0, best.fed - took)
+    best.bittenUntil = now + 200
+    out.push({ owner: owner.id, took })
+  }
+  return out
 }
 
-export function makeWorld(map: MapSpec, skinKey: string, rng: () => number): World {
+export function makeWorld(
+  map: MapSpec,
+  skinKey: string,
+  rng: () => number,
+  yourCompanionCost = 0
+): World {
   const skin = SKIN_BY_KEY[skinKey] ?? SKIN_BY_KEY.grass
   const snakes: Snake[] = [
     makeSnake(0, map.w / 2, map.h / 2, START_FED, true, rng, { hue: skin.hue, pattern: skin.pattern, accent: skin.accent, sat: skin.sat ?? 72 }, map),
@@ -228,15 +232,25 @@ export function makeWorld(map: MapSpec, skinKey: string, rng: () => number): Wor
     // Everyone opens at level one, you included. Whatever is big later
     // got that way in front of you.
     const spot = clearOf(snakes[0], rng, map)
-    snakes.push(
-      makeSnake(i, spot.x, spot.y, START_FED, false, rng, { hue: hues[i % hues.length], pattern: 'bands' }, map)
+    const rival = makeSnake(
+      i,
+      spot.x,
+      spot.y,
+      START_FED,
+      false,
+      rng,
+      { hue: hues[i % hues.length], pattern: 'bands' },
+      map
     )
+    rival.friend = makeFriend(rivalCompanion(yourCompanionCost, rng(), rng()), rival.x, rival.y)
+    snakes.push(rival)
   }
+  snakes[0].friend = null
   const pellets: Pellet[] = []
   for (let i = 0; i < map.pellets; i++) pellets.push(makePellet(rng, map))
   const coins: Coin[] = []
   for (let i = 0; i < COIN_COUNT; i++) coins.push(makeCoin(rng, map))
-  return { snakes, pellets, coins, t: 0, nextId: map.rivals + 1, map, nextSpawnAt: 0, startedAt: 0, friend: null }
+  return { snakes, pellets, coins, t: 0, nextId: map.rivals + 1, map, nextSpawnAt: 0, startedAt: 0 }
 }
 
 /* ------------------------------------------------------------------ */
@@ -615,6 +629,8 @@ export function restock(world: World, now: number, rng: () => number) {
       pattern: 'bands',
     }, world.map)
     s.safeUntil = now + SPAWN_GRACE
+    const yours = player?.friend?.spec.cost ?? 0
+    s.friend = makeFriend(rivalCompanion(yours, rng(), rng()), s.x, s.y)
     world.snakes.push(s)
     // Faster when the field is thin, slower when it is nearly full.
     const short = want - alive
