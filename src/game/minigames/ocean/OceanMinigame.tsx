@@ -47,6 +47,7 @@ import {
   drawLandmark,
   drawMotes,
   drawSeabed,
+  drawShafts,
   drawShip,
   drawSky,
   drawSurface,
@@ -580,6 +581,7 @@ export function OceanMinigame({ onExit }: MinigameProps) {
       drawBackdrop(ctx!, cam)
       drawSurface(ctx!, cam, viewDist, w.t, false)
       drawSeabed(ctx!, cam, viewDist, w.t)
+      drawShafts(ctx!, cam, w.t)
 
       // Everything solid, painted far to near so near things overlap.
       type Item =

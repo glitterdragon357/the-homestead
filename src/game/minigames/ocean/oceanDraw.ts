@@ -8,6 +8,7 @@
  * your view is drawn broadside, and one swimming straight at you is
  * squashed to the narrow silhouette you would actually see.
  */
+import { contactShadow } from '../../engine/polish'
 
 import {
   SURFACE_Y,
@@ -108,6 +109,49 @@ export function drawBackdrop(ctx: CanvasRenderingContext2D, cam: Camera) {
   grad.addColorStop(1, waterColour(cam.y + 560 + lean))
   ctx.fillStyle = grad
   ctx.fillRect(0, 0, VIEW.width, VIEW.height)
+}
+
+/**
+ * Shafts of sunlight coming down through the surface.
+ *
+ * Drawn in screen space and leaning with the camera rather than being
+ * real geometry: they are a lighting effect on the water itself, not
+ * objects in it, and trying to place them in the world only makes them
+ * swing about wrongly when you turn. They fade out with depth, because
+ * by the time the light is gone there is nothing left to make shafts of.
+ */
+export function drawShafts(ctx: CanvasRenderingContext2D, cam: Camera, t: number) {
+  const down = cam.y - SURFACE_Y
+  if (down < 0) return
+  const strength = Math.max(0, 1 - down / 520)
+  if (strength <= 0.02) return
+
+  const top = -Math.sin(cam.pitch) * 600 - 200
+  ctx.save()
+  ctx.globalCompositeOperation = 'lighter'
+  for (let i = 0; i < 7; i++) {
+    const seed = i * 1.37
+    // Each shaft drifts at its own rate, so they never march in step.
+    const sway = Math.sin(t * 0.00035 + seed * 2.1) * 90
+    const x = ((i * 191 + noise(seed) * 120 - cam.yaw * 420) % (VIEW.width + 460)) - 230 + sway
+    const wide = 26 + noise(seed + 3) * 44
+    const lean = 58 + noise(seed + 7) * 40
+
+    const g = ctx.createLinearGradient(x, top, x + lean, top + 1100)
+    const a = strength * (0.05 + noise(seed + 11) * 0.05)
+    g.addColorStop(0, `rgba(210,240,255,${a.toFixed(3)})`)
+    g.addColorStop(0.45, `rgba(180,225,255,${(a * 0.5).toFixed(3)})`)
+    g.addColorStop(1, 'rgba(150,200,255,0)')
+    ctx.fillStyle = g
+    ctx.beginPath()
+    ctx.moveTo(x - wide * 0.3, top)
+    ctx.lineTo(x + wide * 0.3, top)
+    ctx.lineTo(x + lean + wide, top + 1100)
+    ctx.lineTo(x + lean - wide, top + 1100)
+    ctx.closePath()
+    ctx.fill()
+  }
+  ctx.restore()
 }
 
 /**
@@ -458,12 +502,48 @@ export function drawSeabed(ctx: CanvasRenderingContext2D, cam: Camera, viewDist:
       // does not. Only a whisper of per-cell variation: any more and the
       // grid reads as a chequerboard instead of a seabed.
       const g = gloomAt(floorHeightAt(cx))
-      const tone = 0.95 + hash(x * 0.013 + z * 0.017) * 0.1
-      const sandR = Math.round((198 * (1 - g) + 44 * g) * tone)
-      const sandG = Math.round((181 * (1 - g) + 48 * g) * tone)
-      const sandB = Math.round((143 * (1 - g) + 60 * g) * tone)
+
+      // Caustics: the net of light the waves focus onto the bottom.
+      //
+      // Two slow sine fields crossed at an angle. Both are deliberately
+      // long compared to the mesh cell - at anything near the cell size
+      // each cell picks its own brightness and the sea floor comes out a
+      // chequerboard - and the value is worked out at two opposite
+      // corners and run across the cell as a gradient, so neighbouring
+      // cells meet without a seam. It costs one gradient inside a fill
+      // that was happening anyway.
+      // Caustics and the mottling of the sand, both as smooth functions
+      // of world position sampled at the middle of the cell.
+      //
+      // The cell is still one flat colour, but that was never the
+      // problem: the old per-cell random tone made neighbours differ by
+      // up to a tenth at random, which is what made the sea floor a
+      // chequerboard. Long, smooth functions leave neighbouring cells
+      // within a fraction of a percent of each other and the mesh
+      // disappears. Running a gradient across each cell instead looks
+      // right in the middle and wrong at the edges - a diagonal gradient
+      // cannot agree with its neighbour along a shared edge, so every
+      // seam shows as a line and the grid comes back as a wireframe.
+      const sandAt = (px: number, pz: number) => {
+        // Mottling - long wavelengths, so it never lines up with a cell.
+        const tone =
+          0.95 +
+          (Math.sin(px * 0.0041 + pz * 0.0029) * 0.5 +
+            Math.sin(px * 0.0017 - pz * 0.0023) * 0.3 +
+            0.8) *
+            0.055
+        // Caustics - the net of light the waves focus onto the bottom.
+        const net =
+          Math.sin(px * 0.0085 + t * 0.0011) * Math.sin(pz * 0.0072 - t * 0.0009) +
+          Math.sin((px + pz) * 0.0052 + t * 0.0015) * 0.7
+        const bright = Math.pow(Math.max(0, net) / 1.7, 2.2) * (1 - g) * 0.6
+        return `rgb(${Math.round(Math.min(255, (198 * (1 - g) + 44 * g) * tone + bright * 92))},${Math.round(
+          Math.min(255, (181 * (1 - g) + 48 * g) * tone + bright * 98)
+        )},${Math.round(Math.min(255, (143 * (1 - g) + 60 * g) * tone + bright * 80))})`
+      }
+
       ctx.globalAlpha = k
-      ctx.fillStyle = `rgb(${sandR},${sandG},${sandB})`
+      ctx.fillStyle = sandAt(cx, cz)
       fillQuad(ctx, [a, b, c, e])
 
       // A boulder or a stand of weed, always in the same cells.
@@ -473,7 +553,14 @@ export function drawSeabed(ctx: CanvasRenderingContext2D, cam: Camera, viewDist:
         const p = project(cam, cx, floorHeightAt(cx) - r * 0.5, cz)
         if (p) {
           ctx.globalAlpha = clarity(p.depth, reach)
-          ctx.fillStyle = gloomAt(floorHeightAt(cx)) > 0.5 ? '#33353d' : '#8d8570'
+          contactShadow(ctx, p.sx, p.sy + r * 0.5 * p.scale, r * 1.4 * p.scale, r * 0.4 * p.scale, 0.3)
+          // Lit from straight above, the way everything down here is.
+          const stone = gloomAt(floorHeightAt(cx)) > 0.5 ? '#33353d' : '#8d8570'
+          const lit = ctx.createLinearGradient(p.sx, p.sy - r * p.scale, p.sx, p.sy + r * p.scale)
+          lit.addColorStop(0, mix(stone, '#e8f4ff', 0.34))
+          lit.addColorStop(0.55, stone)
+          lit.addColorStop(1, mix(stone, '#0d1420', 0.42))
+          ctx.fillStyle = lit
           ctx.beginPath()
           ctx.ellipse(p.sx, p.sy, r * p.scale, r * 0.7 * p.scale, 0, 0, Math.PI * 2)
           ctx.fill()
@@ -580,6 +667,24 @@ export function drawCreature(
   ctx.restore()
 }
 
+/**
+ * Countershading: dark along the back, pale underneath.
+ *
+ * Almost every animal in open water is painted this way, because it is
+ * what cancels the light coming down from the surface - and it is the
+ * single strongest cue that a shape in the water is a fish rather than a
+ * fish-shaped piece of paper. `h` is the half-height of the body being
+ * filled, so the gradient lands on the animal rather than near it.
+ */
+function hide(ctx: CanvasRenderingContext2D, sp: Species, h: number): CanvasGradient {
+  const g = ctx.createLinearGradient(0, -h, 0, h)
+  g.addColorStop(0, mix(sp.body, '#08131f', 0.45))
+  g.addColorStop(0.38, sp.body)
+  g.addColorStop(0.78, mix(sp.body, sp.belly, 0.7))
+  g.addColorStop(1, mix(sp.belly, '#ffffff', 0.22))
+  return g
+}
+
 function paintCreature(ctx: CanvasRenderingContext2D, sp: Species, t: number, seed: number) {
   const L = sp.length
   const beat = Math.sin(t * 0.006 + seed)
@@ -588,7 +693,7 @@ function paintCreature(ctx: CanvasRenderingContext2D, sp: Species, t: number, se
     case 'torpedo':
     case 'lantern': {
       const h = L * 0.34
-      ctx.fillStyle = sp.body
+      ctx.fillStyle = hide(ctx, sp, h)
       ctx.beginPath()
       ctx.moveTo(L * 0.5, 0)
       ctx.quadraticCurveTo(L * 0.1, -h, -L * 0.34, -h * 0.42)
@@ -626,7 +731,7 @@ function paintCreature(ctx: CanvasRenderingContext2D, sp: Species, t: number, se
     }
     case 'round': {
       const h = L * 0.52
-      ctx.fillStyle = sp.body
+      ctx.fillStyle = hide(ctx, sp, h)
       ctx.beginPath()
       ctx.ellipse(0, 0, L * 0.44, h * 0.5, 0, 0, Math.PI * 2)
       ctx.fill()
@@ -649,7 +754,7 @@ function paintCreature(ctx: CanvasRenderingContext2D, sp: Species, t: number, se
     }
     case 'flat': {
       const h = L * 0.92
-      ctx.fillStyle = sp.body
+      ctx.fillStyle = hide(ctx, sp, h * 0.5)
       ctx.beginPath()
       ctx.moveTo(L * 0.44, 0)
       ctx.quadraticCurveTo(L * 0.1, -h * 0.5, -L * 0.24, -h * 0.36)
@@ -828,7 +933,7 @@ function paintCreature(ctx: CanvasRenderingContext2D, sp: Species, t: number, se
     }
     case 'mammal': {
       const h = L * 0.28
-      ctx.fillStyle = sp.body
+      ctx.fillStyle = hide(ctx, sp, h)
       ctx.beginPath()
       ctx.moveTo(L * 0.5, 0)
       ctx.quadraticCurveTo(L * 0.05, -h, -L * 0.36, -h * 0.3)
