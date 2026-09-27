@@ -17,6 +17,7 @@ import {
   CHEST_REACH,
   CHEST_VALUE,
   COIN_COUNT,
+  pickupReach,
   COIN_VALUE,
   FOOD_HUE,
   FOOD_SAT,
@@ -592,7 +593,7 @@ export function collect(world: World, rng: () => number): number {
   const me = world.snakes.find((s) => s.player)
   if (!me || me.dead) return 0
   let got = 0
-  const reach = HEAD_R + 10 + girthOf(me.fed) * 0.35
+  const reach = pickupReach()
   for (let i = world.coins.length - 1; i >= 0; i--) {
     const c = world.coins[i]
     if (Math.abs(c.x - me.x) > reach || Math.abs(c.y - me.y) > reach) continue
@@ -614,6 +615,10 @@ export function collect(world: World, rng: () => number): number {
  * be counted rather than inferred from the money.
  */
 export function crack(world: World, now: number, rng: () => number): { coins: number; opened: number } {
+  // Only on maps that have them. Without this the refill below quietly
+  // grew chests on every map in the game, including the ones whose whole
+  // point is that there is no money on the floor at all.
+  if (world.map.loot !== 'chests') return { coins: 0, opened: 0 }
   const me = world.snakes.find((s) => s.player)
   if (!me || me.dead) return { coins: 0, opened: 0 }
   let coins = 0
@@ -635,6 +640,9 @@ export function crack(world: World, now: number, rng: () => number): { coins: nu
 
 /** A snake you ate drops what it was worth, right where it died. */
 export function dropBounty(at: Snake, world: World, rng: () => number) {
+  // On a map with no money on it, a kill leaves no money either - the
+  // whole point of those arenas is that there is nothing to collect.
+  if (world.map.loot === 'none') return
   const total = bountyFor(at.fed)
   const lumps = Math.max(2, Math.min(7, Math.round(total / 6)))
   const each = Math.max(1, Math.round(total / lumps))

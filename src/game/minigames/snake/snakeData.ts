@@ -1482,11 +1482,35 @@ export interface Coin {
 export const FOOD_HUE = 48
 export const FOOD_SAT = 92
 
-export const COIN_COUNT = 26
+/**
+ * How many lie about at once, and what a loose one is worth.
+ *
+ * Four, on a map that can be four thousand units across. Coins are meant
+ * to be hunted rather than swept up: at twenty-six the arena was paved
+ * with them and you collected money simply by playing, which made the
+ * whole floor uninteresting to look at.
+ */
+export const COIN_COUNT = 4
 export const COIN_VALUE = 3
 /** Dropped when you eat a snake, on top of what it was carrying. */
 export function bountyFor(fed: number): number {
-  return 4 + Math.round(fed * 0.35)
+  return 2 + Math.round(fed * 0.14)
+}
+
+/**
+ * How far a snake can hoover from. The same for everybody.
+ *
+ * It scaled with level for a while, and paying a coin bonus to big
+ * snakes on top of that was worse still. Both are the same mistake:
+ * being the biggest thing in the arena already pays, because nothing is
+ * above you and you can eat whatever does not get out of the way. Piling
+ * extra income on top of that means whoever gets ahead stays ahead for
+ * ever, which is not a game. Coins are worth the same to everyone and
+ * picked up from the same distance by everyone - what a long run gets
+ * you is more ground covered, not a better rate.
+ */
+export function pickupReach(): number {
+  return HEAD_R + 14
 }
 
 /* ------------------------------------------------------------------ */
