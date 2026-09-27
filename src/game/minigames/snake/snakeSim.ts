@@ -13,6 +13,9 @@ import {
   rivalCompanion,
   reachOf,
   restOf,
+  CHEST_COUNT,
+  CHEST_REACH,
+  CHEST_VALUE,
   COIN_COUNT,
   COIN_VALUE,
   FOOD_HUE,
@@ -42,6 +45,7 @@ import {
   meet,
   segmentsOf,
   speedOf,
+  type Chest,
   type Coin,
   type Friend,
   type MapSpec,
@@ -54,6 +58,7 @@ export interface World {
   snakes: Snake[]
   pellets: Pellet[]
   coins: Coin[]
+  chests: Chest[]
   t: number
   nextId: number
   map: MapSpec
@@ -138,6 +143,15 @@ export function makeCoin(rng: () => number, map: MapSpec, x?: number, y?: number
     y: y ?? 60 + rng() * (map.h - 120),
     value,
     spin: rng() * Math.PI * 2,
+  }
+}
+
+export function makeChest(rng: () => number, map: MapSpec): Chest {
+  return {
+    x: 90 + rng() * (map.w - 180),
+    y: 90 + rng() * (map.h - 180),
+    value: Math.round(CHEST_VALUE * (0.7 + rng() * 0.6)),
+    openedAt: 0,
   }
 }
 
@@ -256,9 +270,24 @@ export function makeWorld(
   snakes[0].friend = null
   const pellets: Pellet[] = []
   for (let i = 0; i < map.pellets; i++) pellets.push(makePellet(rng, map))
+  // What a map puts on the floor is the map's business. Some have loose
+  // coins, some have a handful of chests instead, and some have nothing
+  // at all but food.
   const coins: Coin[] = []
-  for (let i = 0; i < COIN_COUNT; i++) coins.push(makeCoin(rng, map))
-  return { snakes, pellets, coins, t: 0, nextId: map.rivals + 1, map, nextSpawnAt: 0, startedAt: 0 }
+  if (map.loot === 'coins') for (let i = 0; i < COIN_COUNT; i++) coins.push(makeCoin(rng, map))
+  const chests: Chest[] = []
+  if (map.loot === 'chests') for (let i = 0; i < CHEST_COUNT; i++) chests.push(makeChest(rng, map))
+  return {
+    snakes,
+    pellets,
+    coins,
+    chests,
+    t: 0,
+    nextId: map.rivals + 1,
+    map,
+    nextSpawnAt: 0,
+    startedAt: 0,
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -571,8 +600,37 @@ export function collect(world: World, rng: () => number): number {
     got += c.value
     world.coins.splice(i, 1)
   }
-  while (world.coins.length < COIN_COUNT) world.coins.push(makeCoin(rng, world.map))
+  if (world.map.loot === 'coins') {
+    while (world.coins.length < COIN_COUNT) world.coins.push(makeCoin(rng, world.map))
+  }
   return got
+}
+
+/**
+ * Chests the player has reached.
+ *
+ * Returns how many coins came out and how many chests were opened - the
+ * second number is what the elemental skin is earned with, so it has to
+ * be counted rather than inferred from the money.
+ */
+export function crack(world: World, now: number, rng: () => number): { coins: number; opened: number } {
+  const me = world.snakes.find((s) => s.player)
+  if (!me || me.dead) return { coins: 0, opened: 0 }
+  let coins = 0
+  let opened = 0
+  const reach = CHEST_REACH + girthOf(me.fed) * 0.5
+  for (const c of world.chests) {
+    if (c.openedAt) continue
+    if (Math.hypot(c.x - me.x, c.y - me.y) > reach) continue
+    c.openedAt = now
+    coins += c.value
+    opened++
+  }
+  // Clear the ones whose opening has played out, and put fresh ones on
+  // the field so a long run is not left with an empty map.
+  world.chests = world.chests.filter((c) => !c.openedAt || now - c.openedAt < 900)
+  while (world.chests.length < CHEST_COUNT) world.chests.push(makeChest(rng, world.map))
+  return { coins, opened }
 }
 
 /** A snake you ate drops what it was worth, right where it died. */

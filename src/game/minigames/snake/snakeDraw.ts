@@ -9,6 +9,7 @@
 
 import {
   HEAD_R,
+  elementAt,
   girthOf,
   levelOf,
   segmentsOf,
@@ -49,6 +50,119 @@ function hsl(hue: number, s: number, l: number, a = 1): string {
 /* The floor                                                           */
 /* ------------------------------------------------------------------ */
 
+/** The marking on the floor, which is different on every kind of map. */
+function drawGround(ctx: CanvasRenderingContext2D, cam: Camera, map: MapSpec) {
+  if (map.texture === 'bare') return
+  const step = map.texture === 'dots' ? 74 : map.texture === 'hex' ? 96 : 100
+  const x0 = Math.floor((cam.x - VIEW.width / 2 / cam.zoom) / step) * step
+  const x1 = cam.x + VIEW.width / 2 / cam.zoom
+  const y0 = Math.floor((cam.y - VIEW.height / 2 / cam.zoom) / step) * step
+  const y1 = cam.y + VIEW.height / 2 / cam.zoom
+
+  ctx.strokeStyle = map.grid
+  ctx.fillStyle = map.grid
+  ctx.lineWidth = 1
+
+  switch (map.texture) {
+    case 'grid': {
+      ctx.beginPath()
+      for (let x = x0; x < x1; x += step) {
+        const a = toScreen(cam, x, y0 - step)
+        const b = toScreen(cam, x, y1 + step)
+        ctx.moveTo(a.sx, a.sy)
+        ctx.lineTo(b.sx, b.sy)
+      }
+      for (let y = y0; y < y1; y += step) {
+        const a = toScreen(cam, x0 - step, y)
+        const b = toScreen(cam, x1 + step, y)
+        ctx.moveTo(a.sx, a.sy)
+        ctx.lineTo(b.sx, b.sy)
+      }
+      ctx.stroke()
+      break
+    }
+    case 'dots': {
+      for (let x = x0; x < x1; x += step) {
+        for (let y = y0; y < y1; y += step) {
+          const p = toScreen(cam, x, y)
+          ctx.beginPath()
+          ctx.arc(p.sx, p.sy, Math.max(1, 3 * cam.zoom), 0, Math.PI * 2)
+          ctx.fill()
+        }
+      }
+      break
+    }
+    case 'hex': {
+      // Staggered rows of short strokes: a honeycomb without the cost of
+      // actually tiling one.
+      ctx.beginPath()
+      let row = 0
+      for (let y = y0; y < y1; y += step * 0.75) {
+        const off = row % 2 ? step / 2 : 0
+        for (let x = x0; x < x1; x += step) {
+          const c = toScreen(cam, x + off, y)
+          const r = step * 0.3 * cam.zoom
+          for (let k = 0; k < 6; k++) {
+            const a1 = (k / 6) * Math.PI * 2
+            const a2 = ((k + 1) / 6) * Math.PI * 2
+            ctx.moveTo(c.sx + Math.cos(a1) * r, c.sy + Math.sin(a1) * r)
+            ctx.lineTo(c.sx + Math.cos(a2) * r, c.sy + Math.sin(a2) * r)
+          }
+        }
+        row++
+      }
+      ctx.stroke()
+      break
+    }
+    case 'waves': {
+      ctx.beginPath()
+      for (let y = y0; y < y1; y += step * 0.5) {
+        const left = toScreen(cam, x0 - step, y)
+        ctx.moveTo(left.sx, left.sy)
+        for (let x = x0; x < x1 + step; x += step * 0.25) {
+          const p = toScreen(cam, x, y + Math.sin(x * 0.02 + y * 0.01) * step * 0.12)
+          ctx.lineTo(p.sx, p.sy)
+        }
+      }
+      ctx.stroke()
+      break
+    }
+    case 'stripes': {
+      ctx.beginPath()
+      for (let x = x0; x < x1; x += step * 0.6) {
+        const a = toScreen(cam, x, y0 - step)
+        const b = toScreen(cam, x + step * 0.5, y1 + step)
+        ctx.moveTo(a.sx, a.sy)
+        ctx.lineTo(b.sx, b.sy)
+      }
+      ctx.stroke()
+      break
+    }
+    case 'scratch': {
+      // Short marks at fixed positions, so the ground looks worked over
+      // rather than ruled.
+      ctx.beginPath()
+      for (let x = x0; x < x1; x += step * 0.7) {
+        for (let y = y0; y < y1; y += step * 0.7) {
+          const n = hash(x * 0.013 + y * 0.017)
+          const a = toScreen(cam, x + n * 30, y + n * 20)
+          const b = toScreen(cam, x + n * 30 + 24 + n * 20, y + n * 20 + (n - 0.5) * 30)
+          ctx.moveTo(a.sx, a.sy)
+          ctx.lineTo(b.sx, b.sy)
+        }
+      }
+      ctx.stroke()
+      break
+    }
+  }
+}
+
+/** Deterministic noise, so a floor marking never crawls about. */
+function hash(n: number): number {
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453
+  return x - Math.floor(x)
+}
+
 export function drawArena(ctx: CanvasRenderingContext2D, cam: Camera, map: MapSpec) {
   const bg = ctx.createRadialGradient(
     VIEW.width / 2,
@@ -63,29 +177,12 @@ export function drawArena(ctx: CanvasRenderingContext2D, cam: Camera, map: MapSp
   ctx.fillStyle = bg
   ctx.fillRect(0, 0, VIEW.width, VIEW.height)
 
-  // A grid, so speed is legible. Without it a snake in open space looks
-  // like it is barely moving whatever the actual speed.
-  const step = 100
-  ctx.strokeStyle = map.grid
-  ctx.lineWidth = 1
-  ctx.beginPath()
-  const x0 = Math.floor((cam.x - VIEW.width / 2 / cam.zoom) / step) * step
-  const x1 = cam.x + VIEW.width / 2 / cam.zoom
-  for (let x = x0; x < x1; x += step) {
-    const a = toScreen(cam, x, cam.y - VIEW.height / cam.zoom)
-    const b = toScreen(cam, x, cam.y + VIEW.height / cam.zoom)
-    ctx.moveTo(a.sx, a.sy)
-    ctx.lineTo(b.sx, b.sy)
-  }
-  const y0 = Math.floor((cam.y - VIEW.height / 2 / cam.zoom) / step) * step
-  const y1 = cam.y + VIEW.height / 2 / cam.zoom
-  for (let y = y0; y < y1; y += step) {
-    const a = toScreen(cam, cam.x - VIEW.width / cam.zoom, y)
-    const b = toScreen(cam, cam.x + VIEW.width / cam.zoom, y)
-    ctx.moveTo(a.sx, a.sy)
-    ctx.lineTo(b.sx, b.sy)
-  }
-  ctx.stroke()
+  // Ground markings, so speed is legible. Without something fixed to
+  // slide past, a snake in open space looks like it is barely moving
+  // whatever its actual speed - and giving each arena its own marking
+  // is most of what stops fifty of them feeling like one field in
+  // different light.
+  drawGround(ctx, cam, map)
 
   // The wall, which you can slide along but not leave.
   const tl = toScreen(cam, 0, 0)
@@ -168,6 +265,65 @@ export function drawPellets(ctx: CanvasRenderingContext2D, cam: Camera, pellets:
  */
 function plainly(pattern: Pattern): Pattern {
   return pattern === 'glow' || pattern === 'fire' ? 'bands' : pattern === 'vanish' ? 'solid' : pattern
+}
+
+/**
+ * A chest: what you get instead of loose coins on the maps that have
+ * them. Worth a great deal, and there are only ever a few.
+ */
+export function drawChests(
+  ctx: CanvasRenderingContext2D,
+  cam: Camera,
+  chests: { x: number; y: number; value: number; openedAt: number }[],
+  t: number
+) {
+  for (const c of chests) {
+    const p = toScreen(cam, c.x, c.y)
+    if (p.sx < -60 || p.sx > VIEW.width + 60 || p.sy < -60 || p.sy > VIEW.height + 60) continue
+    const w = 26 * cam.zoom
+    const h = 20 * cam.zoom
+    const open = c.openedAt ? Math.min(1, (t - c.openedAt) / 420) : 0
+
+    // Its glow says treasure; the same glow coins have, only bigger.
+    const glow = ctx.createRadialGradient(p.sx, p.sy, w * 0.3, p.sx, p.sy, w * (2.4 + open * 2))
+    glow.addColorStop(0, `rgba(255,210,110,${(0.45 + open * 0.5).toFixed(2)})`)
+    glow.addColorStop(1, 'rgba(255,190,90,0)')
+    ctx.fillStyle = glow
+    ctx.beginPath()
+    ctx.arc(p.sx, p.sy, w * (2.4 + open * 2), 0, Math.PI * 2)
+    ctx.fill()
+    if (open >= 1) continue
+
+    ctx.save()
+    ctx.translate(p.sx, p.sy)
+    // Body.
+    const body = ctx.createLinearGradient(0, -h * 0.2, 0, h)
+    body.addColorStop(0, '#8a5a2a')
+    body.addColorStop(1, '#4a2e14')
+    ctx.fillStyle = body
+    ctx.fillRect(-w / 2, -h * 0.1, w, h * 0.9)
+    // Lid, tilting back as it opens.
+    ctx.save()
+    ctx.translate(-w / 2, -h * 0.1)
+    ctx.rotate(-open * 1.1)
+    const lid = ctx.createLinearGradient(0, -h * 0.55, 0, 0)
+    lid.addColorStop(0, '#a87038')
+    lid.addColorStop(1, '#6b421d')
+    ctx.fillStyle = lid
+    ctx.beginPath()
+    ctx.moveTo(0, 0)
+    ctx.lineTo(0, -h * 0.34)
+    ctx.quadraticCurveTo(w / 2, -h * 0.72, w, -h * 0.34)
+    ctx.lineTo(w, 0)
+    ctx.closePath()
+    ctx.fill()
+    ctx.restore()
+    // Bands and lock.
+    ctx.fillStyle = '#e8c45a'
+    ctx.fillRect(-w / 2, h * 0.18, w, h * 0.12)
+    ctx.fillRect(-w * 0.09, -h * 0.1, w * 0.18, h * 0.5)
+    ctx.restore()
+  }
 }
 
 /**
@@ -365,10 +521,20 @@ export function drawBead(
   const light = opts.light ?? 54
   const taper = opts.taper ?? 1
   const sat = look.sat
-  const a = look.accent
-  const hue = look.pattern === 'shift' ? (look.hue + index * 3.2 + t * 0.03) % 360 : look.hue
+  // Elemental is not a pattern of its own - it is whichever of water,
+  // fire and ice it happens to be wearing, in whatever colour it has
+  // walked round to. Resolving it here means every one of those
+  // textures works on it without being written twice.
+  const el = look.pattern === 'elemental' ? elementAt(t) : null
+  const pattern = el ? el.pattern : look.pattern
+  const a = el ? el.hue : look.accent
+  const hue = el
+    ? el.hue
+    : look.pattern === 'shift'
+      ? (look.hue + index * 3.2 + t * 0.03) % 360
+      : look.hue
 
-  if (look.pattern === 'glow') {
+  if (pattern === 'glow') {
     const halo = ctx.createRadialGradient(x, y, r * 0.3, x, y, r * 2.1)
     halo.addColorStop(0, hsl(hue, 95, 62, 0.4))
     halo.addColorStop(1, hsl(hue, 95, 55, 0))
@@ -379,7 +545,7 @@ export function drawBead(
   }
 
   const wasAlpha = ctx.globalAlpha
-  if (look.pattern === 'ghost') ctx.globalAlpha = wasAlpha * 0.55
+  if (pattern === 'ghost') ctx.globalAlpha = wasAlpha * 0.55
 
   const body = ctx.createRadialGradient(x - r * 0.4, y - r * 0.45, r * 0.1, x, y, r)
   body.addColorStop(0, hsl(hue, sat + 6, light + 22))
@@ -389,14 +555,14 @@ export function drawBead(
   ctx.beginPath()
   ctx.arc(x, y, r, 0, Math.PI * 2)
   ctx.fill()
-  if (look.pattern === 'ghost') ctx.globalAlpha = wasAlpha
+  if (pattern === 'ghost') ctx.globalAlpha = wasAlpha
 
   // Markings. Whatever it is, it runs down the back, because that is
   // the only part of a snake anyone ever sees.
   if (taper <= 0.3) return
   const i = index
   const p = { sx: x, sy: y }
-  switch (look.pattern) {
+  switch (pattern) {
     case 'bands':
       if (i % 3 === 0) {
         ctx.fillStyle = hsl(hue, 60, light - 16, 0.5)
@@ -665,8 +831,8 @@ export function drawSnake(
 
   if (s.dashing) {
     const glow = ctx.createRadialGradient(h.sx, h.sy, hr * 0.4, h.sx, h.sy, hr * 3.4)
-    glow.addColorStop(0, hsl(s.hue, 95, 72, 0.5))
-    glow.addColorStop(1, hsl(s.hue, 95, 60, 0))
+    glow.addColorStop(0, hsl(s.pattern === 'elemental' ? elementAt(t).hue : s.hue, 95, 72, 0.5))
+    glow.addColorStop(1, hsl(s.pattern === 'elemental' ? elementAt(t).hue : s.hue, 95, 60, 0))
     ctx.fillStyle = glow
     ctx.beginPath()
     ctx.arc(h.sx, h.sy, hr * 3.4, 0, Math.PI * 2)
@@ -703,11 +869,16 @@ export function drawSnake(
   const L = hr * 1.34
   const Wd = hr * 1.12
 
+  // The head has to follow the body's colour, not the skin's nominal
+  // one - otherwise an Elemental snake turns orange from the neck back
+  // and keeps a blue head.
+  const headHue = s.pattern === 'elemental' ? elementAt(t).hue : s.hue
+
   const skin = (lift: number) => {
     const g = ctx.createLinearGradient(0, -Wd, 0, Wd)
-    g.addColorStop(0, hsl(s.hue, s.sat + 6, 66 + lift))
-    g.addColorStop(0.45, hsl(s.hue, s.sat, 52 + lift))
-    g.addColorStop(1, hsl(s.hue, s.sat - 6, 33 + lift))
+    g.addColorStop(0, hsl(headHue, s.sat + 6, 66 + lift))
+    g.addColorStop(0.45, hsl(headHue, s.sat, 52 + lift))
+    g.addColorStop(1, hsl(headHue, s.sat - 6, 33 + lift))
     return g
   }
 
@@ -765,7 +936,7 @@ export function drawSnake(
 
   // The lower lip, a lighter line under the opening so the jaw reads as
   // a jaw rather than as a hole.
-  ctx.strokeStyle = hsl(s.hue, s.sat, 30, 0.7)
+  ctx.strokeStyle = hsl(headHue, s.sat, 30, 0.7)
   ctx.lineWidth = Math.max(0.7, hr * 0.07)
   ctx.beginPath()
   ctx.moveTo(L * 0.12, lip * 0.25)
@@ -797,7 +968,7 @@ export function drawSnake(
     ctx.beginPath()
     ctx.ellipse(ex, ey, hr * 0.33, hr * 0.31, 0, 0, Math.PI * 2)
     ctx.fill()
-    ctx.strokeStyle = hsl(s.hue, s.sat, 26, 0.5)
+    ctx.strokeStyle = hsl(headHue, s.sat, 26, 0.5)
     ctx.lineWidth = Math.max(0.6, hr * 0.05)
     ctx.stroke()
     ctx.fillStyle = '#121a24'
@@ -812,7 +983,7 @@ export function drawSnake(
 
   // Nostrils.
   if (hr > 9) {
-    ctx.fillStyle = hsl(s.hue, s.sat, 20)
+    ctx.fillStyle = hsl(headHue, s.sat, 20)
     for (const side of [-1, 1]) {
       ctx.beginPath()
       ctx.arc(L * 0.82, side * Wd * 0.3, hr * 0.05, 0, Math.PI * 2)

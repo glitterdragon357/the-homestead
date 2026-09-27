@@ -24,7 +24,47 @@ export interface MapSpec {
   floorOut: string
   grid: string
   wall: string
+  /**
+   * How the ground is marked out. Size and palette alone left too many
+   * arenas feeling like the same field in a different light.
+   */
+  texture: Texture
+  /**
+   * What is on the floor besides food.
+   *
+   *  - `coins`  loose coins lying about, as before
+   *  - `chests` no loose coins at all; a few chests worth a great deal,
+   *             and the only place the elemental skin is earned
+   *  - `none`   nothing but food. Nothing to collect, nothing to chase,
+   *             just snakes
+   */
+  loot: Loot
 }
+
+export type Texture = 'grid' | 'dots' | 'hex' | 'waves' | 'stripes' | 'scratch' | 'bare'
+export type Loot = 'coins' | 'chests' | 'none'
+
+/* ------------------------------------------------------------------ */
+/* Treasure                                                            */
+/* ------------------------------------------------------------------ */
+
+/** A chest sitting on the floor of a map that has them. */
+export interface Chest {
+  x: number
+  y: number
+  /** Coins inside. */
+  value: number
+  /** Runs its opening animation, then it is gone. */
+  openedAt: number
+}
+
+/** How many sit on the field at once, and what one is worth. */
+export const CHEST_COUNT = 4
+export const CHEST_VALUE = 220
+/** How near you have to be to crack one open. */
+export const CHEST_REACH = 34
+/** Chests opened before the elemental skin is yours. */
+export const CHESTS_FOR_ELEMENTAL = 12
 
 export const MAPS: MapSpec[] = [
   {
@@ -39,6 +79,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#0a1220',
     grid: 'rgba(120,170,230,0.075)',
     wall: '126,196,255',
+    texture: 'grid',
+    loot: 'coins',
   },
   {
     key: 'meadow',
@@ -52,6 +94,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#0a1608',
     grid: 'rgba(150,220,150,0.075)',
     wall: '160,240,170',
+    texture: 'dots',
+    loot: 'none',
   },
   {
     key: 'grove',
@@ -65,6 +109,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#081409',
     grid: 'rgba(140,220,150,0.075)',
     wall: '150,240,170',
+    texture: 'dots',
+    loot: 'chests',
   },
   {
     key: 'wide-sky',
@@ -78,6 +124,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#0b1524',
     grid: 'rgba(150,190,240,0.075)',
     wall: '170,210,255',
+    texture: 'bare',
+    loot: 'chests',
   },
   {
     key: 'shelf',
@@ -91,6 +139,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#071618',
     grid: 'rgba(130,210,210,0.075)',
     wall: '140,230,230',
+    texture: 'waves',
+    loot: 'coins',
   },
   {
     key: 'narrows',
@@ -104,6 +154,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#0e0c1a',
     grid: 'rgba(180,150,235,0.075)',
     wall: '190,160,255',
+    texture: 'stripes',
+    loot: 'coins',
   },
   {
     key: 'long-water',
@@ -117,6 +169,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#05101c',
     grid: 'rgba(120,180,230,0.075)',
     wall: '130,200,255',
+    texture: 'waves',
+    loot: 'coins',
   },
   {
     key: 'causeway',
@@ -130,6 +184,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#14100a',
     grid: 'rgba(220,190,130,0.075)',
     wall: '240,205,140',
+    texture: 'stripes',
+    loot: 'coins',
   },
   {
     key: 'steppe',
@@ -143,6 +199,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#10140c',
     grid: 'rgba(190,200,150,0.075)',
     wall: '205,215,160',
+    texture: 'grid',
+    loot: 'coins',
   },
   {
     key: 'saltflats',
@@ -156,6 +214,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#16181a',
     grid: 'rgba(220,220,225,0.075)',
     wall: '240,240,245',
+    texture: 'bare',
+    loot: 'none',
   },
   {
     key: 'hollow',
@@ -169,6 +229,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#0c0a14',
     grid: 'rgba(170,150,210,0.075)',
     wall: '185,165,230',
+    texture: 'hex',
+    loot: 'chests',
   },
   {
     key: 'warren',
@@ -182,6 +244,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#130e08',
     grid: 'rgba(210,170,130,0.075)',
     wall: '230,185,140',
+    texture: 'hex',
+    loot: 'coins',
   },
   {
     key: 'terraces',
@@ -195,6 +259,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#0c150e',
     grid: 'rgba(160,200,170,0.075)',
     wall: '175,215,185',
+    texture: 'stripes',
+    loot: 'coins',
   },
   {
     key: 'emberfield',
@@ -208,6 +274,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#160a06',
     grid: 'rgba(255,160,120,0.075)',
     wall: '255,170,120',
+    texture: 'scratch',
+    loot: 'coins',
   },
   {
     key: 'kiln',
@@ -221,6 +289,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#180806',
     grid: 'rgba(255,140,90,0.075)',
     wall: '255,150,100',
+    texture: 'scratch',
+    loot: 'coins',
   },
   {
     key: 'crucible',
@@ -234,6 +304,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#160808',
     grid: 'rgba(255,150,130,0.075)',
     wall: '255,150,120',
+    texture: 'hex',
+    loot: 'coins',
   },
   {
     key: 'maw',
@@ -247,6 +319,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#120406',
     grid: 'rgba(255,120,130,0.075)',
     wall: '255,130,140',
+    texture: 'scratch',
+    loot: 'coins',
   },
   {
     key: 'coldstore',
@@ -260,6 +334,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#08141a',
     grid: 'rgba(170,220,240,0.075)',
     wall: '180,235,255',
+    texture: 'waves',
+    loot: 'coins',
   },
   {
     key: 'floe',
@@ -273,6 +349,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#0a141c',
     grid: 'rgba(200,225,240,0.075)',
     wall: '215,240,255',
+    texture: 'hex',
+    loot: 'coins',
   },
   {
     key: 'duskrun',
@@ -286,6 +364,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#0e0814',
     grid: 'rgba(190,160,220,0.075)',
     wall: '205,175,240',
+    texture: 'dots',
+    loot: 'coins',
   },
   {
     key: 'nightmarket',
@@ -299,6 +379,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#0a0610',
     grid: 'rgba(230,180,120,0.075)',
     wall: '250,200,140',
+    texture: 'dots',
+    loot: 'coins',
   },
   {
     key: 'glasshouse',
@@ -312,6 +394,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#0a1614',
     grid: 'rgba(180,235,220,0.075)',
     wall: '195,250,235',
+    texture: 'grid',
+    loot: 'coins',
   },
   {
     key: 'ironworks',
@@ -325,6 +409,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#0e1012',
     grid: 'rgba(180,190,200,0.075)',
     wall: '195,205,215',
+    texture: 'stripes',
+    loot: 'coins',
   },
   {
     key: 'spiral',
@@ -338,6 +424,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#0c0a16',
     grid: 'rgba(175,165,225,0.075)',
     wall: '190,180,245',
+    texture: 'hex',
+    loot: 'chests',
   },
   {
     key: 'gauntlet',
@@ -351,6 +439,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#140408',
     grid: 'rgba(255,130,150,0.075)',
     wall: '255,140,160',
+    texture: 'stripes',
+    loot: 'coins',
   },
   {
     key: 'chimney',
@@ -364,6 +454,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#0c0a12',
     grid: 'rgba(190,175,215,0.075)',
     wall: '205,190,235',
+    texture: 'stripes',
+    loot: 'coins',
   },
   {
     key: 'well',
@@ -377,6 +469,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#070c12',
     grid: 'rgba(150,180,215,0.075)',
     wall: '165,195,235',
+    texture: 'hex',
+    loot: 'coins',
   },
   {
     key: 'rookery',
@@ -390,6 +484,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#110d0a',
     grid: 'rgba(215,190,160,0.075)',
     wall: '235,205,170',
+    texture: 'dots',
+    loot: 'chests',
   },
   {
     key: 'ladder',
@@ -403,6 +499,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#12060c',
     grid: 'rgba(240,150,180,0.075)',
     wall: '255,160,190',
+    texture: 'stripes',
+    loot: 'coins',
   },
   {
     key: 'standing-stones',
@@ -416,6 +514,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#0a0e12',
     grid: 'rgba(180,195,205,0.075)',
     wall: '195,210,225',
+    texture: 'hex',
+    loot: 'coins',
   },
   {
     key: 'hungry-ground',
@@ -429,6 +529,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#100d08',
     grid: 'rgba(205,185,150,0.075)',
     wall: '225,200,160',
+    texture: 'scratch',
+    loot: 'none',
   },
   {
     key: 'lean-season',
@@ -442,6 +544,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#0c100a',
     grid: 'rgba(185,205,170,0.075)',
     wall: '200,220,180',
+    texture: 'dots',
+    loot: 'none',
   },
   {
     key: 'fast',
@@ -455,6 +559,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#120806',
     grid: 'rgba(230,160,140,0.075)',
     wall: '250,170,150',
+    texture: 'bare',
+    loot: 'none',
   },
   {
     key: 'windfall',
@@ -468,6 +574,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#0a1408',
     grid: 'rgba(170,225,150,0.075)',
     wall: '185,245,165',
+    texture: 'dots',
+    loot: 'chests',
   },
   {
     key: 'bloom',
@@ -481,6 +589,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#0d160a',
     grid: 'rgba(190,235,160,0.075)',
     wall: '205,255,175',
+    texture: 'dots',
+    loot: 'chests',
   },
   {
     key: 'spawning-grounds',
@@ -494,6 +604,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#061214',
     grid: 'rgba(150,220,225,0.075)',
     wall: '165,240,245',
+    texture: 'waves',
+    loot: 'coins',
   },
   {
     key: 'ashfall',
@@ -507,6 +619,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#101010',
     grid: 'rgba(200,200,200,0.075)',
     wall: '220,220,220',
+    texture: 'scratch',
+    loot: 'coins',
   },
   {
     key: 'verge',
@@ -520,6 +634,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#10120a',
     grid: 'rgba(205,215,150,0.075)',
     wall: '220,230,160',
+    texture: 'dots',
+    loot: 'none',
   },
   {
     key: 'tin-alley',
@@ -533,6 +649,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#0e1014',
     grid: 'rgba(185,195,215,0.075)',
     wall: '200,210,235',
+    texture: 'stripes',
+    loot: 'coins',
   },
   {
     key: 'shoal-water',
@@ -546,6 +664,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#061418',
     grid: 'rgba(150,215,230,0.075)',
     wall: '165,235,250',
+    texture: 'waves',
+    loot: 'coins',
   },
   {
     key: 'moth-hour',
@@ -559,6 +679,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#0d0a14',
     grid: 'rgba(175,165,205,0.075)',
     wall: '190,180,225',
+    texture: 'dots',
+    loot: 'none',
   },
   {
     key: 'quarry',
@@ -572,6 +694,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#12100e',
     grid: 'rgba(200,195,185,0.075)',
     wall: '215,210,200',
+    texture: 'hex',
+    loot: 'chests',
   },
   {
     key: 'peat',
@@ -585,6 +709,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#100a06',
     grid: 'rgba(195,170,135,0.075)',
     wall: '215,185,145',
+    texture: 'scratch',
+    loot: 'coins',
   },
   {
     key: 'saltmarsh',
@@ -598,6 +724,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#0c1410',
     grid: 'rgba(180,215,195,0.075)',
     wall: '195,235,210',
+    texture: 'waves',
+    loot: 'coins',
   },
   {
     key: 'snowbound',
@@ -611,6 +739,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#0e1218',
     grid: 'rgba(210,225,240,0.075)',
     wall: '225,240,255',
+    texture: 'bare',
+    loot: 'none',
   },
   {
     key: 'glasswater',
@@ -624,6 +754,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#061014',
     grid: 'rgba(160,205,220,0.075)',
     wall: '175,225,240',
+    texture: 'waves',
+    loot: 'chests',
   },
   {
     key: 'lastlight',
@@ -637,6 +769,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#14090a',
     grid: 'rgba(240,175,140,0.075)',
     wall: '255,185,150',
+    texture: 'dots',
+    loot: 'coins',
   },
   {
     key: 'slagfield',
@@ -650,6 +784,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#120c08',
     grid: 'rgba(215,175,130,0.075)',
     wall: '235,190,140',
+    texture: 'scratch',
+    loot: 'coins',
   },
   {
     key: 'lantern',
@@ -663,6 +799,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#08070c',
     grid: 'rgba(230,205,150,0.075)',
     wall: '250,220,160',
+    texture: 'dots',
+    loot: 'coins',
   },
   {
     key: 'colosseum',
@@ -676,6 +814,8 @@ export const MAPS: MapSpec[] = [
     floorOut: '#120808',
     grid: 'rgba(235,170,160,0.075)',
     wall: '255,180,170',
+    texture: 'hex',
+    loot: 'chests',
   },
 ]
 
@@ -724,6 +864,7 @@ export type Pattern =
   | 'fire'
   | 'ice'
   | 'water'
+  | 'elemental'
 
 export interface Skin {
   key: string
@@ -877,6 +1018,17 @@ export const SKINS: Skin[] = [
   { key: 'adder', name: 'Adder', blurb: 'The zigzag that means leave it alone.', hue: 54, accent: 20, sat: 48, pattern: 'chevron', family: 'Hide', cost: 560 },
 
   {
+    key: 'elemental',
+    name: 'Elemental',
+    blurb: 'Water, then fire, then ice, and the colour with it. Found in chests.',
+    hue: 200,
+    accent: 200,
+    sat: 86,
+    pattern: 'elemental',
+    family: 'Oddity',
+    cost: 0,
+  },
+  {
     key: 'nobody',
     name: 'Nobody',
     blurb: 'Unseen the whole run. You can always see yourself; nothing else can.',
@@ -939,8 +1091,52 @@ export function winnerBonus(level: number): number {
 
 export type Ending = 'eaten' | 'idle' | 'time'
 
-/** The ones that cost nothing, which everybody starts with. */
-export const FREE_SKINS = SKINS.filter((s) => s.cost === 0).map((s) => s.key)
+/**
+ * The ones everybody starts with.
+ *
+ * Elemental costs nothing either, but it is not given away - it is
+ * earned by opening chests, so it is kept out of the starting set.
+ */
+export const EARNED_SKINS = ['elemental']
+export const FREE_SKINS = SKINS.filter(
+  (s) => s.cost === 0 && !EARNED_SKINS.includes(s.key)
+).map((s) => s.key)
+
+/**
+ * Which element the elemental skin is showing, and how far through the
+ * change it is. Twelve seconds each, with a couple of seconds of
+ * crossfade, so it is always visibly on its way somewhere.
+ */
+export const ELEMENT_HOLD = 12_000
+export const ELEMENT_FADE = 2_000
+const ELEMENTS: Pattern[] = ['water', 'fire', 'ice']
+const ELEMENT_HUES = [196, 20, 190]
+
+export function elementAt(t: number): { pattern: Pattern; hue: number; next: Pattern; mix: number } {
+  const span = ELEMENT_HOLD
+  const i = Math.floor(t / span) % ELEMENTS.length
+  const j = (i + 1) % ELEMENTS.length
+  const into = t % span
+  const mix = into > span - ELEMENT_FADE ? (into - (span - ELEMENT_FADE)) / ELEMENT_FADE : 0
+
+  // Colour is anchored to the element and then offset once per turn,
+  // rather than drifting continuously. Drifting meant water spent half
+  // its time green: the texture says which element it is, but it should
+  // still look like water when it arrives. This way every pass through
+  // water is a different blue-ish-something, and it holds that colour
+  // for the whole twelve seconds instead of sliding through the wheel.
+  const turn = Math.floor(t / (span * ELEMENTS.length))
+  const shift = (turn * 53) % 360
+  const from = (ELEMENT_HUES[i] + shift) % 360
+  const to = (ELEMENT_HUES[j] + shift) % 360
+  // Blend the short way round the wheel, or the crossfade sweeps
+  // through every hue in between.
+  let step = to - from
+  if (step > 180) step -= 360
+  if (step < -180) step += 360
+  const hue = (from + step * mix + 360) % 360
+  return { pattern: ELEMENTS[i], hue, next: ELEMENTS[j], mix }
+}
 
 /**
  * Which skins a save actually owns.
@@ -1413,6 +1609,8 @@ export interface SnakeSave {
   companions: string[]
   /** Runs finished on the clock as the biggest in the arena. */
   wins: number
+  /** Chests cracked open, all told. Earns the elemental skin. */
+  chests: number
 }
 
 export const initialSnake: SnakeSave = {
@@ -1426,6 +1624,7 @@ export const initialSnake: SnakeSave = {
   companion: null,
   companions: [],
   wins: 0,
+  chests: 0,
 }
 
 /**

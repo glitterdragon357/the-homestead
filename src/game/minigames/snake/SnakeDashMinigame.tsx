@@ -5,9 +5,19 @@ import { usePurse } from '../../state/usePurse'
 import { GiftRow } from '../../economy/GiftRow'
 import { useAmbientMusic } from '../../audio/useAmbientMusic'
 import { finish } from '../../engine/polish'
-import { VIEW, drawArena, drawCoins, drawFriend, drawPellets, drawSnake, type Camera } from './snakeDraw'
+import {
+  VIEW,
+  drawArena,
+  drawChests,
+  drawCoins,
+  drawFriend,
+  drawPellets,
+  drawSnake,
+  type Camera,
+} from './snakeDraw'
 import {
   DASH_MAX,
+  CHESTS_FOR_ELEMENTAL,
   COMPANIONS,
   COMPANION_BY_KEY,
   MAPS,
@@ -32,6 +42,7 @@ import {
 import {
   collect,
   collide,
+  crack,
   dropBounty,
   feed,
   makeFriend,
@@ -80,6 +91,8 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
     nips: number
     how: Ending
     won: boolean
+    chests: number
+    earnedElemental: boolean
   }>(null)
   const [hud, setHud] = useState({ level: 1, fed: 0, dash: 1, eaten: 0, rank: 1, of: 9, toNext: 0, bitten: 0, pocket: 0, vanish: false, left: RUN_LIMIT, idle: IDLE_STOP })
 
@@ -92,6 +105,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
   const bittenRef = useRef(0)
   const pocketRef = useRef(0)
   const nipsRef = useRef(0)
+  const chestsRef = useRef(0)
   const activeRef = useRef(0)
   const lastPointRef = useRef<{ x: number; y: number } | null>(null)
   const endingRef = useRef<Ending>('eaten')
@@ -123,6 +137,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
     bittenRef.current = 0
     pocketRef.current = 0
     nipsRef.current = 0
+    chestsRef.current = 0
     activeRef.current = performance.now()
     lastPointRef.current = null
     endingRef.current = 'eaten'
@@ -148,16 +163,32 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
     const pay =
       payout(level, eatenRef.current, me.fed) + found + (won ? winnerBonus(level) : 0)
     const bitten = bittenRef.current
+    const chests = (saveRef.current.chests ?? 0) + chestsRef.current
+    const earnedNow =
+      chests >= CHESTS_FOR_ELEMENTAL && !ownedSkins(saveRef.current).includes('elemental')
     earn(pay)
     setSave((s) => ({
       ...s,
+      chests,
+      skins: earnedNow ? [...ownedSkins(s), 'elemental'] : s.skins,
       runs: (s.runs ?? 0) + 1,
       eaten: (s.eaten ?? 0) + eatenRef.current,
       best: Math.max(s.best ?? 0, me.fed),
       bestLevel: Math.max(s.bestLevel ?? 1, level),
       wins: (s.wins ?? 0) + (won ? 1 : 0),
     }))
-    setResult({ pay, level, eaten: eatenRef.current, bitten, found, nips: nipsRef.current, how, won })
+    setResult({
+      pay,
+      level,
+      eaten: eatenRef.current,
+      bitten,
+      found,
+      nips: nipsRef.current,
+      how,
+      won,
+      chests: chestsRef.current,
+      earnedElemental: earnedNow,
+    })
     setPlaying(false)
     worldRef.current = null
   }, [earn, setSave])
@@ -203,6 +234,9 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
 
       feed(w, rng)
       pocketRef.current += collect(w, rng)
+      const cracked = crack(w, now, rng)
+      pocketRef.current += cracked.coins
+      chestsRef.current += cracked.opened
       for (const n of nipAll(w, now, dt)) if (n.owner === 0) nipsRef.current++
 
       const hits = collide(w, now)
@@ -254,6 +288,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
       drawArena(ctx, cam, w.map)
       drawPellets(ctx, cam, w.pellets, now)
       drawCoins(ctx, cam, w.coins, now)
+      drawChests(ctx, cam, w.chests, now)
 
       // Rivals first, then you, so your own head is never buried.
       const myLevel = levelOf(me.fed)
@@ -466,6 +501,15 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
                 : `Level ${result.level}.`}
             </strong>{' '}
             {result.pay} 🪙
+            {result.earnedElemental && (
+              <span style={S.won}>Elemental unlocked</span>
+            )}
+            {result.chests > 0 && (
+              <span style={S.bitNote}>
+                {' '}
+                · {result.chests} chest{result.chests === 1 ? '' : 's'} open
+              </span>
+            )}
             {result.nips > 0 && (
               <span style={S.bitNote}>
                 {' '}
@@ -502,7 +546,8 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
                     <span style={S.cardName}>{m.name}</span>
                     <span style={S.cardNote}>{m.blurb}</span>
                     <span style={S.cardMeta}>
-                      {m.w}×{m.h} · {m.rivals} rivals
+                      {m.w}×{m.h} · {m.rivals} rivals ·{' '}
+                      {m.loot === 'chests' ? 'chests' : m.loot === 'none' ? 'no coins' : 'coins'}
                     </span>
                   </button>
                 )
@@ -656,6 +701,12 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
           <span>{save.eaten ?? 0} eaten all told</span>
           <span>{save.runs ?? 0} runs</span>
           <span>{save.wins ?? 0} won on the clock</span>
+          <span>
+            {save.chests ?? 0} chests
+            {ownedSkins(save).includes('elemental')
+              ? ''
+              : ` of ${CHESTS_FOR_ELEMENTAL} for Elemental`}
+          </span>
         </div>
 
         {denied && <div style={S.denied}>{denied}</div>}

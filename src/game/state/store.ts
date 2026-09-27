@@ -268,7 +268,7 @@ export const useHomesteadStore = create<HomesteadState>()(
     }),
     {
       name: SAVE_KEY,
-      version: 17,
+      version: 18,
       storage: createJSONStorage(() => localStorage),
       // Runs before rehydration, so this captures the previous session's
       // save rather than anything this one has written.
@@ -395,6 +395,8 @@ export const useHomesteadStore = create<HomesteadState>()(
           // v15 -> v16: runs can now end on the clock, and being biggest
           // when they do counts as a win worth tallying.
           if (snake.wins === undefined) snake.wins = 0
+          // v17 -> v18: chests, and the skin they earn.
+          if (snake.chests === undefined) snake.chests = 0
         }
 
         // v16 -> v17: the jigsaw table. Additive, with its own save and
