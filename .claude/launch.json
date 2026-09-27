@@ -11,20 +11,6 @@
       "port": 5173,
       "//": "autoPort is false on purpose: the save lives in localStorage, which is scoped per origin. A different port is a different origin, so moving off 5173 makes existing progress look erased.",
       "autoPort": false
-    },
-    {
-      "name": "homestead-built",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": [
-        "vite",
-        "preview",
-        "--port",
-        "4173",
-        "--strictPort"
-      ],
-      "port": 4173,
-      "//": "Serves the production build from dist/, for checking the bundle that gets published as an Artifact.",
-      "autoPort": false
     }
   ]
 }
