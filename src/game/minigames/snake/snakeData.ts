@@ -28,6 +28,24 @@ export interface MapSpec {
    * twice.
    */
   pay?: number
+  /**
+   * Real country rather than a marked floor: water, sand and trees laid
+   * out across the map and drawn under everything.
+   *
+   * It is scenery and nothing else. A lake you cannot swim into or a
+   * tree you can be stopped by would change what the arena is for, and
+   * the arena is for snakes.
+   */
+  wild?: boolean
+  /**
+   * Food on this map cycles through every colour instead of being the
+   * usual flat yellow.
+   *
+   * Only here. Plain yellow food everywhere else is what makes a coin
+   * readable at a glance mid-chase, and this map gives that up on
+   * purpose in exchange for being the pretty one.
+   */
+  rainbow?: boolean
   /** Floor at the centre, floor at the edges, the grid, and the wall. */
   floorIn: string
   floorOut: string
@@ -52,7 +70,7 @@ export interface MapSpec {
   loot: Loot
 }
 
-export type Texture = 'grid' | 'dots' | 'hex' | 'waves' | 'stripes' | 'scratch' | 'bare'
+export type Texture = 'grid' | 'dots' | 'hex' | 'waves' | 'stripes' | 'scratch' | 'bare' | 'meadow'
 export type Loot = 'coins' | 'chests' | 'none' | 'relics'
 
 /* ------------------------------------------------------------------ */
@@ -897,6 +915,32 @@ export const MAPS: MapSpec[] = [
     loot: 'relics',
     pay: 6,
   },
+  /**
+   * The Commons. Open country, and twenty-five others in it.
+   *
+   * The biggest floor in the game by a distance, because it has to be:
+   * twenty-five rivals is more than half again the next most crowded
+   * map, and on anything smaller it would be a scrum rather than a
+   * place. At this size it is somewhere you can actually be alone in
+   * for a while, and then very much not.
+   */
+  {
+    key: 'commons',
+    name: 'The Commons',
+    blurb: 'Grass, water, sand and trees, food in every colour, and twenty-five others out in it.',
+    w: 5200,
+    h: 4000,
+    rivals: 25,
+    pellets: 900,
+    floorIn: '#2f5a2a',
+    floorOut: '#16301a',
+    grid: 'rgba(190,240,170,0.06)',
+    wall: '190,240,160',
+    texture: 'meadow',
+    loot: 'coins',
+    wild: true,
+    rainbow: true,
+  },
 ]
 
 export const MAP_BY_KEY: Record<string, MapSpec> = Object.fromEntries(MAPS.map((m) => [m.key, m]))
@@ -1309,7 +1353,32 @@ export const DASH_FLOOR = 12
 /** How sharply a snake can turn, in radians a second. */
 export const TURN_RATE = 3.4
 
-export const PELLET_R = 7
+/**
+ * How big a piece of food is.
+ *
+ * Five times what it was. This is the drawn size and the size that
+ * counts for eating it - a pellet painted five times larger with the old
+ * hitbox would be a thing you visibly pass straight through, which is
+ * worse than leaving it small.
+ */
+export const FOOD_SCALE = 5
+export const PELLET_R = 7 * FOOD_SCALE
+
+/**
+ * How many pieces of food a map actually puts out.
+ *
+ * Making food five times wider makes each piece twenty-five times the
+ * area, so a map that kept its old count stopped being a field with
+ * food on it and became a floor made of food - you could not see the
+ * ground, the trees, or the snake you were about to run into.
+ *
+ * Thinning the count by two and a half leaves about ten times the
+ * covered ground there used to be, which reads as generous rather than
+ * as a carpet, and keeps every map's relative helping intact.
+ */
+export function pelletsOn(map: { pellets: number }): number {
+  return Math.max(12, Math.round(map.pellets / 2.5))
+}
 export const HEAD_R = 11
 /** Pellets kept on the field at once. */
 export const PELLET_COUNT = 260

@@ -377,9 +377,9 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
       const zoom = Math.max(0.46, Math.min(0.95, 0.95 - me.fed * 0.0009))
       const cam: Camera = { x: me.x, y: me.y, zoom }
 
-      drawArena(ctx, cam, w.map)
+      drawArena(ctx, cam, w.map, now)
       drawGoo(ctx, cam, w.fx.goo, now, GOO_LIFE)
-      drawPellets(ctx, cam, w.pellets, now)
+      drawPellets(ctx, cam, w.pellets, now, w.map.rainbow === true)
       drawCoins(ctx, cam, w.coins, now)
       drawChests(ctx, cam, w.chests, now)
 

@@ -8,6 +8,7 @@
  */
 
 import {
+  FOOD_SCALE,
   HEAD_R,
   elementAt,
   girthOf,
@@ -53,7 +54,7 @@ function hsl(hue: number, s: number, l: number, a = 1): string {
 /** The marking on the floor, which is different on every kind of map. */
 function drawGround(ctx: CanvasRenderingContext2D, cam: Camera, map: MapSpec) {
   if (map.texture === 'bare') return
-  const step = map.texture === 'dots' ? 74 : map.texture === 'hex' ? 96 : 100
+  const step = map.texture === 'dots' ? 74 : map.texture === 'hex' ? 96 : map.texture === 'meadow' ? 56 : 100
   const x0 = Math.floor((cam.x - VIEW.width / 2 / cam.zoom) / step) * step
   const x1 = cam.x + VIEW.width / 2 / cam.zoom
   const y0 = Math.floor((cam.y - VIEW.height / 2 / cam.zoom) / step) * step
@@ -154,6 +155,29 @@ function drawGround(ctx: CanvasRenderingContext2D, cam: Camera, map: MapSpec) {
       ctx.stroke()
       break
     }
+    case 'meadow': {
+      // Grass wants to be seen. At the shared grid alpha it was a green
+      // field with nothing on it, so speed across it was unreadable.
+      ctx.strokeStyle = 'rgba(206,248,180,0.16)'
+      // Tufts of grass rather than a ruled floor. Two blades leaning
+      // apart from a common root, at fixed positions so the field does
+      // not crawl about underneath you.
+      ctx.beginPath()
+      for (let x = x0; x < x1; x += step) {
+        for (let y = y0; y < y1; y += step) {
+          const n = hash(x * 0.011 + y * 0.019)
+          const m = hash(x * 0.023 + y * 0.007)
+          const root = toScreen(cam, x + n * step, y + m * step)
+          const h = (9 + n * 11) * cam.zoom
+          ctx.moveTo(root.sx, root.sy)
+          ctx.lineTo(root.sx - h * 0.35, root.sy - h)
+          ctx.moveTo(root.sx, root.sy)
+          ctx.lineTo(root.sx + h * 0.3, root.sy - h * 0.86)
+        }
+      }
+      ctx.stroke()
+      break
+    }
   }
 }
 
@@ -163,7 +187,167 @@ function hash(n: number): number {
   return x - Math.floor(x)
 }
 
-export function drawArena(ctx: CanvasRenderingContext2D, cam: Camera, map: MapSpec) {
+/* ------------------------------------------------------------------ */
+/* Country                                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The lakes, and the sand around them.
+ *
+ * Laid out once from the map's own dimensions rather than stored, so it
+ * is the same country every time you play it and costs nothing to keep.
+ * Each lake gets a beach because a body of water with a hard edge
+ * against grass reads as a hole in the ground rather than as a lake.
+ */
+interface Country {
+  lakes: { x: number; y: number; r: number; s: number }[]
+  trees: { x: number; y: number; r: number; k: number }[]
+}
+
+/**
+ * Worked out once per map and kept.
+ *
+ * The Commons is five thousand two hundred by four thousand, which comes
+ * to about four hundred and fifty trees. Laying those out inside the
+ * draw call meant hashing and allocating the whole country sixty times a
+ * second to paint the dozen of it that were on screen.
+ */
+const COUNTRY = new Map<string, Country>()
+
+function countryOf(map: MapSpec): Country {
+  const had = COUNTRY.get(map.key)
+  if (had) return had
+  const lakes = lakesOf(map)
+  const made = { lakes, trees: treesOf(map, lakes) }
+  COUNTRY.set(map.key, made)
+  return made
+}
+
+function lakesOf(map: MapSpec): { x: number; y: number; r: number; s: number }[] {
+  const out: { x: number; y: number; r: number; s: number }[] = []
+  // More of them, smaller. One lake at a four hundred and ninety radius
+  // is wider than the whole viewport at playing zoom, so the map read as
+  // a single pond with some grass round the edge rather than as country.
+  const n = Math.round((map.w * map.h) / 1_500_000) + 5
+  for (let i = 0; i < n; i++) {
+    out.push({
+      x: hash(i * 3.1 + 11) * map.w,
+      y: hash(i * 7.7 + 23) * map.h,
+      r: 140 + hash(i * 5.3 + 5) * 200,
+      s: 0.6 + hash(i * 2.9 + 31) * 0.7,
+    })
+  }
+  return out
+}
+
+/** Where the trees stand. Never in a lake, and never in the sand. */
+function treesOf(map: MapSpec, lakes: ReturnType<typeof lakesOf>) {
+  const out: { x: number; y: number; r: number; k: number }[] = []
+  const want = Math.round((map.w * map.h) / 46_000)
+  for (let i = 0; i < want * 2 && out.length < want; i++) {
+    const x = hash(i * 1.7 + 71) * map.w
+    const y = hash(i * 4.3 + 97) * map.h
+    const r = 22 + hash(i * 6.1 + 13) * 20
+    if (lakes.some((l) => Math.hypot(l.x - x, l.y - y) < l.r + 70)) continue
+    out.push({ x, y, r, k: hash(i * 9.4 + 3) })
+  }
+  return out
+}
+
+/** The water and the sand, under everything else. */
+function drawWater(ctx: CanvasRenderingContext2D, cam: Camera, map: MapSpec, t: number) {
+  for (const l of countryOf(map).lakes) {
+    const p = toScreen(cam, l.x, l.y)
+    const r = l.r * cam.zoom
+    if (
+      p.sx < -r * 1.6 ||
+      p.sy < -r * 1.6 ||
+      p.sx > VIEW.width + r * 1.6 ||
+      p.sy > VIEW.height + r * 1.6
+    ) {
+      continue
+    }
+    // Sand first, a little wider than the water.
+    const sand = ctx.createRadialGradient(p.sx, p.sy, r * 0.8, p.sx, p.sy, r * 1.32)
+    sand.addColorStop(0, hsl(46, 52, 62, 0.9))
+    sand.addColorStop(0.55, hsl(44, 48, 56, 0.72))
+    sand.addColorStop(1, hsl(42, 44, 50, 0))
+    ctx.fillStyle = sand
+    ctx.beginPath()
+    ctx.ellipse(p.sx, p.sy, r * 1.32, r * 1.32 * l.s, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    // The water.
+    const water = ctx.createRadialGradient(
+      p.sx - r * 0.3,
+      p.sy - r * 0.3,
+      r * 0.1,
+      p.sx,
+      p.sy,
+      r
+    )
+    water.addColorStop(0, hsl(196, 68, 54))
+    water.addColorStop(0.7, hsl(202, 66, 40))
+    water.addColorStop(1, hsl(208, 62, 30))
+    ctx.fillStyle = water
+    ctx.beginPath()
+    ctx.ellipse(p.sx, p.sy, r, r * l.s, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    // Ripples, kept near the shore and faint.
+    //
+    // Three full rings at a third opacity marching out from the middle
+    // did not read as water at all - it read as a radar sweep, with the
+    // snake sitting in the crosshairs of it.
+    ctx.lineWidth = Math.max(1, 1.4 * cam.zoom)
+    for (let i = 0; i < 2; i++) {
+      const f = 0.72 + ((t * 0.00008 + i * 0.5 + l.x * 0.0001) % 1) * 0.26
+      ctx.strokeStyle = hsl(190, 78, 82, 0.16 * (1 - Math.abs(f - 0.85) * 3))
+      ctx.beginPath()
+      ctx.ellipse(p.sx, p.sy, r * f, r * l.s * f, 0, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+  }
+}
+
+/** Trees, over the ground and under the snakes. */
+function drawTrees(ctx: CanvasRenderingContext2D, cam: Camera, map: MapSpec, t: number) {
+  for (const tr of countryOf(map).trees) {
+    const p = toScreen(cam, tr.x, tr.y)
+    const r = tr.r * cam.zoom
+    if (p.sx < -r * 3 || p.sy < -r * 3 || p.sx > VIEW.width + r * 3 || p.sy > VIEW.height + r * 3) {
+      continue
+    }
+    // Shadow on the grass, offset the way the light comes from.
+    ctx.fillStyle = 'rgba(0,0,0,0.26)'
+    ctx.beginPath()
+    ctx.ellipse(p.sx + r * 0.5, p.sy + r * 0.55, r * 1.05, r * 0.42, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    // Trunk.
+    ctx.fillStyle = hsl(28, 38, 26)
+    ctx.fillRect(p.sx - r * 0.12, p.sy - r * 0.1, r * 0.24, r * 0.8)
+
+    // Canopy: three overlapping crowns, leaning very slightly in a
+    // breeze so the country is not completely still.
+    const sway = Math.sin(t * 0.0008 + tr.x * 0.01) * r * 0.06
+    const green = 96 + tr.k * 36
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2 + tr.k * 6
+      const cx = p.sx + Math.cos(a) * r * 0.36 + sway
+      const cy = p.sy + Math.sin(a) * r * 0.24 - r * 0.42
+      const g = ctx.createRadialGradient(cx - r * 0.25, cy - r * 0.3, r * 0.1, cx, cy, r * 0.82)
+      g.addColorStop(0, hsl(green, 52, 44 + tr.k * 10))
+      g.addColorStop(1, hsl(green + 8, 54, 22))
+      ctx.fillStyle = g
+      ctx.beginPath()
+      ctx.arc(cx, cy, r * 0.78, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+}
+
+export function drawArena(ctx: CanvasRenderingContext2D, cam: Camera, map: MapSpec, t = 0) {
   const bg = ctx.createRadialGradient(
     VIEW.width / 2,
     VIEW.height / 2,
@@ -183,6 +367,13 @@ export function drawArena(ctx: CanvasRenderingContext2D, cam: Camera, map: MapSp
   // is most of what stops fifty of them feeling like one field in
   // different light.
   drawGround(ctx, cam, map)
+
+  // Country, on the maps that have it. Water and sand go down first,
+  // then the trees over them, and the snakes over everything.
+  if (map.wild) {
+    drawWater(ctx, cam, map, t)
+    drawTrees(ctx, cam, map, t)
+  }
 
   // The wall, which you can slide along but not leave.
   const tl = toScreen(cam, 0, 0)
@@ -218,12 +409,21 @@ export function drawArena(ctx: CanvasRenderingContext2D, cam: Camera, map: MapSp
 /* Pellets                                                             */
 /* ------------------------------------------------------------------ */
 
-export function drawPellets(ctx: CanvasRenderingContext2D, cam: Camera, pellets: Pellet[], t: number) {
+export function drawPellets(
+  ctx: CanvasRenderingContext2D,
+  cam: Camera,
+  pellets: Pellet[],
+  t: number,
+  rainbow = false
+) {
   const pad = 40
   for (const p of pellets) {
     const s = toScreen(cam, p.x, p.y)
     if (s.sx < -pad || s.sx > VIEW.width + pad || s.sy < -pad || s.sy > VIEW.height + pad) continue
-    const r = (4.6 + Math.min(4, p.worth * 0.5)) * cam.zoom
+    // The drawn size follows FOOD_SCALE, so what you see is what you can
+    // eat. The rainbow orbs keep a slight edge on the rest, but a much
+    // smaller one now that everything is this size.
+    const r = (4.6 + Math.min(4, p.worth * 0.5)) * FOOD_SCALE * cam.zoom * (rainbow ? 1.12 : 1)
 
     // Food never glows. Coins do, and that is the whole point: a glow on
     // the floor means money, a flat disc means something to eat. When
@@ -245,12 +445,38 @@ export function drawPellets(ctx: CanvasRenderingContext2D, cam: Camera, pellets:
       continue
     }
 
-    // Wild food: one flat yellow disc, the same as every other one.
-    ctx.fillStyle = hsl(p.hue, p.sat, 62)
+    // Wild food: one flat yellow disc, the same as every other one -
+    // except on the one map that trades that readability for colour,
+    // where every orb runs round the wheel instead.
+    //
+    // Each orb is offset by its own position, so the field is a spread
+    // of colours at any moment rather than five hundred discs all
+    // turning green together.
+    const hue = rainbow ? (t * 0.06 + p.x * 0.35 + p.y * 0.21) % 360 : p.hue
+    const sat = rainbow ? 88 : p.sat
+    if (rainbow) {
+      // A soft corona. These are orbs rather than pellets here, and it
+      // is the one place a glow on the floor is not money.
+      const halo = ctx.createRadialGradient(s.sx, s.sy, r * 0.3, s.sx, s.sy, r * 2.1)
+      halo.addColorStop(0, hsl(hue, sat, 70, 0.4))
+      halo.addColorStop(1, hsl(hue, sat, 62, 0))
+      ctx.fillStyle = halo
+      ctx.beginPath()
+      ctx.arc(s.sx, s.sy, r * 2.1, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    // Held deliberately dim.
+    //
+    // The finishing pass blooms anything bright, and it does it by area -
+    // so food that was flat at the old size started throwing a halo the
+    // moment it got five times wider, which is exactly the glow that is
+    // supposed to mean money and nothing else. Dropping the lightness
+    // keeps it under that threshold while leaving it plainly yellow.
+    ctx.fillStyle = hsl(hue, sat, rainbow ? 56 : 52)
     ctx.beginPath()
     ctx.arc(s.sx, s.sy, r, 0, Math.PI * 2)
     ctx.fill()
-    ctx.fillStyle = hsl(p.hue, p.sat, 76)
+    ctx.fillStyle = hsl(hue, sat, rainbow ? 72 : 63)
     ctx.beginPath()
     ctx.arc(s.sx, s.sy, r * 0.55, 0, Math.PI * 2)
     ctx.fill()

@@ -36,6 +36,7 @@ import {
   GROW,
   HEAD_R,
   PELLET_R,
+  pelletsOn,
   rivalHues,
   RIVAL_NAMES,
   SKIN_BY_KEY,
@@ -298,7 +299,7 @@ export function makeWorld(
   }
   snakes[0].friend = null
   const pellets: Pellet[] = []
-  for (let i = 0; i < map.pellets; i++) pellets.push(makePellet(rng, map))
+  for (let i = 0; i < pelletsOn(map); i++) pellets.push(makePellet(rng, map))
   // What a map puts on the floor is the map's business. Some have loose
   // coins, some have a handful of chests instead, and some have nothing
   // at all but food.
@@ -732,8 +733,9 @@ export function feed(world: World, rng: () => number): number {
   // with rivals arriving for ever that only ever goes one way: a long
   // run reached seven and a half thousand pellets on the floor, all of
   // them walked over every frame by every snake.
-  while (world.pellets.length < world.map.pellets) world.pellets.push(makePellet(rng, world.map))
-  const ceiling = Math.round(world.map.pellets * 2.2)
+  const want = pelletsOn(world.map)
+  while (world.pellets.length < want) world.pellets.push(makePellet(rng, world.map))
+  const ceiling = Math.round(want * 2.2)
   if (world.pellets.length > ceiling) {
     // Drop the oldest, which are the ones furthest from whatever is
     // happening now.
