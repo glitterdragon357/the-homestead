@@ -128,16 +128,19 @@ export function drawPellets(ctx: CanvasRenderingContext2D, cam: Camera, pellets:
     if (s.sx < -pad || s.sx > VIEW.width + pad || s.sy < -pad || s.sy > VIEW.height + pad) continue
     const r = (4.6 + Math.min(4, p.worth * 0.5)) * cam.zoom
 
-    // A pellet that came off a snake is drawn as the piece of snake it
-    // was - same painter, same colour, same marking, same place in the
-    // body - so a kill leaves a recognisable trail of whoever died.
+    // Food never glows. Coins do, and that is the whole point: a glow on
+    // the floor means money, a flat disc means something to eat. When
+    // both shimmered there was no telling them apart at a glance, which
+    // is a poor thing to have to squint at mid-chase.
     if (p.pattern) {
+      // Remains keep the colour and marking of whoever they came off,
+      // but flat - the glow and halo patterns are suppressed here.
       drawBead(
         ctx,
         s.sx,
         s.sy,
         r * 1.25,
-        { hue: p.hue, sat: p.sat, accent: p.accent ?? p.hue, pattern: p.pattern },
+        { hue: p.hue, sat: p.sat, accent: p.accent ?? p.hue, pattern: plainly(p.pattern) },
         p.index ?? 0,
         t,
         { light: 56 }
@@ -145,21 +148,26 @@ export function drawPellets(ctx: CanvasRenderingContext2D, cam: Camera, pellets:
       continue
     }
 
-    // Loose food: a glowing speck, pulsing out of step with its neighbours.
-    const beat = 0.82 + Math.sin(t * 0.004 + p.x * 0.05 + p.y * 0.03) * 0.18
-    const g = ctx.createRadialGradient(s.sx, s.sy, 0, s.sx, s.sy, r * 2.6 * beat)
-    g.addColorStop(0, hsl(p.hue, 90, 78, 0.95))
-    g.addColorStop(0.35, hsl(p.hue, 85, 58, 0.55))
-    g.addColorStop(1, hsl(p.hue, 85, 50, 0))
-    ctx.fillStyle = g
+    // Wild food: one flat yellow disc, the same as every other one.
+    ctx.fillStyle = hsl(p.hue, p.sat, 62)
     ctx.beginPath()
-    ctx.arc(s.sx, s.sy, r * 2.6 * beat, 0, Math.PI * 2)
+    ctx.arc(s.sx, s.sy, r, 0, Math.PI * 2)
     ctx.fill()
-    ctx.fillStyle = hsl(p.hue, 95, 86)
+    ctx.fillStyle = hsl(p.hue, p.sat, 76)
     ctx.beginPath()
-    ctx.arc(s.sx, s.sy, r * 0.62, 0, Math.PI * 2)
+    ctx.arc(s.sx, s.sy, r * 0.55, 0, Math.PI * 2)
     ctx.fill()
   }
+}
+
+/**
+ * The same marking, minus anything that lights up.
+ *
+ * A pellet off a burning or glowing snake would otherwise carry its halo
+ * onto the floor and look like money.
+ */
+function plainly(pattern: Pattern): Pattern {
+  return pattern === 'glow' || pattern === 'fire' ? 'bands' : pattern === 'vanish' ? 'solid' : pattern
 }
 
 /**
@@ -677,136 +685,137 @@ export function drawSnake(
     ctx.fill()
   }
 
-  // The head, with jaws.
+  // The head.
   //
-  // A circle with two eyes on it reads as a bead, not a snake. This is
-  // built in the head's own frame - nose along +x - so the whole thing
-  // can be laid out as if it were facing right and then turned to
-  // wherever the snake is actually going.
-  //
-  // The mouth is never quite shut. A jaw line that only appears when
-  // the snake happens to be mid-chomp is a jaw line nobody ever sees;
-  // holding it a little open means the head always reads as a head.
+  // Built in its own frame - nose along +x - then turned to wherever the
+  // snake is going. It is one rounded head with a mouth cut into the
+  // front of it, not two jaws meeting at a hinge: a wedge running back
+  // into the skull splits the whole head in two and reads as a beak.
+  // The mouth belongs in the front third and nowhere else.
   const chomp = 0.5 + Math.sin(t * 0.009 + s.id) * 0.5
   const bitJustNow = t < s.bittenUntil ? 1 : 0
-  // Kept modest on purpose. Opened wide the jaws become two slivers and
-  // the head reads as a mouth with a snake behind it - the gape has to
-  // stay narrower than the head is deep.
-  const gape = Math.min(0.5, 0.12 + chomp * 0.12 + (s.dashing ? 0.14 : 0) + bitJustNow * 0.22)
+  const gape = Math.min(0.62, 0.16 + chomp * 0.14 + (s.dashing ? 0.16 : 0) + bitJustNow * 0.3)
 
   ctx.save()
   ctx.translate(h.sx, h.sy)
   ctx.rotate(s.heading)
 
-  const L = hr * 1.5
-  const Wd = hr * 1.1
+  const L = hr * 1.34
+  const Wd = hr * 1.12
 
-  // Head skin sits in the same range as the body, or the head looks
-  // like a different animal stuck on the front.
   const skin = (lift: number) => {
     const g = ctx.createLinearGradient(0, -Wd, 0, Wd)
-    g.addColorStop(0, hsl(s.hue, s.sat + 6, 64 + lift))
-    g.addColorStop(0.5, hsl(s.hue, s.sat, 50 + lift))
-    g.addColorStop(1, hsl(s.hue, s.sat - 6, 32 + lift))
+    g.addColorStop(0, hsl(s.hue, s.sat + 6, 66 + lift))
+    g.addColorStop(0.45, hsl(s.hue, s.sat, 52 + lift))
+    g.addColorStop(1, hsl(s.hue, s.sat - 6, 33 + lift))
     return g
   }
 
-  // Throat, drawn first so both jaws close over it.
+  // The head itself: a blunt dome, wider at the back than the snout.
+  ctx.fillStyle = skin(0)
+  ctx.beginPath()
+  ctx.moveTo(-L * 0.72, 0)
+  ctx.bezierCurveTo(-L * 0.7, -Wd * 1.04, -L * 0.1, -Wd * 1.04, L * 0.52, -Wd * 0.8)
+  ctx.bezierCurveTo(L * 0.94, -Wd * 0.62, L * 1.02, -Wd * 0.24, L * 1.02, 0)
+  ctx.bezierCurveTo(L * 1.02, Wd * 0.24, L * 0.94, Wd * 0.62, L * 0.52, Wd * 0.8)
+  ctx.bezierCurveTo(-L * 0.1, Wd * 1.04, -L * 0.7, Wd * 1.04, -L * 0.72, 0)
+  ctx.fill()
+
+  // The mouth, cut into the front. Clipped to the head so the opening
+  // can never spill past the snout however wide it gets.
+  ctx.save()
+  ctx.clip()
+  const lip = Wd * gape
   ctx.fillStyle = '#4a0f1a'
   ctx.beginPath()
-  ctx.moveTo(-hr * 0.2, 0)
-  ctx.lineTo(L * 1.02, -Wd * gape * 1.05)
-  ctx.lineTo(L * 1.02, Wd * gape * 1.05)
+  ctx.moveTo(L * 0.12, -lip * 0.25)
+  ctx.quadraticCurveTo(L * 0.8, -lip * 1.0, L * 1.1, -lip * 0.5)
+  ctx.lineTo(L * 1.1, lip * 0.5)
+  ctx.quadraticCurveTo(L * 0.8, lip * 1.0, L * 0.12, lip * 0.25)
   ctx.closePath()
   ctx.fill()
 
-  // Upper jaw.
-  ctx.fillStyle = skin(4)
-  ctx.beginPath()
-  ctx.moveTo(-L * 0.55, -Wd * 0.2)
-  ctx.quadraticCurveTo(-L * 0.4, -Wd * 1.04, L * 0.1, -Wd * 1.02)
-  ctx.quadraticCurveTo(L * 0.78, -Wd * 0.9, L * 0.99, -Wd * (0.12 + gape))
-  ctx.lineTo(-hr * 0.2, -Wd * gape * 0.35)
-  ctx.closePath()
-  ctx.fill()
-  ctx.strokeStyle = hsl(s.hue, s.sat, 24, 0.55)
-  ctx.lineWidth = Math.max(0.7, hr * 0.06)
-  ctx.stroke()
-
-  // Lower jaw, hinged further back so it swings rather than slides.
-  ctx.fillStyle = skin(-12)
-  ctx.beginPath()
-  ctx.moveTo(-L * 0.55, Wd * 0.2)
-  ctx.quadraticCurveTo(-L * 0.4, Wd * 1.04, L * 0.08, Wd * 1.0)
-  ctx.quadraticCurveTo(L * 0.66, Wd * 0.88, L * 0.86, Wd * (0.16 + gape))
-  ctx.lineTo(-hr * 0.2, Wd * gape * 0.35)
-  ctx.closePath()
-  ctx.fill()
-  ctx.stroke()
-
-  // Teeth. Two on top, two below, and they meet when the mouth shuts.
-  if (hr > 6) {
-    ctx.fillStyle = '#fdf8ee'
-    const tooth = (baseX: number, tipX: number, sign: number, from: number, to: number) => {
-      ctx.beginPath()
-      ctx.moveTo(baseX, sign * Wd * from)
-      ctx.lineTo(tipX, sign * Wd * to)
-      ctx.lineTo(baseX - hr * 0.22, sign * Wd * (from + 0.06))
-      ctx.closePath()
-      ctx.fill()
-    }
-    tooth(L * 0.9, L * 0.82, -1, 0.14 + gape, 0.5 + gape * 0.5)
-    tooth(L * 0.62, L * 0.56, -1, 0.3 + gape * 0.8, 0.62 + gape * 0.4)
-    tooth(L * 0.78, L * 0.7, 1, 0.18 + gape, 0.52 + gape * 0.5)
-  }
-
-  // A tongue, flicked out now and then rather than always hanging there.
-  const flick = Math.sin(t * 0.004 + s.id * 2.1)
-  if (flick > 0.84 && hr > 5) {
+  // Tongue, back in the throat, only while the mouth is properly open.
+  if (gape > 0.3 && hr > 6) {
     ctx.strokeStyle = '#e0486a'
-    ctx.lineWidth = Math.max(0.8, hr * 0.11)
+    ctx.lineWidth = Math.max(0.8, hr * 0.1)
     ctx.lineCap = 'round'
-    const reach = L * (1.06 + (flick - 0.84) * 2.2)
     ctx.beginPath()
-    ctx.moveTo(L * 0.9, 0)
-    ctx.lineTo(reach, 0)
-    ctx.moveTo(reach, 0)
-    ctx.lineTo(reach + hr * 0.28, -hr * 0.2)
-    ctx.moveTo(reach, 0)
-    ctx.lineTo(reach + hr * 0.28, hr * 0.2)
+    ctx.moveTo(L * 0.3, 0)
+    ctx.lineTo(L * 0.85, 0)
     ctx.stroke()
   }
 
-  // Eyes, on top of the head and well back from the snout - which is
-  // where a snake's actually are, and leaves the jaws room to read.
+  // Teeth along the upper lip, small and evenly spaced.
+  if (hr > 6) {
+    ctx.fillStyle = '#fdf8ee'
+    for (const side of [-1, 1]) {
+      for (const along of [0.5, 0.72, 0.9]) {
+        const y = -side * lip * (0.35 + along * 0.55)
+        ctx.beginPath()
+        ctx.moveTo(L * along, y)
+        ctx.lineTo(L * (along + 0.07), y)
+        ctx.lineTo(L * (along + 0.035), y + side * lip * 0.36)
+        ctx.closePath()
+        ctx.fill()
+      }
+    }
+  }
+  ctx.restore()
+
+  // The lower lip, a lighter line under the opening so the jaw reads as
+  // a jaw rather than as a hole.
+  ctx.strokeStyle = hsl(s.hue, s.sat, 30, 0.7)
+  ctx.lineWidth = Math.max(0.7, hr * 0.07)
+  ctx.beginPath()
+  ctx.moveTo(L * 0.12, lip * 0.25)
+  ctx.quadraticCurveTo(L * 0.8, lip * 1.0, L * 1.06, lip * 0.45)
+  ctx.stroke()
+
+  // A tongue flick, out past the snout, now and then.
+  const flick = Math.sin(t * 0.004 + s.id * 2.1)
+  if (flick > 0.88 && hr > 5) {
+    ctx.strokeStyle = '#e0486a'
+    ctx.lineWidth = Math.max(0.8, hr * 0.1)
+    ctx.lineCap = 'round'
+    const reach = L * (1.1 + (flick - 0.88) * 3)
+    ctx.beginPath()
+    ctx.moveTo(L * 0.95, 0)
+    ctx.lineTo(reach, 0)
+    ctx.moveTo(reach, 0)
+    ctx.lineTo(reach + hr * 0.26, -hr * 0.18)
+    ctx.moveTo(reach, 0)
+    ctx.lineTo(reach + hr * 0.26, hr * 0.18)
+    ctx.stroke()
+  }
+
+  // Eyes: big, round and well forward, the way a cartoon snake's are.
   for (const side of [-1, 1]) {
-    const ex = L * 0.02
-    const ey = side * Wd * 0.46
+    const ex = -L * 0.02
+    const ey = side * Wd * 0.44
     ctx.fillStyle = '#ffffff'
     ctx.beginPath()
-    ctx.ellipse(ex, ey, hr * 0.26, hr * 0.24, 0, 0, Math.PI * 2)
+    ctx.ellipse(ex, ey, hr * 0.33, hr * 0.31, 0, 0, Math.PI * 2)
     ctx.fill()
+    ctx.strokeStyle = hsl(s.hue, s.sat, 26, 0.5)
+    ctx.lineWidth = Math.max(0.6, hr * 0.05)
+    ctx.stroke()
     ctx.fillStyle = '#121a24'
     ctx.beginPath()
-    ctx.ellipse(ex + hr * 0.09, ey, hr * 0.1, hr * 0.17, 0, 0, Math.PI * 2)
+    ctx.ellipse(ex + hr * 0.11, ey, hr * 0.14, hr * 0.2, 0, 0, Math.PI * 2)
     ctx.fill()
     ctx.fillStyle = 'rgba(255,255,255,0.95)'
     ctx.beginPath()
-    ctx.arc(ex + hr * 0.015, ey - hr * 0.1, hr * 0.055, 0, Math.PI * 2)
-    ctx.fill()
-    // A brow over the top, which is most of the expression.
-    ctx.fillStyle = skin(-18)
-    ctx.beginPath()
-    ctx.ellipse(ex - hr * 0.04, ey + side * hr * 0.22, hr * 0.3, hr * 0.14, 0, 0, Math.PI * 2)
+    ctx.arc(ex + hr * 0.06, ey - hr * 0.12, hr * 0.06, 0, Math.PI * 2)
     ctx.fill()
   }
 
-  // Nostrils, one dot each. At this size it is a pixel of character.
+  // Nostrils.
   if (hr > 9) {
-    ctx.fillStyle = hsl(s.hue, s.sat, 18)
+    ctx.fillStyle = hsl(s.hue, s.sat, 20)
     for (const side of [-1, 1]) {
       ctx.beginPath()
-      ctx.arc(L * 0.74, side * Wd * 0.42, hr * 0.055, 0, Math.PI * 2)
+      ctx.arc(L * 0.82, side * Wd * 0.3, hr * 0.05, 0, Math.PI * 2)
       ctx.fill()
     }
   }
@@ -817,7 +826,7 @@ export function drawSnake(
   ctx.strokeStyle = ring
   ctx.lineWidth = Math.max(1, 2 * cam.zoom)
   ctx.beginPath()
-  ctx.arc(h.sx, h.sy, hr * 1.24, 0, Math.PI * 2)
+  ctx.arc(h.sx, h.sy, hr * 1.26, 0, Math.PI * 2)
   ctx.stroke()
 
   // The level, which is the only number that matters in a fight.
