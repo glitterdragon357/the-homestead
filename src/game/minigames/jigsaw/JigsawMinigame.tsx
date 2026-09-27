@@ -5,12 +5,11 @@ import { usePurse } from '../../state/usePurse'
 import { GiftRow } from '../../economy/GiftRow'
 import { useAmbientMusic } from '../../audio/useAmbientMusic'
 import { sceneImage } from './jigsawDraw'
+import { RECIPES } from './jigsawScenes'
 import {
   BOARD,
   CUTS,
   CUT_BY_KEY,
-  SCENES,
-  SCENE_BY_KEY,
   SNAP,
   homeOf,
   initialJigsaw,
@@ -58,12 +57,16 @@ export function JigsawMinigame({ onExit }: MinigameProps) {
   const startedRef = useRef(0)
   const zRef = useRef(1)
 
+  // The order the picture groups appear in, taken from the recipes so a
+  // new one only has to name its group.
+  const groups = [...new Set(RECIPES.map((r) => r.group))]
+
   const [playing, setPlaying] = useState(false)
   const [placed, setPlaced] = useState(0)
   const [total, setTotal] = useState(0)
   const [result, setResult] = useState<null | { pay: number; seconds: number; best: boolean }>(null)
 
-  const scene = SCENE_BY_KEY[save.scene] ?? SCENES[0]
+  const scene = RECIPES.find((r) => r.key === save.scene) ?? RECIPES[0]
 
   /* ---------------------------------------------------------------- */
   /* Tipping the box out                                               */
@@ -317,18 +320,25 @@ export function JigsawMinigame({ onExit }: MinigameProps) {
           </div>
         )}
 
-        <p style={S.label}>Picture</p>
-        <div style={S.grid}>
-          {SCENES.map((s) => (
-            <button
-              key={s.key}
-              style={{ ...S.card, ...(save.scene === s.key ? S.cardOn : null) }}
-              onClick={() => setSave((v) => ({ ...v, scene: s.key }))}
-            >
-              <ScenePreview scene={s.key} />
-              <span style={S.cardName}>{s.name}</span>
-              <span style={S.cardNote}>{s.blurb}</span>
-            </button>
+        <p style={S.label}>Picture · {RECIPES.length} of them</p>
+        <div style={S.scroller}>
+          {groups.map((group) => (
+            <div key={group}>
+              <p style={S.group}>{group}</p>
+              <div style={S.grid}>
+                {RECIPES.filter((r) => r.group === group).map((r) => (
+                  <button
+                    key={r.key}
+                    style={{ ...S.card, ...(save.scene === r.key ? S.cardOn : null) }}
+                    onClick={() => setSave((v) => ({ ...v, scene: r.key }))}
+                  >
+                    <ScenePreview scene={r.key} />
+                    <span style={S.cardName}>{r.name}</span>
+                    <span style={S.cardNote}>{r.blurb}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
 
@@ -444,6 +454,20 @@ const S: Record<string, React.CSSProperties> = {
   best: { color: '#8ef0b4' },
   label: { margin: '16px 0 7px', fontSize: 11, letterSpacing: 1.2, textTransform: 'uppercase', opacity: 0.55 },
   grid: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 },
+  scroller: {
+    maxHeight: 300,
+    overflowY: 'auto',
+    padding: 8,
+    borderRadius: 10,
+    background: 'rgba(0,0,0,0.18)',
+  },
+  group: {
+    margin: '6px 2px 7px',
+    fontSize: 11,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    opacity: 0.5,
+  },
   card: {
     textAlign: 'left',
     display: 'flex',

@@ -7,9 +7,9 @@
  * time, which is what makes it a puzzle about looking rather than about
  * hunting through a pile.
  *
- * The pictures are drawn rather than loaded: a handful of scenes built
- * out of shapes, so there is nothing to download and every cut is clean
- * at any size.
+ * The pictures are drawn rather than loaded - seventy-five of them,
+ * built from a kit of parts described in `jigsawScenes` - so there is
+ * nothing to download and every cut is clean at any size.
  */
 
 export const BOARD = { w: 560, h: 420 }
@@ -34,23 +34,6 @@ export const CUTS: Cut[] = [
 ]
 
 export const CUT_BY_KEY: Record<string, Cut> = Object.fromEntries(CUTS.map((c) => [c.key, c]))
-
-export interface Scene {
-  key: string
-  name: string
-  blurb: string
-}
-
-export const SCENES: Scene[] = [
-  { key: 'harbour', name: 'The Harbour', blurb: 'Boats, a low sun and a long jetty.' },
-  { key: 'orchard', name: 'The Orchard', blurb: 'Rows of trees on a green slope.' },
-  { key: 'peaks', name: 'The Peaks', blurb: 'Snow, rock and a very cold lake.' },
-  { key: 'market', name: 'Night Market', blurb: 'Awnings, lanterns and a lot of colour.' },
-  { key: 'reef', name: 'The Reef', blurb: 'Coral, fish and light coming down through it.' },
-  { key: 'balloons', name: 'Balloons', blurb: 'Seven of them, over a patchwork of fields.' },
-]
-
-export const SCENE_BY_KEY: Record<string, Scene> = Object.fromEntries(SCENES.map((s) => [s.key, s]))
 
 /** One piece of a cut-up picture. */
 export interface Piece {
