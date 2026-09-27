@@ -1491,7 +1491,7 @@ export const FOOD_SAT = 92
  * whole floor uninteresting to look at.
  */
 export const COIN_COUNT = 4
-export const COIN_VALUE = 3
+export const COIN_VALUE = 5
 /** Dropped when you eat a snake, on top of what it was carrying. */
 export function bountyFor(fed: number): number {
   return 2 + Math.round(fed * 0.14)
