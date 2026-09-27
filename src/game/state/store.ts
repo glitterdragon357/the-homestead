@@ -409,3 +409,18 @@ export const useHomesteadStore = create<HomesteadState>()(
     }
   )
 )
+
+/**
+ * A handle on the store during development.
+ *
+ * Only so the running game can be driven from a console while checking
+ * something - opening a building without hunting for its tile, say.
+ * Importing the module from a console gets a second copy of it once Vite
+ * has hot-reloaded anything, and a second copy is not the store the app
+ * is rendering from, which makes it useless for exactly this.
+ */
+const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]', '::1']
+if (typeof window !== 'undefined' && LOCAL_HOSTS.includes(location.hostname)) {
+  ;(window as unknown as { homestead: typeof useHomesteadStore }).homestead =
+    useHomesteadStore
+}

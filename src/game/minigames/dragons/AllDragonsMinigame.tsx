@@ -519,7 +519,9 @@ export function AllDragonsMinigame({ onExit }: MinigameProps) {
             <div style={S.actions}>
               <button style={S.go} onClick={startShift}>
                 Mind the nursery
-                {eggsWaiting.length > 0 ? ` · ${eggsWaiting.length} eggs` : ''}
+                {eggsWaiting.length > 0
+                  ? ` · ${eggsWaiting.length} egg${eggsWaiting.length === 1 ? '' : 's'}`
+                  : ''}
               </button>
               <label style={S.toggle}>
                 <input
