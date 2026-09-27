@@ -1485,12 +1485,19 @@ export const FOOD_SAT = 92
 /**
  * How many lie about at once, and what a loose one is worth.
  *
- * Four, on a map that can be four thousand units across. Coins are meant
- * to be hunted rather than swept up: at twenty-six the arena was paved
- * with them and you collected money simply by playing, which made the
- * whole floor uninteresting to look at.
+ * One. On maps that run up to four thousand units across, there is a
+ * single coin out at a time, and it does not come back the moment you
+ * take it - see COIN_WAIT.
+ *
+ * Refilling instantly kept the field at a constant density however fast
+ * you hoovered, so picking one up cost nothing and there was always
+ * another somewhere. Now taking the coin empties the map, and finding
+ * one at all is an event rather than something that happens while you
+ * are busy doing something else.
  */
-export const COIN_COUNT = 4
+export const COIN_COUNT = 1
+/** How long the field stays empty before putting another one out. */
+export const COIN_WAIT = 15_000
 export const COIN_VALUE = 5
 /** Dropped when you eat a snake, on top of what it was carrying. */
 export function bountyFor(fed: number): number {

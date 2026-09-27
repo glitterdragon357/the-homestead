@@ -17,6 +17,7 @@ import {
   CHEST_REACH,
   CHEST_VALUE,
   COIN_COUNT,
+  COIN_WAIT,
   pickupReach,
   COIN_VALUE,
   FOOD_HUE,
@@ -65,6 +66,8 @@ export interface World {
   map: MapSpec
   /** The earliest the next rival may appear, so they trickle in. */
   nextSpawnAt: number
+  /** The earliest the next coin may appear, for the same reason. */
+  nextCoinAt: number
   /** When the run began. */
   startedAt: number
 }
@@ -287,6 +290,7 @@ export function makeWorld(
     nextId: map.rivals + 1,
     map,
     nextSpawnAt: 0,
+    nextCoinAt: 0,
     startedAt: 0,
   }
 }
@@ -589,7 +593,7 @@ export function scatter(s: Snake, world: World, rng: () => number) {
 /**
  * Coins the player has run over. Only the player: see the note on `Coin`.
  */
-export function collect(world: World, rng: () => number): number {
+export function collect(world: World, now: number, rng: () => number): number {
   const me = world.snakes.find((s) => s.player)
   if (!me || me.dead) return 0
   let got = 0
@@ -601,8 +605,11 @@ export function collect(world: World, rng: () => number): number {
     got += c.value
     world.coins.splice(i, 1)
   }
-  if (world.map.loot === 'coins') {
-    while (world.coins.length < COIN_COUNT) world.coins.push(makeCoin(rng, world.map))
+  // One at a time, and only when the wait is up. The field is meant to
+  // run dry for a while after you clear it.
+  if (world.map.loot === 'coins' && world.coins.length < COIN_COUNT && now >= world.nextCoinAt) {
+    world.coins.push(makeCoin(rng, world.map))
+    world.nextCoinAt = now + COIN_WAIT
   }
   return got
 }

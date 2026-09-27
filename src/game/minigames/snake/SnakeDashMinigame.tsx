@@ -234,7 +234,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
       }
 
       feed(w, rng)
-      pocketRef.current += collect(w, rng)
+      pocketRef.current += collect(w, now, rng)
       const cracked = crack(w, now, rng)
       pocketRef.current += cracked.coins
       chestsRef.current += cracked.opened
