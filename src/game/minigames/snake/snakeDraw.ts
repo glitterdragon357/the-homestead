@@ -1024,3 +1024,165 @@ export function drawSnake(
   if (fade < 1) ctx.globalAlpha = wasGlobal
   void t
 }
+
+/* ------------------------------------------------------------------ */
+/* The special snakes                                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The slug's trail.
+ *
+ * Painted under everything else, oldest first, so a fresh patch reads as
+ * brighter than one about to dry up. The wobble is per-patch and fixed
+ * off its own position, not off the clock, or the whole trail breathes
+ * in step and looks like one object.
+ */
+export function drawGoo(
+  ctx: CanvasRenderingContext2D,
+  cam: Camera,
+  goo: { x: number; y: number; bornAt: number }[],
+  t: number,
+  life: number
+) {
+  if (goo.length === 0) return
+  ctx.save()
+  for (const g of goo) {
+    const age = Math.min(1, (t - g.bornAt) / life)
+    const p = toScreen(cam, g.x, g.y)
+    // Sized generously on purpose. At the zoom a grown snake plays at,
+    // the first version of this was an eighteen pixel wash at half alpha
+    // over a dark floor, which is to say invisible - the trail was being
+    // laid the whole time and could not be seen at all.
+    const r = (62 - age * 10) * cam.zoom
+    if (p.sx < -r || p.sy < -r || p.sx > VIEW.width + r || p.sy > VIEW.height + r) continue
+    const fade = 1 - age * 0.78
+    const wob = 1 + Math.sin(g.x * 0.05 + g.y * 0.03) * 0.16
+    const grad = ctx.createRadialGradient(p.sx, p.sy, 0, p.sx, p.sy, r)
+    // Yellow-green rather than green. The starting skin is green, and at
+    // this size the trail read as more snake rather than as slime.
+    grad.addColorStop(0, hsl(72, 86, 44, fade * 0.9))
+    grad.addColorStop(0.55, hsl(68, 80, 33, fade * 0.78))
+    grad.addColorStop(0.86, hsl(64, 72, 23, fade * 0.4))
+    grad.addColorStop(1, hsl(62, 66, 18, 0))
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.ellipse(p.sx, p.sy, r * wob, r / wob, g.x * 0.01, 0, Math.PI * 2)
+    ctx.fill()
+    // A bright rim and a wet highlight, so it reads as something sitting
+    // on the floor rather than a smear of fog.
+    ctx.strokeStyle = hsl(76, 90, 58, fade * 0.4)
+    ctx.lineWidth = Math.max(1, 1.6 * cam.zoom)
+    ctx.beginPath()
+    ctx.ellipse(p.sx, p.sy, r * wob * 0.8, (r / wob) * 0.8, g.x * 0.01, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.fillStyle = hsl(80, 94, 80, fade * 0.5)
+    ctx.beginPath()
+    ctx.ellipse(p.sx - r * 0.24, p.sy - r * 0.28, r * 0.22, r * 0.14, 0, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.restore()
+}
+
+/**
+ * The fog bank.
+ *
+ * Drawn over the arena but under you, and kept deliberately thin in the
+ * middle: you are meant to be able to see out of your own fog. It thins
+ * at the rim too, because a hard circle edge looks like a bug.
+ */
+export function drawFog(
+  ctx: CanvasRenderingContext2D,
+  cam: Camera,
+  x: number,
+  y: number,
+  radius: number,
+  t: number,
+  strength: number
+) {
+  const p = toScreen(cam, x, y)
+  const r = radius * cam.zoom
+  ctx.save()
+  // Three offset lobes, drifting slowly, so the bank churns instead of
+  // sitting there as a disc.
+  for (let i = 0; i < 3; i++) {
+    const a = t * 0.00035 + (i / 3) * Math.PI * 2
+    const ox = Math.cos(a) * r * 0.16
+    const oy = Math.sin(a * 1.3) * r * 0.13
+    const grad = ctx.createRadialGradient(p.sx + ox, p.sy + oy, r * 0.12, p.sx + ox, p.sy + oy, r)
+    // Milky white. Barely any hue in it at all - a faint cool cast so it
+    // does not read as a flat grey smear over the arena, and no more.
+    grad.addColorStop(0, hsl(200, 8, 97, 0.12 * strength))
+    grad.addColorStop(0.45, hsl(200, 7, 95, 0.4 * strength))
+    grad.addColorStop(0.82, hsl(202, 6, 92, 0.3 * strength))
+    grad.addColorStop(1, hsl(204, 6, 90, 0))
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.arc(p.sx + ox, p.sy + oy, r, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.restore()
+}
+
+/** The King's snakes, out on the floor. */
+export function drawMinions(
+  ctx: CanvasRenderingContext2D,
+  cam: Camera,
+  minions: { x: number; y: number; targetId: number | null; dartUntil: number; carrying: number }[],
+  snakes: { id: number; x: number; y: number; dead: boolean }[],
+  hue: number,
+  t: number
+) {
+  for (const m of minions) {
+    const p = toScreen(cam, m.x, m.y)
+    // Big enough to find on a crowded floor. At ten they were a couple of
+    // violet specks among sixteen rivals and you could not tell your own
+    // minions from somebody's tail.
+    const r = Math.max(7, 15 * cam.zoom)
+
+    if (t < m.dartUntil && m.targetId !== null) {
+      const target = snakes.find((s) => s.id === m.targetId && !s.dead)
+      if (target) {
+        const q = toScreen(cam, target.x, target.y)
+        ctx.strokeStyle = hsl(286, 90, 78, 0.8)
+        ctx.lineWidth = Math.max(1, 2.6 * cam.zoom)
+        ctx.beginPath()
+        ctx.moveTo(p.sx, p.sy)
+        ctx.lineTo(q.sx, q.sy)
+        ctx.stroke()
+      }
+    }
+
+    // A short body, four beads, angled along the way it is heading.
+    const a = Math.atan2(m.y - cam.y, m.x - cam.x) + Math.sin(t * 0.004) * 0.4
+    for (let i = 3; i >= 0; i--) {
+      const bx = p.sx - Math.cos(a) * i * r * 0.9
+      const by = p.sy - Math.sin(a) * i * r * 0.9
+      const rr = r * (1 - i * 0.16)
+      const grad = ctx.createRadialGradient(bx - rr * 0.3, by - rr * 0.4, rr * 0.1, bx, by, rr)
+      grad.addColorStop(0, hsl(hue, 78, 74))
+      grad.addColorStop(1, hsl(hue, 70, 44))
+      ctx.fillStyle = grad
+      ctx.beginPath()
+      ctx.arc(bx, by, rr, 0, Math.PI * 2)
+      ctx.fill()
+      // A gold edge. Rivals come in every colour including violet, so
+      // colour alone does not say whose these are.
+      ctx.strokeStyle = hsl(46, 92, 70, 0.55)
+      ctx.lineWidth = Math.max(1, 1.4 * cam.zoom)
+      ctx.stroke()
+    }
+    // A crown-flick of light on the head, so the King's own read apart
+    // from a companion at a glance.
+    ctx.fillStyle = hsl(46, 96, 80, 0.95)
+    ctx.beginPath()
+    ctx.arc(p.sx, p.sy - r * 0.95, Math.max(1.6, r * 0.26), 0, Math.PI * 2)
+    ctx.fill()
+
+    if (m.carrying > 0) {
+      ctx.fillStyle = hsl(46, 94, 66, 0.95)
+      ctx.beginPath()
+      ctx.arc(p.sx + r * 0.7, p.sy + r * 0.6, Math.max(1.4, r * 0.3), 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+}

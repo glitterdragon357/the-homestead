@@ -10,7 +10,10 @@ import {
   drawArena,
   drawChests,
   drawCoins,
+  drawFog,
   drawFriend,
+  drawGoo,
+  drawMinions,
   drawPellets,
   drawSnake,
   type Camera,
@@ -21,7 +24,15 @@ import {
   COMPANIONS,
   COMPANION_BY_KEY,
   MAPS,
+  ABILITIES,
+  ABILITY_BY_KEY,
+  type AbilityKey,
+  FOG_RADIUS,
+  GOO_LIFE,
+  heldList,
   MAP_BY_KEY,
+  SKIN_FOR_ABILITY,
+  WHOLE_RUN,
   nipOf,
   SKINS,
   SKIN_BY_KEY,
@@ -31,7 +42,6 @@ import {
   SPAWN_GRACE,
   fedForLevel,
   initialSnake,
-  VANISH_TOLL,
   IDLE_STOP,
   RUN_LIMIT,
   winnerBonus,
@@ -40,6 +50,7 @@ import {
   payout,
   type SnakeSave,
 } from './snakeData'
+import { isOut, leftOf, outNow, runEffects, unleash } from './snakeAbility'
 import {
   collect,
   collide,
@@ -84,6 +95,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
 
   const [playing, setPlaying] = useState(false)
   const [result, setResult] = useState<null | {
+    relics: AbilityKey[]
     pay: number
     level: number
     eaten: number
@@ -110,6 +122,19 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
   const activeRef = useRef(0)
   const lastPointRef = useRef<{ x: number; y: number } | null>(null)
   const endingRef = useRef<Ending>('eaten')
+  /** Special snakes found this run, for the result screen. */
+  const relicsRef = useRef<AbilityKey[]>([])
+  /** The find, held on screen for a moment. */
+  const [fanfare, setFanfare] = useState<{ keys: AbilityKey[]; at: number } | null>(null)
+  /**
+   * What is in hand, and what is out.
+   *
+   * Both are mirrored into React state because the run loop lives outside
+   * it - the buttons have to redraw when a charge is spent or a timer
+   * runs down, and the loop itself must not re-render on every frame.
+   */
+  const [inHand, setInHand] = useState<Partial<Record<AbilityKey, number>>>({})
+  const [live, setLive] = useState<{ key: AbilityKey; left: number }[]>([])
 
   /* ---------------------------------------------------------------- */
   /* A run                                                             */
@@ -120,17 +145,23 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
     const map = MAP_BY_KEY[saveRef.current.map] ?? MAPS[0]
     const skin = saveRef.current.skin ?? 'grass'
 
-    // Nobody charges a toll every time it goes out. Taking it before the
-    // world is built means a refused payment cannot leave a run half
-    // started with a skin that was never paid for.
-    if (skin === 'nobody' && !spend(VANISH_TOLL)) {
-      setDenied(`Nobody costs ${VANISH_TOLL} 🪙 a run. You have ${coins}.`)
-      return
-    }
     setDenied(null)
 
     const yours = COMPANION_BY_KEY[saveRef.current.companion ?? '']
     const w = makeWorld(map, skin, rng, yours?.cost ?? 0)
+
+    // A whole-run snake is spent here, at the start, and it is out from
+    // the first second. The charge goes now rather than at the end - the
+    // run having gone badly is not a refund.
+    const taking = saveRef.current.taking ?? null
+    if (taking && (saveRef.current.held?.[taking] ?? 0) > 0) {
+      unleash(w.fx, taking, performance.now(), w.snakes[0])
+      setSave((prev) => {
+        const held = { ...(prev.held ?? {}) }
+        held[taking] = Math.max(0, (held[taking] ?? 0) - 1)
+        return { ...prev, held, taking: null }
+      })
+    }
     w.snakes[0].friend = makeFriend(yours?.key ?? null, w.snakes[0].x, w.snakes[0].y)
     w.snakes[0].safeUntil = performance.now() + SPAWN_GRACE
     worldRef.current = w
@@ -142,11 +173,46 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
     activeRef.current = performance.now()
     lastPointRef.current = null
     endingRef.current = 'eaten'
+    relicsRef.current = []
+    setFanfare(null)
+    setInHand({ ...(saveRef.current.held ?? {}) })
+    setLive([])
     aimRef.current = null
     dashRef.current = false
     setResult(null)
     setPlaying(true)
   }
+
+  /**
+   * Take a special snake out.
+   *
+   * The charge is spent here and now, before the effect starts, and it
+   * comes off the save rather than off a run tally - so a run that ends
+   * badly a second later has still used it. That is the deal: one use,
+   * and using it is the moment you press the button.
+   */
+  const useAbility = useCallback(
+    (key: AbilityKey) => {
+      const w = worldRef.current
+      if (!w) return
+      const me = w.snakes[0]
+      if (me.dead) return
+      if ((saveRef.current.held?.[key] ?? 0) <= 0) return
+      // Fog only ever goes out once. A second double click while it is
+      // already out must not quietly burn another charge.
+      if (isOut(w.fx, key, performance.now())) return
+      const now = performance.now()
+      unleash(w.fx, key, now, me)
+      setSave((prev) => {
+        const held = { ...(prev.held ?? {}) }
+        held[key] = Math.max(0, (held[key] ?? 0) - 1)
+        return { ...prev, held }
+      })
+      setInHand((prev) => ({ ...prev, [key]: Math.max(0, (prev[key] ?? 0) - 1) }))
+      activeRef.current = now
+    },
+    [setSave]
+  )
 
   const end = useCallback(() => {
     const w = worldRef.current
@@ -161,8 +227,12 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
     const biggest = w.snakes.every((s) => s.dead || s.player || levelOf(s.fed) <= level)
     const won = how === 'time' && biggest && !me.dead
 
+    // The Wringer pays a multiple of everything else, which is the other
+    // half of why anyone would go in there.
     const pay =
-      payout(level, eatenRef.current, me.fed) + found + (won ? winnerBonus(level) : 0)
+      payout(level, eatenRef.current, me.fed, w.map.pay ?? 1) +
+      found +
+      (won ? winnerBonus(level) : 0)
     const bitten = bittenRef.current
     const chests = (saveRef.current.chests ?? 0) + chestsRef.current
     const earnedNow =
@@ -189,6 +259,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
       won,
       chests: chestsRef.current,
       earnedElemental: earnedNow,
+      relics: relicsRef.current.slice(),
     })
     setPlaying(false)
     worldRef.current = null
@@ -217,8 +288,11 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
       const me = w.snakes[0]
       if (w.startedAt === 0) w.startedAt = now
 
-      // Nobody is unseen for the whole run, not on a cycle.
-      me.unseen = me.pattern === 'vanish' ? 1 : 0
+      // Whatever special snake is out: the fog, the magnet, the King's
+      // snakes, the goo, the vanishing. This also resets everyone's pace
+      // and your own visibility every tick, so it has to run before
+      // anything moves.
+      pocketRef.current += runEffects(w.fx, me, w.snakes.slice(1), w.coins, w.map, now, dt)
 
       /* --- steering ------------------------------------------------ */
       for (const s of w.snakes) {
@@ -238,6 +312,23 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
       const cracked = crack(w, now, rng)
       pocketRef.current += cracked.coins
       chestsRef.current += cracked.opened
+      if (cracked.found.length > 0) {
+        // Straight into the save, not held until the run ends. Dying
+        // with a special snake still in the chest you just opened would
+        // be an unreasonable thing to do to someone who got that far.
+    relicsRef.current.push(...cracked.found)
+        setSave((prev) => {
+          const held = { ...(prev.held ?? {}) }
+          for (const k of cracked.found) held[k] = (held[k] ?? 0) + 1
+          // The look comes with it, and it keeps. Nobody is in that list
+          // too, which is how that skin is obtained now that it is no
+          // longer for sale.
+          const skins = new Set(ownedSkins(prev))
+          for (const k of cracked.found) skins.add(SKIN_FOR_ABILITY[k])
+          return { ...prev, held, skins: [...skins] }
+        })
+        setFanfare({ keys: cracked.found, at: now })
+      }
       for (const n of nipAll(w, now, dt)) if (n.owner === 0) nipsRef.current++
 
       const hits = collide(w, now)
@@ -287,6 +378,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
       const cam: Camera = { x: me.x, y: me.y, zoom }
 
       drawArena(ctx, cam, w.map)
+      drawGoo(ctx, cam, w.fx.goo, now, GOO_LIFE)
       drawPellets(ctx, cam, w.pellets, now)
       drawCoins(ctx, cam, w.coins, now)
       drawChests(ctx, cam, w.chests, now)
@@ -299,6 +391,15 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
         drawSnake(ctx, cam, s, now, their < myLevel ? 'prey' : their > myLevel ? 'danger' : 'peer')
       }
       drawSnake(ctx, cam, me, now, 'self')
+      if (w.fx.minions.length > 0) {
+        drawMinions(ctx, cam, w.fx.minions, w.snakes, ABILITY_BY_KEY.king.hue, now)
+      }
+      // The fog goes over the snakes, including yours - you can see
+      // through your own bank, but it should still read as weather.
+      const fogLeft = leftOf(w.fx, 'fog', now)
+      if (fogLeft > 0) {
+        drawFog(ctx, cam, me.x, me.y, FOG_RADIUS, now, Math.min(1, fogLeft * 4))
+      }
       // Every companion in the arena, over the snakes so none is buried.
       for (const s of w.snakes) {
         if (!s.dead && s.friend) drawFriend(ctx, cam, s.friend, w.snakes, now)
@@ -338,10 +439,13 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
           toNext: Math.max(0, Math.min(1, (me.fed - from) / Math.max(1, need - from))),
           bitten: bittenRef.current,
           pocket: pocketRef.current,
-          vanish: me.pattern === 'vanish',
+          vanish: me.unseen > 0.6,
           left: Math.max(0, RUN_LIMIT - (now - w.startedAt)),
           idle: Math.max(0, IDLE_STOP - (now - activeRef.current)),
         })
+        setLive(outNow(w.fx, now))
+        // The find notice says its piece and gets out of the way.
+        setFanfare((f) => (f && now - f.at > 3400 ? null : f))
       }
     }
 
@@ -435,6 +539,12 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
             aimAt(e)
             dashRef.current = true
           }}
+          onDoubleClick={(e) => {
+            // Letting the Fog out. The only thing a double click does,
+            // and it does nothing at all if there is none in hand.
+            if ((e.target as HTMLElement).closest('button')) return
+            useAbility('fog')
+          }}
         >
           <canvas ref={canvasRef} width={VIEW.width} height={VIEW.height} style={S.canvas} />
 
@@ -457,6 +567,70 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
           {hud.idle < 10_000 && (
             <div style={S.idleWarn}>
               Still there? Ending in {Math.ceil(hud.idle / 1000)} - your loot is safe either way.
+            </div>
+          )}
+
+          {fanfare && (
+            <div style={S.found}>
+              <strong>
+                {fanfare.keys.map((k) => ABILITY_BY_KEY[k].name).join(' and ')} found
+              </strong>
+              <span>one use, yours to spend whenever you like</span>
+            </div>
+          )}
+
+          {(live.length > 0 || ABILITIES.some((a) => (inHand[a.key] ?? 0) > 0)) && (
+            <div style={S.bar}>
+              {ABILITIES.map((a) => {
+                const n = inHand[a.key] ?? 0
+                const out = live.find((l) => l.key === a.key)
+                if (n === 0 && !out) return null
+                // Worn snakes have no control - they are simply on. The
+                // Fog has one, but it is a double click on the arena,
+                // not this. Both still show here so you can see what is
+                // running, but only the Magnet is pressable.
+                const pressable = a.how === 'button'
+                return (
+                  <button
+                    key={a.key}
+                    type="button"
+                    style={{
+                      ...S.charge,
+                      borderColor: `hsl(${a.hue} 80% 62% / ${out ? 0.95 : 0.5})`,
+                      background: out
+                        ? `hsl(${a.hue} 64% 30%)`
+                        : n > 0
+                          ? `hsl(${a.hue} 40% 17%)`
+                          : 'rgba(10,14,22,0.6)',
+                      opacity: n > 0 || out ? 1 : 0.45,
+                    }}
+                    disabled={!pressable || n === 0}
+                    onClick={() => pressable && useAbility(a.key)}
+                    title={a.blurb}
+                  >
+                    <span style={S.chargeName}>{a.name}</span>
+                    {out ? (
+                      a.lasts >= WHOLE_RUN ? (
+                        <span style={S.chargeN}>out</span>
+                      ) : (
+                        <span style={S.chargeTrack}>
+                          <span
+                            style={{
+                              ...S.chargeFill,
+                              width: `${Math.round(out.left * 100)}%`,
+                              background: `hsl(${a.hue} 86% 68%)`,
+                            }}
+                          />
+                        </span>
+                      )
+                    ) : a.how === 'double' ? (
+                      <span style={S.chargeN}>double click ×{n}</span>
+                    ) : (
+                      <span style={S.chargeN}>×{n}</span>
+                    )}
+                  </button>
+                )
+              })}
             </div>
           )}
 
@@ -505,6 +679,11 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
             {result.earnedElemental && (
               <span style={S.won}>Elemental unlocked</span>
             )}
+            {result.relics.length > 0 && (
+              <span style={S.won}>
+                {result.relics.map((k) => ABILITY_BY_KEY[k].name).join(', ')} — kept
+              </span>
+            )}
             {result.chests > 0 && (
               <span style={S.bitNote}>
                 {' '}
@@ -532,6 +711,66 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
 
         <div style={S.pickers}>
           <div style={S.sectionHead}>
+            <p style={S.rulesHead}>Special snakes</p>
+          </div>
+          {heldList(save).length > 0 ? (
+            <>
+              <div style={S.hand}>
+                {heldList(save).map(({ spec, n }) => {
+                  // The worn ones are a choice made here, before the run.
+                  // The other two are used in the arena, so they are shown
+                  // but not selectable.
+                  const worn = spec.how === 'worn'
+                  const on = worn && (save.taking ?? null) === spec.key
+                  const style = {
+                    ...S.handOne,
+                    borderColor: `hsl(${spec.hue} 70% 58% / ${on ? 1 : 0.5})`,
+                    background: on ? `hsl(${spec.hue} 52% 26%)` : `hsl(${spec.hue} 38% 15%)`,
+                    color: `hsl(${spec.hue} 60% 88%)`,
+                  }
+                  if (!worn) {
+                    return (
+                      <span key={spec.key} style={style} title={spec.blurb}>
+                        {spec.name}
+                        <span style={S.handN}>×{n}</span>
+                        <span style={S.handHow}>
+                          {spec.how === 'button' ? 'a button in there' : 'double click in there'}
+                        </span>
+                      </span>
+                    )
+                  }
+                  return (
+                    <button
+                      key={spec.key}
+                      type="button"
+                      style={{ ...style, cursor: 'pointer' }}
+                      title={spec.blurb}
+                      onClick={() =>
+                        setSave((v) => ({ ...v, taking: on ? null : spec.key }))
+                      }
+                    >
+                      {spec.name}
+                      <span style={S.handN}>×{n}</span>
+                      <span style={S.handHow}>{on ? 'taking it in' : 'take it in'}</span>
+                    </button>
+                  )
+                })}
+              </div>
+              <p style={S.handNote}>
+                Every one of them is a single use, spent the moment it comes out. Three are snakes
+                you become for a whole run and pick here; the Magnet is a button in the arena, and
+                the Fog rolls out on a double click and then stays out.
+              </p>
+            </>
+          ) : (
+            <p style={S.handNote}>
+              None in hand. They are not for sale at any price — the only place any of the five is
+              found is a chest in the Wringer, the hardest arena here, and each one you find is a
+              single use.
+            </p>
+          )}
+
+          <div style={S.sectionHead}>
             <p style={S.rulesHead}>Where · {MAPS.length} arenas</p>
           </div>
           <div style={S.scroller}>
@@ -548,7 +787,13 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
                     <span style={S.cardNote}>{m.blurb}</span>
                     <span style={S.cardMeta}>
                       {m.w}×{m.h} · {m.rivals} rivals ·{' '}
-                      {m.loot === 'chests' ? 'chests' : m.loot === 'none' ? 'no coins' : 'coins'}
+                      {m.loot === 'chests'
+                        ? 'chests'
+                        : m.loot === 'none'
+                          ? 'no coins'
+                          : m.loot === 'relics'
+                            ? `special snakes · pays ×${m.pay ?? 1}`
+                            : 'coins'}
                     </span>
                   </button>
                 )
@@ -671,10 +916,12 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
                               ? on
                                 ? 'worn'
                                 : 'yours'
-                              : EARNED_SKINS.includes(k.key)
+                              : k.key === 'elemental'
                                 ? `${save.chests ?? 0} of ${CHESTS_FOR_ELEMENTAL} chests`
+                                : EARNED_SKINS.includes(k.key)
+                                  ? 'found in the Wringer'
                                 : `🪙 ${k.cost}`}
-                            {k.key === 'nobody' ? ` · ${VANISH_TOLL} 🪙 a run` : ''}
+
                           </span>
                         </button>
                       )
@@ -726,7 +973,7 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
 
         <button style={S.go} onClick={start}>
           {result ? 'Go again' : 'Into the arena'}
-          {(save.skin ?? 'grass') === 'nobody' ? ` · ${VANISH_TOLL} 🪙` : ''}
+
         </button>
 
         <label style={S.musicRow}>
@@ -891,6 +1138,87 @@ const S: Record<string, React.CSSProperties> = {
   tally: { fontSize: 12, opacity: 0.8 },
   pocket: { fontSize: 14, fontWeight: 700, color: '#f2c04a' },
   clock: { fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums' },
+  /**
+   * The row of charges, sat above the dash meter.
+   *
+   * Deliberately large. These are one-shot, found in the hardest map in
+   * the game, and pressing the wrong one by accident wastes a run's work
+   * - so each button gets a real name on it rather than an icon to
+   * squint at, and a target big enough to hit without looking.
+   */
+  bar: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 62,
+    display: 'flex',
+    gap: 8,
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
+  charge: {
+    minWidth: 96,
+    minHeight: 46,
+    padding: '6px 12px',
+    border: '2px solid',
+    borderRadius: 10,
+    color: '#eaf2ff',
+    font: '700 12px/1.25 ui-sans-serif, system-ui, sans-serif',
+    letterSpacing: 0.2,
+    cursor: 'pointer',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 4,
+    backdropFilter: 'blur(3px)',
+  },
+  chargeName: { whiteSpace: 'nowrap' },
+  chargeN: { opacity: 0.75, fontWeight: 600, fontVariantNumeric: 'tabular-nums' },
+  chargeTrack: {
+    width: '100%',
+    height: 4,
+    borderRadius: 2,
+    background: 'rgba(0,0,0,0.45)',
+    overflow: 'hidden',
+  },
+  chargeFill: { display: 'block', height: '100%', borderRadius: 2 },
+  found: {
+    position: 'absolute',
+    top: '34%',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 4,
+    font: '600 14px/1.35 ui-sans-serif, system-ui, sans-serif',
+    color: '#f0d9ff',
+    textShadow: '0 2px 14px rgba(0,0,0,0.85)',
+    pointerEvents: 'none',
+  },
+  /** The inventory on the front screen. */
+  hand: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 8,
+    margin: '4px 0 2px',
+  },
+  handOne: {
+    padding: '7px 11px',
+    borderRadius: 10,
+    border: '1px solid',
+    font: '600 12px/1.3 ui-sans-serif, system-ui, sans-serif',
+    display: 'flex',
+    gap: 7,
+    alignItems: 'baseline',
+  },
+  handN: { fontWeight: 800, fontVariantNumeric: 'tabular-nums' },
+  handHow: { fontWeight: 400, fontSize: 11, opacity: 0.66 },
+  handNote: {
+    font: '400 12px/1.5 ui-sans-serif, system-ui, sans-serif',
+    color: 'rgba(234,242,255,0.6)',
+    margin: 0,
+  },
   idleWarn: {
     position: 'absolute',
     top: '42%',

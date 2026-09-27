@@ -16,6 +16,12 @@ import {
   CHEST_COUNT,
   CHEST_REACH,
   CHEST_VALUE,
+  RELIC_CHANCE,
+  RELIC_COINS,
+  RELIC_COUNT,
+  RELICS_PER_RUN,
+  ABILITIES,
+  type AbilityKey,
   COIN_COUNT,
   COIN_WAIT,
   pickupReach,
@@ -55,6 +61,7 @@ import {
   type Pellet,
   type Snake,
 } from './snakeData'
+import { type Effects, makeEffects } from './snakeAbility'
 
 export interface World {
   snakes: Snake[]
@@ -70,6 +77,10 @@ export interface World {
   nextCoinAt: number
   /** When the run began. */
   startedAt: number
+  /** Whatever special snake is out, and what it has left behind. */
+  fx: Effects
+  /** Special snakes taken out of the Wringer this run. Caps at one. */
+  relics: number
 }
 
 /* ------------------------------------------------------------------ */
@@ -151,9 +162,23 @@ export function makeCoin(rng: () => number, map: MapSpec, x?: number, y?: number
 }
 
 export function makeChest(rng: () => number, map: MapSpec): Chest {
-  return {
+  const spot = {
     x: 90 + rng() * (map.w - 180),
     y: 90 + rng() * (map.h - 180),
+  }
+  // The Wringer's chests are a different thing. Half of them hold one of
+  // the five special snakes, drawn evenly, and the rest hold money.
+  if (map.loot === 'relics') {
+    const relic = rng() < RELIC_CHANCE
+    return {
+      ...spot,
+      value: relic ? 0 : Math.round(RELIC_COINS * (0.7 + rng() * 0.6)),
+      openedAt: 0,
+      relic: relic ? ABILITIES[Math.floor(rng() * ABILITIES.length)].key : undefined,
+    }
+  }
+  return {
+    ...spot,
     value: Math.round(CHEST_VALUE * (0.7 + rng() * 0.6)),
     openedAt: 0,
   }
@@ -281,6 +306,7 @@ export function makeWorld(
   if (map.loot === 'coins') for (let i = 0; i < COIN_COUNT; i++) coins.push(makeCoin(rng, map))
   const chests: Chest[] = []
   if (map.loot === 'chests') for (let i = 0; i < CHEST_COUNT; i++) chests.push(makeChest(rng, map))
+  if (map.loot === 'relics') for (let i = 0; i < RELIC_COUNT; i++) chests.push(makeChest(rng, map))
   return {
     snakes,
     pellets,
@@ -292,6 +318,8 @@ export function makeWorld(
     nextSpawnAt: 0,
     nextCoinAt: 0,
     startedAt: 0,
+    fx: makeEffects(),
+    relics: 0,
   }
 }
 
@@ -301,6 +329,11 @@ export function makeWorld(
 
 /** Where a rival wants to be pointing. */
 export function steer(self: Snake, world: World): { heading: number; dash: boolean } {
+  // Inside the fog it can see nothing at all - not you, not food, not
+  // the snake beside it. All it can do is keep going and hope.
+  if (self.blindUntil && world.t < self.blindUntil) {
+    return { heading: self.heading + Math.sin(world.t * 0.004 + self.id) * 0.5, dash: false }
+  }
   const myLevel = levelOf(self.fed)
   let wantX = 0
   let wantY = 0
@@ -402,7 +435,7 @@ export function moveSnake(
   s.dash = Math.max(0, Math.min(DASH_MAX, s.dash + (dashing ? -DASH_DRAIN : DASH_REFILL) * dt))
 
   s.heading = turnToward(s.heading, target, TURN_RATE * dt * (shoved ? 2.4 : 1))
-  const speed = speedOf(s.fed, dashing) * (shoved ? 1.35 : 1)
+  const speed = speedOf(s.fed, dashing) * (shoved ? 1.35 : 1) * (s.pace ?? 1)
   s.x += Math.cos(s.heading) * speed * dt
   s.y += Math.sin(s.heading) * speed * dt
 
@@ -621,28 +654,48 @@ export function collect(world: World, now: number, rng: () => number): number {
  * second number is what the elemental skin is earned with, so it has to
  * be counted rather than inferred from the money.
  */
-export function crack(world: World, now: number, rng: () => number): { coins: number; opened: number } {
+export function crack(
+  world: World,
+  now: number,
+  rng: () => number
+): { coins: number; opened: number; found: AbilityKey[] } {
+  const none = { coins: 0, opened: 0, found: [] as AbilityKey[] }
   // Only on maps that have them. Without this the refill below quietly
   // grew chests on every map in the game, including the ones whose whole
   // point is that there is no money on the floor at all.
-  if (world.map.loot !== 'chests') return { coins: 0, opened: 0 }
+  const kind = world.map.loot
+  if (kind !== 'chests' && kind !== 'relics') return none
   const me = world.snakes.find((s) => s.player)
-  if (!me || me.dead) return { coins: 0, opened: 0 }
+  if (!me || me.dead) return none
   let coins = 0
   let opened = 0
+  const found: AbilityKey[] = []
   const reach = CHEST_REACH + girthOf(me.fed) * 0.5
   for (const c of world.chests) {
     if (c.openedAt) continue
     if (Math.hypot(c.x - me.x, c.y - me.y) > reach) continue
     c.openedAt = now
-    coins += c.value
+    if (c.relic && world.relics < RELICS_PER_RUN) {
+      found.push(c.relic)
+      world.relics++
+    } else if (c.relic) {
+      // Past the run's one special snake, a relic chest is money like any
+      // other - it does not become an empty box.
+      coins += Math.round(RELIC_COINS * 0.8)
+    } else {
+      coins += c.value
+    }
     opened++
   }
   // Clear the ones whose opening has played out, and put fresh ones on
   // the field so a long run is not left with an empty map.
   world.chests = world.chests.filter((c) => !c.openedAt || now - c.openedAt < 900)
-  while (world.chests.length < CHEST_COUNT) world.chests.push(makeChest(rng, world.map))
-  return { coins, opened }
+  // Ordinary chest maps restock so a long run is not left on an empty
+  // floor. The Wringer does not: what it started with is all there is.
+  if (kind === 'chests') {
+    while (world.chests.length < CHEST_COUNT) world.chests.push(makeChest(rng, world.map))
+  }
+  return { coins, opened, found }
 }
 
 /** A snake you ate drops what it was worth, right where it died. */

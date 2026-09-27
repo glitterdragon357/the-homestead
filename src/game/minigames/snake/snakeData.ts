@@ -19,6 +19,15 @@ export interface MapSpec {
   h: number
   rivals: number
   pellets: number
+  /**
+   * What a finished run here is multiplied by, if not 1.
+   *
+   * Only the Wringer sets this. It has to: a map you mostly die on in
+   * the first thirty seconds pays nothing at all on average, however
+   * good the rate is per second survived, and nobody would choose it
+   * twice.
+   */
+  pay?: number
   /** Floor at the centre, floor at the edges, the grid, and the wall. */
   floorIn: string
   floorOut: string
@@ -37,12 +46,14 @@ export interface MapSpec {
    *             and the only place the elemental skin is earned
    *  - `none`   nothing but food. Nothing to collect, nothing to chase,
    *             just snakes
+   *  - `relics` the Wringer only: chests that hold a special snake
+   *             rather than money, and pay far better besides
    */
   loot: Loot
 }
 
 export type Texture = 'grid' | 'dots' | 'hex' | 'waves' | 'stripes' | 'scratch' | 'bare'
-export type Loot = 'coins' | 'chests' | 'none'
+export type Loot = 'coins' | 'chests' | 'none' | 'relics'
 
 /* ------------------------------------------------------------------ */
 /* Treasure                                                            */
@@ -56,6 +67,11 @@ export interface Chest {
   value: number
   /** Runs its opening animation, then it is gone. */
   openedAt: number
+  /**
+   * A special snake inside instead of money. Only the Wringer's chests
+   * hold these, and there are very few of them.
+   */
+  relic?: AbilityKey
 }
 
 /** How many sit on the field at once, and what one is worth. */
@@ -65,6 +81,39 @@ export const CHEST_VALUE = 220
 export const CHEST_REACH = 34
 /** Chests opened before the elemental skin is yours. */
 export const CHESTS_FOR_ELEMENTAL = 12
+
+/**
+ * The Wringer's chests.
+ *
+ * Two on the floor at a time, and one of them is not money - it is a
+ * special snake, drawn at random from the five. This is the only way
+ * any of them is ever obtained.
+ *
+ * Two is deliberately few. The map is fourteen hundred by eleven
+ * hundred with sixteen others on it, so crossing it to reach a chest is
+ * the hard part, not finding one, and putting more out would only mean
+ * grabbing several on the one run where you happen to survive.
+ */
+export const RELIC_COUNT = 2
+/** The chance a Wringer chest holds a special snake rather than coins. */
+export const RELIC_CHANCE = 0.28
+/** What a Wringer chest holds when it is only money. */
+export const RELIC_COINS = 320
+/**
+ * At most one special snake leaves the Wringer per run, and its chests
+ * do not come back once opened.
+ *
+ * Both of these are load-bearing. Measured without them: the map is
+ * fourteen hundred across, chests refilled the instant one was opened,
+ * and a run with a whole-run Nobody in it came out with forty-seven
+ * chests, twenty-three special snakes and eight thousand coins. One trip
+ * paid for every trip after it forever.
+ *
+ * So the Wringer holds exactly what it was dealt. Two chests, roughly
+ * one of them a special snake, and when they are gone the map has
+ * nothing further to give however long you last.
+ */
+export const RELICS_PER_RUN = 1
 
 export const MAPS: MapSpec[] = [
   {
@@ -817,6 +866,37 @@ export const MAPS: MapSpec[] = [
     texture: 'hex',
     loot: 'chests',
   },
+  /**
+   * The Wringer. The hardest arena in the game, and the only place the
+   * special snakes are found.
+   *
+   * Every dial is set against you at once: it is the smallest floor
+   * here, there are sixteen others on it, and there is barely a third
+   * of the food any other map of this size carries. You cannot outrun
+   * anything, because there is nowhere to run to, and you cannot outgrow
+   * anything, because there is nothing to grow on. What you can do is
+   * pick your moment.
+   *
+   * It pays for itself. The chests hold a special snake rather than
+   * money, and the run itself pays several times what an ordinary map
+   * does - see PAY_MULTIPLIER.
+   */
+  {
+    key: 'wringer',
+    name: 'The Wringer',
+    blurb: 'Sixteen others, nowhere to hide, and nothing to eat. Special snakes are only found here.',
+    w: 1300,
+    h: 1050,
+    rivals: 16,
+    pellets: 80,
+    floorIn: '#231026',
+    floorOut: '#0b0310',
+    grid: 'rgba(225,150,255,0.08)',
+    wall: '236,150,255',
+    texture: 'scratch',
+    loot: 'relics',
+    pay: 6,
+  },
 ]
 
 export const MAP_BY_KEY: Record<string, MapSpec> = Object.fromEntries(MAPS.map((m) => [m.key, m]))
@@ -1028,15 +1108,67 @@ export const SKINS: Skin[] = [
     family: 'Oddity',
     cost: 0,
   },
+  /*
+   * A look for each of the five special snakes, all of them Oddities.
+   *
+   * None is for sale. Finding a special snake in the Wringer hands you
+   * its look for keeps, separately from the single use of the snake
+   * itself - so the run that got you a King leaves something behind
+   * after the King is spent.
+   */
+  {
+    key: 'fogskin',
+    name: 'Fog Breath',
+    blurb: 'Milky white and soft at the edges, as though most of it were still weather.',
+    hue: 196,
+    accent: 208,
+    sat: 22,
+    pattern: 'ghost',
+    family: 'Oddity',
+    cost: 0,
+  },
+  {
+    key: 'magnetskin',
+    name: 'Coin Magnet',
+    blurb: 'Struck gold, rubbed bright, ridged down its length like a minted coin.',
+    hue: 44,
+    accent: 38,
+    sat: 84,
+    pattern: 'metal',
+    family: 'Oddity',
+    cost: 0,
+  },
+  {
+    key: 'kingskin',
+    name: 'King Snake',
+    blurb: 'Deep violet ringed in gold, the way a thing looks when other things answer to it.',
+    hue: 286,
+    accent: 46,
+    sat: 76,
+    pattern: 'rings',
+    family: 'Oddity',
+    cost: 0,
+  },
+  {
+    key: 'slugskin',
+    name: 'Slug Snake',
+    blurb: 'Wet green, permanently glistening, and leaving a little of itself everywhere it goes.',
+    hue: 96,
+    accent: 104,
+    sat: 70,
+    pattern: 'water',
+    family: 'Oddity',
+    cost: 0,
+  },
   {
     key: 'nobody',
     name: 'Nobody',
-    blurb: 'Unseen the whole run. You can always see yourself; nothing else can.',
+    blurb: 'Barely a snake at all - a grey outline, and the arena showing through the middle of it.',
     hue: 204,
     accent: 204,
     pattern: 'vanish',
     family: 'Oddity',
-    cost: 1000,
+    cost: 0,
   },
 ]
 
@@ -1046,22 +1178,21 @@ export const SKIN_FAMILIES = ['Oddity', 'Elements', 'Remains', 'Hide', 'Garden',
 export const SKIN_BY_KEY: Record<string, Skin> = Object.fromEntries(SKINS.map((s) => [s.key, s]))
 
 /**
- * Nobody is not on a timer. Wear it and you are unseen for the whole
- * run, first second to last - you can always see yourself, and nothing
- * else in the arena can see you at all.
+ * Nobody used to be a skin you wore for a toll, unseen from the first
+ * second of a run to the last. It is now one of the special snakes: you
+ * find it in the Wringer and it lasts twenty seconds, once.
  *
- * What it costs is money: a toll every single time you take it out,
- * paid before the run starts.
+ * The reason is that a permanent cloak settles the game. Measured over
+ * natural runs to death it earned a median of about 2600 against a
+ * normal skin's 80, because almost nothing the arena does to you works
+ * if it cannot find you, and the fix was a toll so steep the skin was
+ * only worth wearing on a run that went long anyway. Twenty seconds you
+ * had to earn is the same idea with the sting left in and the
+ * bookkeeping gone.
  *
- * The toll has to be larger than the run is worth, or it is not a cost
- * at all - it is an investment, and there is no reason ever to play
- * without it. Measured over natural runs to death, wearing this earns a
- * median of about 2600 against a normal skin's 80, because almost
- * nothing the arena does to you works if it cannot find you. So the
- * toll sits above that: a typical run in it loses money, and only a
- * genuinely long one comes out ahead.
+ * The skin is still in the shop, and still looks the way it looked. It
+ * just does not do anything any more.
  */
-export const VANISH_TOLL = 3000
 
 /* ------------------------------------------------------------------ */
 /* When a run ends by itself                                           */
@@ -1097,7 +1228,16 @@ export type Ending = 'eaten' | 'idle' | 'time'
  * Elemental costs nothing either, but it is not given away - it is
  * earned by opening chests, so it is kept out of the starting set.
  */
-export const EARNED_SKINS = ['elemental']
+export const EARNED_SKINS = ['elemental', 'fogskin', 'magnetskin', 'kingskin', 'slugskin', 'nobody']
+
+/** Which look a special snake hands over when you find one. */
+export const SKIN_FOR_ABILITY: Record<AbilityKey, string> = {
+  fog: 'fogskin',
+  magnet: 'magnetskin',
+  king: 'kingskin',
+  slug: 'slugskin',
+  nobody: 'nobody',
+}
 export const FREE_SKINS = SKINS.filter(
   (s) => s.cost === 0 && !EARNED_SKINS.includes(s.key)
 ).map((s) => s.key)
@@ -1339,6 +1479,13 @@ export interface Snake {
   unseen: number
   /** What is swimming along with this snake, if anything. */
   friend: Friend | null
+  /**
+   * Speed multiplier, set fresh every tick by whatever special snake is
+   * out. One means nothing is touching it.
+   */
+  pace?: number
+  /** Can see nothing at all until this moment. Fog Breath sets it. */
+  blindUntil?: number
 }
 
 /**
@@ -1621,6 +1768,126 @@ export function restOf(cost: number): number {
 }
 
 /* ------------------------------------------------------------------ */
+/* Special snakes                                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The five special snakes.
+ *
+ * None of these is for sale. They are only found in the Wringer, the
+ * hardest arena there is, and each one you find is a single use: take it
+ * out, it lasts its handful of seconds, and then it is gone and you have
+ * to go back and earn another.
+ *
+ * That is the whole reason they are allowed to be as strong as they are.
+ * A permanent version of any of them would settle the game; one that
+ * costs a run in the worst map in the game to earn, and is spent the
+ * moment it is used, is a decision instead.
+ */
+export type AbilityKey = 'fog' | 'magnet' | 'king' | 'slug' | 'nobody'
+
+/**
+ * How a special snake is brought out. They are not all the same thing.
+ *
+ *  - `worn`   taken in with you, chosen before the run starts, and on
+ *             from the first second to the last. You are that snake for
+ *             the run; there is nothing to press.
+ *  - `button` a burst, pressed when you want it. Only the Magnet works
+ *             this way - it is the one whose whole point is timing.
+ *  - `double` let out mid-run with a double click, and then it stays out
+ *             for the rest of the run. The Fog.
+ */
+export type How = 'worn' | 'button' | 'double'
+
+export interface Ability {
+  key: AbilityKey
+  name: string
+  blurb: string
+  how: How
+  /**
+   * How long one use lasts. WHOLE_RUN means exactly that - it is out
+   * until the run ends, however long that is.
+   */
+  lasts: number
+  hue: number
+}
+
+/** Longer than any run can possibly last. */
+export const WHOLE_RUN = 24 * 60 * 60 * 1000
+
+export const ABILITIES: Ability[] = [
+  {
+    key: 'fog',
+    name: 'Fog Breath',
+    blurb:
+      'Double click and a bank of milky white fog rolls out around you, for the rest of the run. Nothing else can see through it. You can.',
+    how: 'double',
+    lasts: WHOLE_RUN,
+    hue: 196,
+  },
+  {
+    key: 'magnet',
+    name: 'Coin Magnet',
+    blurb: 'Press it and every coin within reach comes to you, whether you go to it or not.',
+    how: 'button',
+    lasts: 14_000,
+    hue: 44,
+  },
+  {
+    key: 'king',
+    name: 'King Snake',
+    blurb:
+      'Take it in and smaller snakes pour out of you all run, fighting on your behalf and bringing back what they find.',
+    how: 'worn',
+    lasts: WHOLE_RUN,
+    hue: 286,
+  },
+  {
+    key: 'slug',
+    name: 'Slug Snake',
+    blurb:
+      'Take it in and you lay sticky goo the whole run. It bogs down anything that crosses it, and you go faster.',
+    how: 'worn',
+    lasts: WHOLE_RUN,
+    hue: 96,
+  },
+  {
+    key: 'nobody',
+    name: 'Nobody',
+    blurb:
+      'Take it in and you are unseen the whole run. You can always see yourself; nothing else can see you at all.',
+    how: 'worn',
+    lasts: WHOLE_RUN,
+    hue: 204,
+  },
+]
+
+export const ABILITY_BY_KEY: Record<string, Ability> = Object.fromEntries(
+  ABILITIES.map((a) => [a.key, a])
+)
+
+/** How far the fog reaches, and how far the magnet pulls from. */
+export const FOG_RADIUS = 330
+export const MAGNET_RADIUS = 620
+/** How many minions the King sends out, and how hard they bite. */
+export const KING_COUNT = 3
+/**
+ * What one bite takes, and how long a minion rests between bites.
+ *
+ * Three of them at twenty-two every six hundred milliseconds stripped a
+ * rival from a hundred and twenty fed down to nothing in seven seconds,
+ * all run long - which is not a special snake, it is a cheat code. At
+ * twelve every second they are still the strongest thing in the game and
+ * a big rival now takes real time to chew down.
+ */
+export const KING_NIP = 12
+export const KING_REST = 1_000
+/** What the goo does to anything that is not you. */
+export const GOO_SLOW = 0.55
+export const GOO_BOOST = 1.3
+export const GOO_LIFE = 9_000
+
+/* ------------------------------------------------------------------ */
 /* Saving                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -1642,6 +1909,26 @@ export interface SnakeSave {
   wins: number
   /** Chests cracked open, all told. Earns the elemental skin. */
   chests: number
+  /**
+   * Special snakes in hand, by kind. Each one is spent the first time it
+   * is used, so these only ever count down.
+   */
+  held?: Partial<Record<AbilityKey, number>>
+  /**
+   * The whole-run special snake picked to take in, if any. Spent when
+   * the run starts, so this is cleared at the same moment.
+   */
+  taking?: AbilityKey | null
+}
+
+/** How many of a given special snake is in hand. */
+export function heldCount(save: SnakeSave, key: AbilityKey): number {
+  return save.held?.[key] ?? 0
+}
+
+/** Everything in hand, in the order the abilities are listed. */
+export function heldList(save: SnakeSave): { spec: Ability; n: number }[] {
+  return ABILITIES.map((spec) => ({ spec, n: heldCount(save, spec.key) })).filter((e) => e.n > 0)
 }
 
 export const initialSnake: SnakeSave = {
@@ -1656,14 +1943,16 @@ export const initialSnake: SnakeSave = {
   companions: [],
   wins: 0,
   chests: 0,
+  held: {},
+  taking: null,
 }
 
 /**
  * What a finished run was worth, on top of the coins picked up along the
  * way. Surviving longer and eating more both show up here.
  */
-export function payout(level: number, eaten: number, fed: number): number {
-  return Math.round(level * 11 + eaten * 18 + fed * 0.8)
+export function payout(level: number, eaten: number, fed: number, pay = 1): number {
+  return Math.round((level * 11 + eaten * 18 + fed * 0.8) * pay)
 }
 
 
