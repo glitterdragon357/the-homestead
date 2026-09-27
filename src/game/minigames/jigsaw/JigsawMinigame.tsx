@@ -453,7 +453,12 @@ const S: Record<string, React.CSSProperties> = {
   },
   best: { color: '#8ef0b4' },
   label: { margin: '16px 0 7px', fontSize: 11, letterSpacing: 1.2, textTransform: 'uppercase', opacity: 0.55 },
-  grid: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 },
+  // As many cards as the width allows: three across on a desktop, two on
+  // a phone. Fixed columns wrapped every blurb to five lines on a narrow
+  // screen; too generous a minimum collapsed it to a single enormous
+  // card, which is no way to pick between seventy-five pictures. The
+  // minimum has to leave room for the gap as well as the card.
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(132px, 1fr))', gap: 8 },
   scroller: {
     maxHeight: 300,
     overflowY: 'auto',

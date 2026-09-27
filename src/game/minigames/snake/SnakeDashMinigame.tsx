@@ -1013,7 +1013,8 @@ const S: Record<string, React.CSSProperties> = {
     background: 'rgba(226,88,79,0.16)',
     fontSize: 13,
   },
-  grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 },
+  // As many across as fit; one column on a narrow phone.
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(142px, 1fr))', gap: 8 },
   card: {
     textAlign: 'left',
     display: 'flex',
