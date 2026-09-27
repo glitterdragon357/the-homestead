@@ -25,6 +25,8 @@ import { SpaMinigame } from './spa/SpaMinigame'
 import { spaPending, type SpaSave } from './spa/spaData'
 import { SnakeDashMinigame } from './snake/SnakeDashMinigame'
 import { JigsawMinigame } from './jigsaw/JigsawMinigame'
+import { AllDragonsMinigame } from './dragons/AllDragonsMinigame'
+import { type DragonSave } from './dragons/dragonData'
 import { SalonMinigame } from './salon/SalonMinigame'
 import { salonPending, type SalonSave } from './salon/salonData'
 
@@ -174,6 +176,22 @@ export const MINIGAME_REGISTRY: Record<string, MinigameDefinition> = {
     description: 'Dive the shelf: hunt fish, or just go and see what is down there.',
     icon: '\u{1F93F}',
     component: OceanMinigame,
+  },
+  dragons: {
+    id: 'dragons',
+    name: 'All Dragons',
+    description: 'Mind a nursery full of babies who cannot hold on to what they can do.',
+    icon: '\u{1F409}',
+    component: AllDragonsMinigame,
+    /**
+     * Eggs waiting on the nursery floor. Urgent, because they are on a
+     * floor with the wild ones and nobody is watching them.
+     */
+    pending: (progress) => {
+      const save = progress.dragons as DragonSave | undefined
+      const eggs = (save?.dragons ?? []).filter((d) => d.stage === 'egg' && d.house === null)
+      return eggs.length > 0 ? { count: eggs.length, urgent: true } : null
+    },
   },
   jigsaw: {
     id: 'jigsaw',
