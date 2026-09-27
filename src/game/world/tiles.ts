@@ -45,7 +45,7 @@ const PLACEMENTS: Placement[] = [
   { x: 1, y: 3, type: 'building', label: 'The Workshop', icon: '\u{1F9BE}', minigameId: 'ironman' },
   { x: 2, y: 1, type: 'grass', label: 'The Pit', icon: '\u{1F40D}', minigameId: 'snakedash' },
   { x: 5, y: 1, type: 'building', label: 'The Table', icon: '\u{1F9E9}', minigameId: 'jigsaw' },
-  { x: 0, y: 6, type: 'building', label: 'The Nursery', icon: '\u{1F409}', minigameId: 'dragons' },
+  { x: 3, y: 6, type: 'building', label: 'The Nursery', icon: '\u{1F409}', minigameId: 'dragons' },
 ]
 
 /**
@@ -98,9 +98,19 @@ export function buildStarterMap(): HomesteadTile[] {
   const shore = tiles.find((t) => t.x === 0 && t.y === 6)
   if (shore) shore.icon = '\u{1F93F}'
 
+  // Placements run last, so one of them dropped on water silently wins
+  // and takes that water's game with it. The nursery went down on the
+  // ocean shore at 0,6 and the result was a building standing in the
+  // sea where the way into the ocean used to be.
   for (const p of PLACEMENTS) {
     const tile = tiles.find((t) => t.x === p.x && t.y === p.y)
     if (!tile) continue
+    if (tile.type === 'water') {
+      console.error(
+        `Tile ${p.x},${p.y} is water - ${p.label} would sit on top of ${tile.label}. Left where it was.`
+      )
+      continue
+    }
     tile.type = p.type
     tile.label = p.label
     tile.icon = p.icon
