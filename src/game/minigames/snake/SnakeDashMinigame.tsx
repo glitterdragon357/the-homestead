@@ -26,6 +26,7 @@ import {
   SKINS,
   SKIN_BY_KEY,
   SKIN_FAMILIES,
+  EARNED_SKINS,
   ownedSkins,
   SPAWN_GRACE,
   fedForLevel,
@@ -643,13 +644,19 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
                           style={{
                             ...S.card,
                             ...(on ? S.cardOn : null),
-                            ...(!have && k.cost > coins ? S.cardBroke : null),
+                            ...(!have && (k.cost > coins || EARNED_SKINS.includes(k.key))
+                              ? S.cardBroke
+                              : null),
                           }}
                           onClick={() => {
                             if (have) {
                               setSave((v) => ({ ...v, skin: k.key }))
                               return
                             }
+                            // Earned skins are not for sale. They cost
+                            // nothing, so without this a tap would hand
+                            // one over for free.
+                            if (EARNED_SKINS.includes(k.key)) return
                             if (!spend(k.cost)) return
                             setSave((v) => ({ ...v, skin: k.key, skins: [...ownedSkins(v), k.key] }))
                           }}
@@ -660,7 +667,13 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
                           </span>
                           <span style={S.cardNote}>{k.blurb}</span>
                           <span style={S.cardMeta}>
-                            {have ? (on ? 'worn' : 'yours') : `🪙 ${k.cost}`}
+                            {have
+                              ? on
+                                ? 'worn'
+                                : 'yours'
+                              : EARNED_SKINS.includes(k.key)
+                                ? `${save.chests ?? 0} of ${CHESTS_FOR_ELEMENTAL} chests`
+                                : `🪙 ${k.cost}`}
                             {k.key === 'nobody' ? ` · ${VANISH_TOLL} 🪙 a run` : ''}
                           </span>
                         </button>
