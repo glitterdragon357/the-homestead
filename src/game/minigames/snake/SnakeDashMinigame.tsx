@@ -218,9 +218,10 @@ export function SnakeDashMinigame({ onExit }: MinigameProps) {
       }
       for (const bite of hits.bites) {
         // The piece that came off goes back on the field as food, so a
-        // long chase leaves a trail of it for everyone else.
-        scatterBeads(bite.lost, 2, w, rng)
+        // long chase leaves a trail of it for everyone else - and it is
+        // still that snake's colour, so you can see whose tail it was.
         const victim = w.snakes.find((s) => s.id === bite.victim)
+        scatterBeads(bite.lost, 2, w, rng, victim, bite.at)
         if (victim) victim.bittenUntil = now + 220
         if (bite.victim === 0) bittenRef.current++
       }

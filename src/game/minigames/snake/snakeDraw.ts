@@ -7,7 +7,17 @@
  * a snake reading as a string of dots.
  */
 
-import { HEAD_R, girthOf, levelOf, segmentsOf, type Coin, type MapSpec, type Pellet, type Snake } from './snakeData'
+import {
+  HEAD_R,
+  girthOf,
+  levelOf,
+  segmentsOf,
+  type Coin,
+  type MapSpec,
+  type Pattern,
+  type Pellet,
+  type Snake,
+} from './snakeData'
 
 export const VIEW = { width: 960, height: 640 }
 
@@ -117,7 +127,25 @@ export function drawPellets(ctx: CanvasRenderingContext2D, cam: Camera, pellets:
     const s = toScreen(cam, p.x, p.y)
     if (s.sx < -pad || s.sx > VIEW.width + pad || s.sy < -pad || s.sy > VIEW.height + pad) continue
     const r = (4.6 + Math.min(4, p.worth * 0.5)) * cam.zoom
-    // A slow pulse, out of step between pellets so the field shimmers.
+
+    // A pellet that came off a snake is drawn as the piece of snake it
+    // was - same painter, same colour, same marking, same place in the
+    // body - so a kill leaves a recognisable trail of whoever died.
+    if (p.pattern) {
+      drawBead(
+        ctx,
+        s.sx,
+        s.sy,
+        r * 1.25,
+        { hue: p.hue, sat: p.sat, accent: p.accent ?? p.hue, pattern: p.pattern },
+        p.index ?? 0,
+        t,
+        { light: 56 }
+      )
+      continue
+    }
+
+    // Loose food: a glowing speck, pulsing out of step with its neighbours.
     const beat = 0.82 + Math.sin(t * 0.004 + p.x * 0.05 + p.y * 0.03) * 0.18
     const g = ctx.createRadialGradient(s.sx, s.sy, 0, s.sx, s.sy, r * 2.6 * beat)
     g.addColorStop(0, hsl(p.hue, 90, 78, 0.95))
@@ -289,6 +317,298 @@ export function drawFriend(
 /* Snakes                                                              */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Everything needed to paint a piece of a particular snake.
+ *
+ * Passed about as one object so that a pellet dropped by a dead snake
+ * can be drawn by exactly the same code as the snake was - which is the
+ * only way to be sure it really is the same colour and marking rather
+ * than a near miss that drifts apart the next time either is touched.
+ */
+export interface Look {
+  hue: number
+  sat: number
+  accent: number
+  pattern: Pattern
+}
+
+export function lookOf(s: { hue: number; sat: number; accent: number; pattern: Pattern }): Look {
+  return { hue: s.hue, sat: s.sat, accent: s.accent, pattern: s.pattern }
+}
+
+/**
+ * One bead of a snake: the body, and whatever marking it wears.
+ *
+ * `index` is how far down the body it sits - the patterns that repeat
+ * (bands, ladders, diamonds) count on it, and 'shift' walks its hue by
+ * it. A loose pellet passes the index it had when it was still part of
+ * the snake, so a dropped body keeps the banding it had in life.
+ */
+export function drawBead(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  r: number,
+  look: Look,
+  index: number,
+  t: number,
+  opts: { light?: number; taper?: number } = {}
+) {
+  const light = opts.light ?? 54
+  const taper = opts.taper ?? 1
+  const sat = look.sat
+  const a = look.accent
+  const hue = look.pattern === 'shift' ? (look.hue + index * 3.2 + t * 0.03) % 360 : look.hue
+
+  if (look.pattern === 'glow') {
+    const halo = ctx.createRadialGradient(x, y, r * 0.3, x, y, r * 2.1)
+    halo.addColorStop(0, hsl(hue, 95, 62, 0.4))
+    halo.addColorStop(1, hsl(hue, 95, 55, 0))
+    ctx.fillStyle = halo
+    ctx.beginPath()
+    ctx.arc(x, y, r * 2.1, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  const wasAlpha = ctx.globalAlpha
+  if (look.pattern === 'ghost') ctx.globalAlpha = wasAlpha * 0.55
+
+  const body = ctx.createRadialGradient(x - r * 0.4, y - r * 0.45, r * 0.1, x, y, r)
+  body.addColorStop(0, hsl(hue, sat + 6, light + 22))
+  body.addColorStop(0.55, hsl(hue, sat, light))
+  body.addColorStop(1, hsl(hue, sat - 4, light - 26))
+  ctx.fillStyle = body
+  ctx.beginPath()
+  ctx.arc(x, y, r, 0, Math.PI * 2)
+  ctx.fill()
+  if (look.pattern === 'ghost') ctx.globalAlpha = wasAlpha
+
+  // Markings. Whatever it is, it runs down the back, because that is
+  // the only part of a snake anyone ever sees.
+  if (taper <= 0.3) return
+  const i = index
+  const p = { sx: x, sy: y }
+  switch (look.pattern) {
+    case 'bands':
+      if (i % 3 === 0) {
+        ctx.fillStyle = hsl(hue, 60, light - 16, 0.5)
+        dot(ctx, p.sx, p.sy, r * 0.52)
+      }
+      break
+    case 'stripe':
+      ctx.fillStyle = hsl(hue, 40, light + 30, 0.6)
+      dot(ctx, p.sx, p.sy, r * 0.3)
+      break
+    case 'diamond':
+      if (i % 4 === 0) {
+        ctx.fillStyle = hsl(a, 70, light - 26, 0.8)
+        ctx.beginPath()
+        ctx.moveTo(p.sx, p.sy - r * 0.68)
+        ctx.lineTo(p.sx + r * 0.52, p.sy)
+        ctx.lineTo(p.sx, p.sy + r * 0.68)
+        ctx.lineTo(p.sx - r * 0.52, p.sy)
+        ctx.closePath()
+        ctx.fill()
+      }
+      break
+    case 'speckle': {
+      const n = (i * 2654435761) % 7
+      if (n < 4) {
+        ctx.fillStyle = hsl(a, 55, light + 18, 0.55)
+        dot(ctx, p.sx + ((n - 2) * r) / 4, p.sy + ((n % 3) - 1) * r * 0.3, r * 0.2)
+      }
+      break
+    }
+    case 'rings':
+      if (i % 5 < 2) {
+        ctx.strokeStyle = hsl(a, 72, light + 16, 0.75)
+        ctx.lineWidth = Math.max(0.7, r * 0.22)
+        ctx.beginPath()
+        ctx.arc(p.sx, p.sy, r * 0.66, 0, Math.PI * 2)
+        ctx.stroke()
+      }
+      break
+    case 'ladder':
+      if (i % 2 === 0) {
+        ctx.strokeStyle = hsl(a, 60, light + 12, 0.6)
+        ctx.lineWidth = Math.max(0.7, r * 0.26)
+        ctx.beginPath()
+        ctx.moveTo(p.sx - r * 0.6, p.sy)
+        ctx.lineTo(p.sx + r * 0.6, p.sy)
+        ctx.stroke()
+      }
+      break
+    case 'twotone':
+      if (Math.floor(i / 4) % 2 === 0) {
+        ctx.fillStyle = hsl(a, 62, light - 4, 0.65)
+        dot(ctx, p.sx, p.sy, r * 0.8)
+      }
+      break
+    case 'metal':
+      ctx.fillStyle = `rgba(255,255,255,${(0.34 * taper).toFixed(2)})`
+      ctx.beginPath()
+      ctx.ellipse(p.sx - r * 0.2, p.sy - r * 0.42, r * 0.44, r * 0.2, -0.5, 0, Math.PI * 2)
+      ctx.fill()
+      break
+    case 'ghost':
+    case 'vanish':
+    case 'solid':
+      break
+
+    /* --- textures: motifs with a shape of their own ------------- */
+    case 'skull': {
+      if (i % 3 !== 0) break
+      const k = r * 0.62
+      ctx.fillStyle = hsl(a, 24, 92, 0.92)
+      ctx.beginPath()
+      ctx.arc(p.sx, p.sy - k * 0.12, k * 0.62, Math.PI, 0)
+      ctx.rect(p.sx - k * 0.42, p.sy - k * 0.12, k * 0.84, k * 0.5)
+      ctx.fill()
+      ctx.fillStyle = 'rgba(20,16,14,0.9)'
+      for (const side of [-1, 1]) {
+        ctx.beginPath()
+        ctx.arc(p.sx + side * k * 0.26, p.sy - k * 0.14, k * 0.17, 0, Math.PI * 2)
+        ctx.fill()
+      }
+      ctx.fillRect(p.sx - k * 0.08, p.sy + k * 0.1, k * 0.16, k * 0.22)
+      break
+    }
+    case 'bones': {
+      if (i % 2 !== 0) break
+      ctx.strokeStyle = hsl(a, 22, 90, 0.85)
+      ctx.lineWidth = Math.max(0.8, r * 0.2)
+      ctx.lineCap = 'round'
+      for (const side of [-1, 1]) {
+        ctx.beginPath()
+        ctx.moveTo(p.sx, p.sy - r * 0.1)
+        ctx.quadraticCurveTo(p.sx + side * r * 0.5, p.sy, p.sx + side * r * 0.62, p.sy + r * 0.5)
+        ctx.stroke()
+      }
+      break
+    }
+    case 'scales': {
+      ctx.strokeStyle = hsl(a, 46, light - 22, 0.75)
+      ctx.lineWidth = Math.max(0.7, r * 0.16)
+      for (const side of [-1, 0, 1]) {
+        ctx.beginPath()
+        ctx.arc(p.sx + side * r * 0.5, p.sy + (i % 2 ? r * 0.18 : -r * 0.18), r * 0.4, Math.PI * 0.15, Math.PI * 0.85)
+        ctx.stroke()
+      }
+      break
+    }
+    case 'spikes': {
+      if (i % 2 !== 0) break
+      ctx.fillStyle = hsl(a, 34, light + 26, 0.9)
+      ctx.beginPath()
+      ctx.moveTo(p.sx - r * 0.34, p.sy)
+      ctx.lineTo(p.sx, p.sy - r * 1.22)
+      ctx.lineTo(p.sx + r * 0.34, p.sy)
+      ctx.closePath()
+      ctx.fill()
+      break
+    }
+    case 'eyes': {
+      if (i % 4 !== 0) break
+      for (const side of [-1, 1]) {
+        const ex = p.sx + side * r * 0.42
+        ctx.fillStyle = hsl(a, 62, 82, 0.95)
+        dot(ctx, ex, p.sy, r * 0.34)
+        ctx.fillStyle = 'rgba(16,12,20,0.92)'
+        dot(ctx, ex, p.sy, r * 0.17)
+      }
+      break
+    }
+    case 'stitch': {
+      if (i % 3 !== 0) break
+      ctx.strokeStyle = hsl(a, 30, 86, 0.8)
+      ctx.lineWidth = Math.max(0.6, r * 0.13)
+      for (let k = -2; k <= 2; k++) {
+        ctx.beginPath()
+        ctx.moveTo(p.sx - r * 0.2, p.sy + (k * r) / 3)
+        ctx.lineTo(p.sx + r * 0.2, p.sy + (k * r) / 3)
+        ctx.stroke()
+      }
+      break
+    }
+    case 'chevron': {
+      if (i % 2 !== 0) break
+      ctx.strokeStyle = hsl(a, 58, light - 24, 0.85)
+      ctx.lineWidth = Math.max(0.8, r * 0.24)
+      ctx.lineJoin = 'round'
+      ctx.beginPath()
+      ctx.moveTo(p.sx - r * 0.6, p.sy + r * 0.34)
+      ctx.lineTo(p.sx, p.sy - r * 0.3)
+      ctx.lineTo(p.sx + r * 0.6, p.sy + r * 0.34)
+      ctx.stroke()
+      break
+    }
+    case 'web': {
+      const seed = (i * 2246822519) % 5
+      ctx.strokeStyle = hsl(a, 18, 84, 0.6)
+      ctx.lineWidth = Math.max(0.5, r * 0.1)
+      ctx.beginPath()
+      for (let k = 0; k < 3; k++) {
+        const ang = ((seed + k) / 3) * Math.PI * 2
+        ctx.moveTo(p.sx, p.sy)
+        ctx.lineTo(p.sx + Math.cos(ang) * r * 0.8, p.sy + Math.sin(ang) * r * 0.8)
+      }
+      ctx.stroke()
+      break
+    }
+    case 'fire': {
+      const beat = t * 0.012 + i * 0.7
+      const lick = 0.65 + Math.sin(beat) * 0.35 + Math.sin(beat * 2.3) * 0.18
+      const tall = r * (1.1 + lick * 1.5)
+      const flame = ctx.createLinearGradient(p.sx, p.sy + r * 0.3, p.sx, p.sy - tall)
+      flame.addColorStop(0, hsl(hue, 95, 58, 0.85))
+      flame.addColorStop(0.45, hsl(hue + 18, 98, 66, 0.7))
+      flame.addColorStop(1, hsl(hue + 34, 100, 88, 0))
+      ctx.fillStyle = flame
+      ctx.beginPath()
+      ctx.moveTo(p.sx - r * 0.62, p.sy + r * 0.2)
+      ctx.quadraticCurveTo(p.sx - r * 0.3, p.sy - tall * 0.55, p.sx + Math.sin(beat) * r * 0.4, p.sy - tall)
+      ctx.quadraticCurveTo(p.sx + r * 0.42, p.sy - tall * 0.5, p.sx + r * 0.62, p.sy + r * 0.2)
+      ctx.closePath()
+      ctx.fill()
+      ctx.fillStyle = hsl(hue + 10, 100, 70, 0.4 + lick * 0.3)
+      dot(ctx, p.sx, p.sy, r * 0.5)
+      break
+    }
+    case 'ice': {
+      const cycle = (t * 0.0012 + i * 0.13) % 1
+      const grow = cycle < 0.82 ? cycle / 0.82 : 1 - (cycle - 0.82) / 0.18
+      const len = r * (0.5 + grow * 1.5)
+      ctx.fillStyle = hsl(a, 62, 88, 0.5 + grow * 0.4)
+      for (const side of [-1, 1]) {
+        ctx.beginPath()
+        ctx.moveTo(p.sx + side * r * 0.2, p.sy - r * 0.2)
+        ctx.lineTo(p.sx + side * (r * 0.4 + len), p.sy - len * 0.5)
+        ctx.lineTo(p.sx + side * r * 0.3, p.sy + r * 0.35)
+        ctx.closePath()
+        ctx.fill()
+      }
+      ctx.fillStyle = 'rgba(226,246,255,0.26)'
+      ctx.beginPath()
+      ctx.ellipse(p.sx - r * 0.2, p.sy - r * 0.3, r * 0.42, r * 0.2, -0.5, 0, Math.PI * 2)
+      ctx.fill()
+      break
+    }
+    case 'water': {
+      const flow = (i * 0.28 - t * 0.0045) % 1
+      const wave = (flow + 1) % 1
+      const bright = Math.pow(Math.sin(wave * Math.PI), 2)
+      ctx.fillStyle = hsl(a, 82, 62 + bright * 30, 0.2 + bright * 0.6)
+      dot(ctx, p.sx, p.sy, r * (0.5 + bright * 0.45))
+      ctx.strokeStyle = `rgba(232,250,255,${(0.16 + bright * 0.5).toFixed(2)})`
+      ctx.lineWidth = Math.max(0.6, r * 0.14)
+      ctx.beginPath()
+      ctx.arc(p.sx, p.sy, r * 0.74, Math.PI * 0.1, Math.PI * 0.9)
+      ctx.stroke()
+      break
+    }
+  }
+}
+
 export function drawSnake(
   ctx: CanvasRenderingContext2D,
   cam: Camera,
@@ -321,279 +641,12 @@ export function drawSnake(
     const from = beads.length * 0.8
     const taper = i < from ? 1 : 1 - (i - from) / (beads.length - from + 0.001)
     const r = Math.max(1.5, girth * (0.55 + 0.45 * taper))
-
     const bitten = t < s.bittenUntil
-    const light = (s.dashing ? 66 : 54) + (bitten ? 22 : 0)
-    // 'shift' walks the colour down the body; everything else holds one.
-    const hue = s.pattern === 'shift' ? (s.hue + i * 3.2 + t * 0.03) % 360 : s.hue
 
-    if (s.pattern === 'glow') {
-      const halo = ctx.createRadialGradient(p.sx, p.sy, r * 0.3, p.sx, p.sy, r * 2.1)
-      halo.addColorStop(0, hsl(hue, 95, 62, 0.4))
-      halo.addColorStop(1, hsl(hue, 95, 55, 0))
-      ctx.fillStyle = halo
-      ctx.beginPath()
-      ctx.arc(p.sx, p.sy, r * 2.1, 0, Math.PI * 2)
-      ctx.fill()
-    }
-
-    const wasAlpha = ctx.globalAlpha
-    if (s.pattern === 'ghost') ctx.globalAlpha = wasAlpha * 0.55
-
-    const sat = s.sat
-    const body = ctx.createRadialGradient(p.sx - r * 0.4, p.sy - r * 0.45, r * 0.1, p.sx, p.sy, r)
-    body.addColorStop(0, hsl(hue, sat + 6, light + 22))
-    body.addColorStop(0.55, hsl(hue, sat, light))
-    body.addColorStop(1, hsl(hue, sat - 4, light - 26))
-    ctx.fillStyle = body
-    ctx.beginPath()
-    ctx.arc(p.sx, p.sy, r, 0, Math.PI * 2)
-    ctx.fill()
-    if (s.pattern === 'ghost') ctx.globalAlpha = wasAlpha
-
-    // Markings. Whatever it is, it runs down the back, because that is
-    // the only part of a snake anyone ever sees.
-    if (taper > 0.3) {
-      const a = s.accent
-      switch (s.pattern) {
-        case 'bands':
-          if (i % 3 === 0) {
-            ctx.fillStyle = hsl(hue, 60, light - 16, 0.5)
-            dot(ctx, p.sx, p.sy, r * 0.52)
-          }
-          break
-        case 'stripe':
-          ctx.fillStyle = hsl(hue, 40, light + 30, 0.6)
-          dot(ctx, p.sx, p.sy, r * 0.3)
-          break
-        case 'diamond':
-          if (i % 4 === 0) {
-            ctx.fillStyle = hsl(a, 70, light - 26, 0.8)
-            ctx.beginPath()
-            ctx.moveTo(p.sx, p.sy - r * 0.68)
-            ctx.lineTo(p.sx + r * 0.52, p.sy)
-            ctx.lineTo(p.sx, p.sy + r * 0.68)
-            ctx.lineTo(p.sx - r * 0.52, p.sy)
-            ctx.closePath()
-            ctx.fill()
-          }
-          break
-        case 'speckle': {
-          // Freckling, fixed per bead so it does not crawl about.
-          const n = (i * 2654435761) % 7
-          if (n < 4) {
-            ctx.fillStyle = hsl(a, 55, light + 18, 0.55)
-            dot(ctx, p.sx + ((n - 2) * r) / 4, p.sy + ((n % 3) - 1) * r * 0.3, r * 0.2)
-          }
-          break
-        }
-        case 'rings':
-          if (i % 5 < 2) {
-            ctx.strokeStyle = hsl(a, 72, light + 16, 0.75)
-            ctx.lineWidth = Math.max(0.7, r * 0.22)
-            ctx.beginPath()
-            ctx.arc(p.sx, p.sy, r * 0.66, 0, Math.PI * 2)
-            ctx.stroke()
-          }
-          break
-        case 'ladder':
-          if (i % 2 === 0) {
-            ctx.strokeStyle = hsl(a, 60, light + 12, 0.6)
-            ctx.lineWidth = Math.max(0.7, r * 0.26)
-            ctx.beginPath()
-            ctx.moveTo(p.sx - r * 0.6, p.sy)
-            ctx.lineTo(p.sx + r * 0.6, p.sy)
-            ctx.stroke()
-          }
-          break
-        case 'twotone':
-          // Alternating blocks of two colours, four beads each.
-          if (Math.floor(i / 4) % 2 === 0) {
-            ctx.fillStyle = hsl(a, 62, light - 4, 0.65)
-            dot(ctx, p.sx, p.sy, r * 0.8)
-          }
-          break
-        case 'metal': {
-          // A hard specular line along the top, not a coloured marking.
-          ctx.fillStyle = `rgba(255,255,255,${(0.34 * taper).toFixed(2)})`
-          ctx.beginPath()
-          ctx.ellipse(p.sx - r * 0.2, p.sy - r * 0.42, r * 0.44, r * 0.2, -0.5, 0, Math.PI * 2)
-          ctx.fill()
-          break
-        }
-        case 'ghost':
-        case 'vanish':
-          // Nothing added; the body itself is drawn faint. See above.
-          break
-
-        /* --- textures: motifs with a shape of their own ------------- */
-        case 'skull': {
-          if (i % 3 !== 0) break
-          const k = r * 0.62
-          ctx.fillStyle = hsl(a, 24, 92, 0.92)
-          ctx.beginPath()
-          ctx.arc(p.sx, p.sy - k * 0.12, k * 0.62, Math.PI, 0)
-          ctx.rect(p.sx - k * 0.42, p.sy - k * 0.12, k * 0.84, k * 0.5)
-          ctx.fill()
-          ctx.fillStyle = 'rgba(20,16,14,0.9)'
-          for (const side of [-1, 1]) {
-            ctx.beginPath()
-            ctx.arc(p.sx + side * k * 0.26, p.sy - k * 0.14, k * 0.17, 0, Math.PI * 2)
-            ctx.fill()
-          }
-          ctx.fillRect(p.sx - k * 0.08, p.sy + k * 0.1, k * 0.16, k * 0.22)
-          break
-        }
-        case 'bones': {
-          if (i % 2 !== 0) break
-          // A pair of ribs, curving back from the spine.
-          ctx.strokeStyle = hsl(a, 22, 90, 0.85)
-          ctx.lineWidth = Math.max(0.8, r * 0.2)
-          ctx.lineCap = 'round'
-          for (const side of [-1, 1]) {
-            ctx.beginPath()
-            ctx.moveTo(p.sx, p.sy - r * 0.1)
-            ctx.quadraticCurveTo(p.sx + side * r * 0.5, p.sy, p.sx + side * r * 0.62, p.sy + r * 0.5)
-            ctx.stroke()
-          }
-          break
-        }
-        case 'scales': {
-          // Two staggered rows of overlapping arcs.
-          ctx.strokeStyle = hsl(a, 46, light - 22, 0.75)
-          ctx.lineWidth = Math.max(0.7, r * 0.16)
-          for (const side of [-1, 0, 1]) {
-            ctx.beginPath()
-            ctx.arc(p.sx + side * r * 0.5, p.sy + (i % 2 ? r * 0.18 : -r * 0.18), r * 0.4, Math.PI * 0.15, Math.PI * 0.85)
-            ctx.stroke()
-          }
-          break
-        }
-        case 'spikes': {
-          if (i % 2 !== 0) break
-          ctx.fillStyle = hsl(a, 34, light + 26, 0.9)
-          ctx.beginPath()
-          ctx.moveTo(p.sx - r * 0.34, p.sy)
-          ctx.lineTo(p.sx, p.sy - r * 1.22)
-          ctx.lineTo(p.sx + r * 0.34, p.sy)
-          ctx.closePath()
-          ctx.fill()
-          break
-        }
-        case 'eyes': {
-          if (i % 4 !== 0) break
-          for (const side of [-1, 1]) {
-            const ex = p.sx + side * r * 0.42
-            ctx.fillStyle = hsl(a, 62, 82, 0.95)
-            dot(ctx, ex, p.sy, r * 0.34)
-            ctx.fillStyle = 'rgba(16,12,20,0.92)'
-            dot(ctx, ex, p.sy, r * 0.17)
-          }
-          break
-        }
-        case 'stitch': {
-          // Seams across the body, with the thread showing.
-          if (i % 3 !== 0) break
-          ctx.strokeStyle = hsl(a, 30, 86, 0.8)
-          ctx.lineWidth = Math.max(0.6, r * 0.13)
-          for (let k = -2; k <= 2; k++) {
-            ctx.beginPath()
-            ctx.moveTo(p.sx - r * 0.2, p.sy + (k * r) / 3)
-            ctx.lineTo(p.sx + r * 0.2, p.sy + (k * r) / 3)
-            ctx.stroke()
-          }
-          break
-        }
-        case 'chevron': {
-          if (i % 2 !== 0) break
-          ctx.strokeStyle = hsl(a, 58, light - 24, 0.85)
-          ctx.lineWidth = Math.max(0.8, r * 0.24)
-          ctx.lineJoin = 'round'
-          ctx.beginPath()
-          ctx.moveTo(p.sx - r * 0.6, p.sy + r * 0.34)
-          ctx.lineTo(p.sx, p.sy - r * 0.3)
-          ctx.lineTo(p.sx + r * 0.6, p.sy + r * 0.34)
-          ctx.stroke()
-          break
-        }
-        /* --- live textures: these move of their own accord --------- */
-        case 'fire': {
-          // Flame tongues leaning back along the body, each bead on its
-          // own phase so the fire crawls rather than pulsing as one.
-          const beat = t * 0.012 + i * 0.7
-          const lick = 0.65 + Math.sin(beat) * 0.35 + Math.sin(beat * 2.3) * 0.18
-          const tall = r * (1.1 + lick * 1.5)
-          const flame = ctx.createLinearGradient(p.sx, p.sy + r * 0.3, p.sx, p.sy - tall)
-          flame.addColorStop(0, hsl(hue, 95, 58, 0.85))
-          flame.addColorStop(0.45, hsl(hue + 18, 98, 66, 0.7))
-          flame.addColorStop(1, hsl(hue + 34, 100, 88, 0))
-          ctx.fillStyle = flame
-          ctx.beginPath()
-          ctx.moveTo(p.sx - r * 0.62, p.sy + r * 0.2)
-          ctx.quadraticCurveTo(p.sx - r * 0.3, p.sy - tall * 0.55, p.sx + Math.sin(beat) * r * 0.4, p.sy - tall)
-          ctx.quadraticCurveTo(p.sx + r * 0.42, p.sy - tall * 0.5, p.sx + r * 0.62, p.sy + r * 0.2)
-          ctx.closePath()
-          ctx.fill()
-          // An ember at the base, so the body itself looks hot.
-          ctx.fillStyle = hsl(hue + 10, 100, 70, 0.4 + lick * 0.3)
-          dot(ctx, p.sx, p.sy, r * 0.5)
-          break
-        }
-        case 'ice': {
-          // Spikes that grow and break off, on a slow cycle per bead.
-          const cycle = (t * 0.0012 + i * 0.13) % 1
-          const grow = cycle < 0.82 ? cycle / 0.82 : 1 - (cycle - 0.82) / 0.18
-          const len = r * (0.5 + grow * 1.5)
-          ctx.fillStyle = hsl(a, 62, 88, 0.5 + grow * 0.4)
-          for (const side of [-1, 1]) {
-            ctx.beginPath()
-            ctx.moveTo(p.sx + side * r * 0.2, p.sy - r * 0.2)
-            ctx.lineTo(p.sx + side * (r * 0.4 + len), p.sy - len * 0.5)
-            ctx.lineTo(p.sx + side * r * 0.3, p.sy + r * 0.35)
-            ctx.closePath()
-            ctx.fill()
-          }
-          // A cold sheen on the body underneath.
-          ctx.fillStyle = 'rgba(226,246,255,0.26)'
-          ctx.beginPath()
-          ctx.ellipse(p.sx - r * 0.2, p.sy - r * 0.3, r * 0.42, r * 0.2, -0.5, 0, Math.PI * 2)
-          ctx.fill()
-          break
-        }
-        case 'water': {
-          // Bands running down the body. The phase depends on the bead
-          // index, so the flow travels head to tail as time passes
-          // rather than every bead brightening together.
-          const flow = (i * 0.28 - t * 0.0045) % 1
-          const wave = (flow + 1) % 1
-          const bright = Math.pow(Math.sin(wave * Math.PI), 2)
-          ctx.fillStyle = hsl(a, 82, 62 + bright * 30, 0.2 + bright * 0.6)
-          dot(ctx, p.sx, p.sy, r * (0.5 + bright * 0.45))
-          ctx.strokeStyle = `rgba(232,250,255,${(0.16 + bright * 0.5).toFixed(2)})`
-          ctx.lineWidth = Math.max(0.6, r * 0.14)
-          ctx.beginPath()
-          ctx.arc(p.sx, p.sy, r * 0.74, Math.PI * 0.1, Math.PI * 0.9)
-          ctx.stroke()
-          break
-        }
-        case 'web': {
-          // Cracks, fixed per bead so they do not crawl.
-          const seed = (i * 2246822519) % 5
-          ctx.strokeStyle = hsl(a, 18, 84, 0.6)
-          ctx.lineWidth = Math.max(0.5, r * 0.1)
-          ctx.beginPath()
-          for (let k = 0; k < 3; k++) {
-            const ang = ((seed + k) / 3) * Math.PI * 2
-            ctx.moveTo(p.sx, p.sy)
-            ctx.lineTo(p.sx + Math.cos(ang) * r * 0.8, p.sy + Math.sin(ang) * r * 0.8)
-          }
-          ctx.stroke()
-          break
-        }
-        default:
-          break
-      }
-    }
+    drawBead(ctx, p.sx, p.sy, r, lookOf(s), i, t, {
+      light: (s.dashing ? 66 : 54) + (bitten ? 22 : 0),
+      taper,
+    })
   }
 
   // Head.
@@ -624,33 +677,148 @@ export function drawSnake(
     ctx.fill()
   }
 
-  const head = ctx.createRadialGradient(h.sx - hr * 0.4, h.sy - hr * 0.45, hr * 0.1, h.sx, h.sy, hr)
-  head.addColorStop(0, hsl(s.hue, 80, 76))
-  head.addColorStop(0.6, hsl(s.hue, 74, 58))
-  head.addColorStop(1, hsl(s.hue, 70, 34))
-  ctx.fillStyle = head
+  // The head, with jaws.
+  //
+  // A circle with two eyes on it reads as a bead, not a snake. This is
+  // built in the head's own frame - nose along +x - so the whole thing
+  // can be laid out as if it were facing right and then turned to
+  // wherever the snake is actually going.
+  //
+  // The mouth is never quite shut. A jaw line that only appears when
+  // the snake happens to be mid-chomp is a jaw line nobody ever sees;
+  // holding it a little open means the head always reads as a head.
+  const chomp = 0.5 + Math.sin(t * 0.009 + s.id) * 0.5
+  const bitJustNow = t < s.bittenUntil ? 1 : 0
+  // Kept modest on purpose. Opened wide the jaws become two slivers and
+  // the head reads as a mouth with a snake behind it - the gape has to
+  // stay narrower than the head is deep.
+  const gape = Math.min(0.5, 0.12 + chomp * 0.12 + (s.dashing ? 0.14 : 0) + bitJustNow * 0.22)
+
+  ctx.save()
+  ctx.translate(h.sx, h.sy)
+  ctx.rotate(s.heading)
+
+  const L = hr * 1.5
+  const Wd = hr * 1.1
+
+  // Head skin sits in the same range as the body, or the head looks
+  // like a different animal stuck on the front.
+  const skin = (lift: number) => {
+    const g = ctx.createLinearGradient(0, -Wd, 0, Wd)
+    g.addColorStop(0, hsl(s.hue, s.sat + 6, 64 + lift))
+    g.addColorStop(0.5, hsl(s.hue, s.sat, 50 + lift))
+    g.addColorStop(1, hsl(s.hue, s.sat - 6, 32 + lift))
+    return g
+  }
+
+  // Throat, drawn first so both jaws close over it.
+  ctx.fillStyle = '#4a0f1a'
   ctx.beginPath()
-  ctx.arc(h.sx, h.sy, hr, 0, Math.PI * 2)
+  ctx.moveTo(-hr * 0.2, 0)
+  ctx.lineTo(L * 1.02, -Wd * gape * 1.05)
+  ctx.lineTo(L * 1.02, Wd * gape * 1.05)
+  ctx.closePath()
   ctx.fill()
-  ctx.strokeStyle = ring
-  ctx.lineWidth = Math.max(1, 2 * cam.zoom)
+
+  // Upper jaw.
+  ctx.fillStyle = skin(4)
+  ctx.beginPath()
+  ctx.moveTo(-L * 0.55, -Wd * 0.2)
+  ctx.quadraticCurveTo(-L * 0.4, -Wd * 1.04, L * 0.1, -Wd * 1.02)
+  ctx.quadraticCurveTo(L * 0.78, -Wd * 0.9, L * 0.99, -Wd * (0.12 + gape))
+  ctx.lineTo(-hr * 0.2, -Wd * gape * 0.35)
+  ctx.closePath()
+  ctx.fill()
+  ctx.strokeStyle = hsl(s.hue, s.sat, 24, 0.55)
+  ctx.lineWidth = Math.max(0.7, hr * 0.06)
   ctx.stroke()
 
-  // Eyes, looking the way it is going.
-  const c = Math.cos(s.heading)
-  const sn = Math.sin(s.heading)
+  // Lower jaw, hinged further back so it swings rather than slides.
+  ctx.fillStyle = skin(-12)
+  ctx.beginPath()
+  ctx.moveTo(-L * 0.55, Wd * 0.2)
+  ctx.quadraticCurveTo(-L * 0.4, Wd * 1.04, L * 0.08, Wd * 1.0)
+  ctx.quadraticCurveTo(L * 0.66, Wd * 0.88, L * 0.86, Wd * (0.16 + gape))
+  ctx.lineTo(-hr * 0.2, Wd * gape * 0.35)
+  ctx.closePath()
+  ctx.fill()
+  ctx.stroke()
+
+  // Teeth. Two on top, two below, and they meet when the mouth shuts.
+  if (hr > 6) {
+    ctx.fillStyle = '#fdf8ee'
+    const tooth = (baseX: number, tipX: number, sign: number, from: number, to: number) => {
+      ctx.beginPath()
+      ctx.moveTo(baseX, sign * Wd * from)
+      ctx.lineTo(tipX, sign * Wd * to)
+      ctx.lineTo(baseX - hr * 0.22, sign * Wd * (from + 0.06))
+      ctx.closePath()
+      ctx.fill()
+    }
+    tooth(L * 0.9, L * 0.82, -1, 0.14 + gape, 0.5 + gape * 0.5)
+    tooth(L * 0.62, L * 0.56, -1, 0.3 + gape * 0.8, 0.62 + gape * 0.4)
+    tooth(L * 0.78, L * 0.7, 1, 0.18 + gape, 0.52 + gape * 0.5)
+  }
+
+  // A tongue, flicked out now and then rather than always hanging there.
+  const flick = Math.sin(t * 0.004 + s.id * 2.1)
+  if (flick > 0.84 && hr > 5) {
+    ctx.strokeStyle = '#e0486a'
+    ctx.lineWidth = Math.max(0.8, hr * 0.11)
+    ctx.lineCap = 'round'
+    const reach = L * (1.06 + (flick - 0.84) * 2.2)
+    ctx.beginPath()
+    ctx.moveTo(L * 0.9, 0)
+    ctx.lineTo(reach, 0)
+    ctx.moveTo(reach, 0)
+    ctx.lineTo(reach + hr * 0.28, -hr * 0.2)
+    ctx.moveTo(reach, 0)
+    ctx.lineTo(reach + hr * 0.28, hr * 0.2)
+    ctx.stroke()
+  }
+
+  // Eyes, on top of the head and well back from the snout - which is
+  // where a snake's actually are, and leaves the jaws room to read.
   for (const side of [-1, 1]) {
-    const ex = h.sx + c * hr * 0.42 - sn * side * hr * 0.46
-    const ey = h.sy + sn * hr * 0.42 + c * side * hr * 0.46
+    const ex = L * 0.02
+    const ey = side * Wd * 0.46
     ctx.fillStyle = '#ffffff'
     ctx.beginPath()
-    ctx.arc(ex, ey, hr * 0.28, 0, Math.PI * 2)
+    ctx.ellipse(ex, ey, hr * 0.26, hr * 0.24, 0, 0, Math.PI * 2)
     ctx.fill()
-    ctx.fillStyle = '#16202c'
+    ctx.fillStyle = '#121a24'
     ctx.beginPath()
-    ctx.arc(ex + c * hr * 0.1, ey + sn * hr * 0.1, hr * 0.15, 0, Math.PI * 2)
+    ctx.ellipse(ex + hr * 0.09, ey, hr * 0.1, hr * 0.17, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = 'rgba(255,255,255,0.95)'
+    ctx.beginPath()
+    ctx.arc(ex + hr * 0.015, ey - hr * 0.1, hr * 0.055, 0, Math.PI * 2)
+    ctx.fill()
+    // A brow over the top, which is most of the expression.
+    ctx.fillStyle = skin(-18)
+    ctx.beginPath()
+    ctx.ellipse(ex - hr * 0.04, ey + side * hr * 0.22, hr * 0.3, hr * 0.14, 0, 0, Math.PI * 2)
     ctx.fill()
   }
+
+  // Nostrils, one dot each. At this size it is a pixel of character.
+  if (hr > 9) {
+    ctx.fillStyle = hsl(s.hue, s.sat, 18)
+    for (const side of [-1, 1]) {
+      ctx.beginPath()
+      ctx.arc(L * 0.74, side * Wd * 0.42, hr * 0.055, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+  ctx.restore()
+
+  // The threat ring goes round the whole head, outside the rotation, so
+  // it stays a circle whatever way the snake is pointing.
+  ctx.strokeStyle = ring
+  ctx.lineWidth = Math.max(1, 2 * cam.zoom)
+  ctx.beginPath()
+  ctx.arc(h.sx, h.sy, hr * 1.24, 0, Math.PI * 2)
+  ctx.stroke()
 
   // The level, which is the only number that matters in a fight.
   const label = `${level}`

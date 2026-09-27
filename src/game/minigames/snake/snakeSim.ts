@@ -15,6 +15,8 @@ import {
   restOf,
   COIN_COUNT,
   COIN_VALUE,
+  FOOD_HUE,
+  FOOD_SAT,
   bountyFor,
   DASH_DRAIN,
   DASH_FLOOR,
@@ -144,13 +146,19 @@ export function makePellet(
   map: MapSpec,
   x?: number,
   y?: number,
-  worth = 1
+  worth = 1,
+  /** What it came off, if it came off anything. */
+  from?: { hue: number; sat: number; accent: number; pattern: Pattern; index: number }
 ): Pellet {
   return {
     x: x ?? 40 + rng() * (map.w - 80),
     y: y ?? 40 + rng() * (map.h - 80),
     worth,
-    hue: 30 + rng() * 300,
+    hue: from ? from.hue : FOOD_HUE,
+    sat: from ? from.sat : FOOD_SAT,
+    accent: from?.accent,
+    pattern: from?.pattern,
+    index: from?.index,
   }
 }
 
@@ -391,7 +399,7 @@ export interface Outcome {
    * Bites taken out of a snake that survived it, with the piece that came
    * off, so it can be scattered as food.
    */
-  bites: { victim: number; by: number; lost: { x: number; y: number }[] }[]
+  bites: { victim: number; by: number; at: number; lost: { x: number; y: number }[] }[]
 }
 
 function bounce(s: Snake, awayFrom: Snake, now: number) {
@@ -490,7 +498,7 @@ export function collide(world: World, now: number): Outcome {
           // Shove the bitten one clear, so one bite is one bite and not
           // the same contact resolving again on the very next tick.
           bounce(b, a, now)
-          out.bites.push({ victim: b.id, by: a.id, lost: beads.slice(bead) })
+          out.bites.push({ victim: b.id, by: a.id, at: bead, lost: beads.slice(bead) })
         }
       } else {
         bounce(a, b, now)
@@ -505,12 +513,25 @@ export function scatterBeads(
   beads: { x: number; y: number }[],
   worth: number,
   world: World,
-  rng: () => number
+  rng: () => number,
+  /** The snake it was bitten off, so the piece stays its colour. */
+  from?: Snake,
+  /** Where along that snake the severed piece began. */
+  at = 0
 ) {
   const step = Math.max(1, Math.floor(beads.length / 18))
   for (let i = 0; i < beads.length; i += step) {
     world.pellets.push(
-      makePellet(rng, world.map, beads[i].x + (rng() - 0.5) * 20, beads[i].y + (rng() - 0.5) * 20, worth)
+      makePellet(
+        rng,
+        world.map,
+        beads[i].x + (rng() - 0.5) * 20,
+        beads[i].y + (rng() - 0.5) * 20,
+        worth,
+        from
+          ? { hue: from.hue, sat: from.sat, accent: from.accent, pattern: from.pattern, index: at + i }
+          : undefined
+      )
     )
   }
 }
@@ -526,7 +547,10 @@ export function scatter(s: Snake, world: World, rng: () => number) {
         world.map,
         beads[i].x + (rng() - 0.5) * 22,
         beads[i].y + (rng() - 0.5) * 22,
-        1 + Math.round(s.fed / 40)
+        1 + Math.round(s.fed / 40),
+        // What it leaves behind is the snake it was: same hue, same
+        // saturation, same marking, and the same place in the body.
+        { hue: s.hue, sat: s.sat, accent: s.accent, pattern: s.pattern, index: i }
       )
     )
   }

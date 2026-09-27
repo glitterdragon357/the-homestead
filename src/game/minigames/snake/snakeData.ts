@@ -1246,6 +1246,16 @@ export interface Pellet {
   /** Worth more than one, when it came off a dead snake. */
   worth: number
   hue: number
+  sat: number
+  /**
+   * Set only on pellets that came off a snake, along with the bead index
+   * they had while they were still part of it. A dropped body keeps the
+   * exact colour and marking it wore in life rather than turning into
+   * anonymous food.
+   */
+  accent?: number
+  pattern?: Pattern
+  index?: number
 }
 
 /**
@@ -1264,6 +1274,18 @@ export interface Coin {
 }
 
 /** How many lie about at once, and what a loose one is worth. */
+/**
+ * Loose food is always the same yellow.
+ *
+ * It used to be a different hue every pellet, which looked lively and
+ * read badly: with a hundred colours on the floor there was no telling
+ * plain food from the coloured remains of a snake at a glance. Food is
+ * yellow, coins are gold, and anything else on the ground is somebody's
+ * body.
+ */
+export const FOOD_HUE = 48
+export const FOOD_SAT = 92
+
 export const COIN_COUNT = 26
 export const COIN_VALUE = 3
 /** Dropped when you eat a snake, on top of what it was carrying. */
