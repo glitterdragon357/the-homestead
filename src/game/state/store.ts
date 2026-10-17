@@ -18,6 +18,7 @@ import { initialIron } from '../minigames/ironman/ironData'
 import { initialSnake } from '../minigames/snake/snakeData'
 import { initialJigsaw } from '../minigames/jigsaw/jigsawData'
 import { initialDragons } from '../minigames/dragons/dragonData'
+import { initialChutes } from '../minigames/chutes/ChutesMinigame'
 import { saveKeysOf, shiftTimestamps } from './gameClock'
 import { TRADE_IDS } from '../economy/trades'
 
@@ -126,7 +127,7 @@ export const useHomesteadStore = create<HomesteadState>()(
       tiles: buildStarterMap(),
       player: { x: 0, y: 0 },
       activeMinigameId: null,
-      progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet(), doctor: initialDoctor(), salon: initialSalon(), ocean: initialOcean(), spa: initialSpa(), horses: initialHorses(), city: initialCity(), pets: initialPets(), ironman: initialIron(), snakedash: { ...initialSnake }, jigsaw: { ...initialJigsaw }, dragons: { ...initialDragons } },
+      progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet(), doctor: initialDoctor(), salon: initialSalon(), ocean: initialOcean(), spa: initialSpa(), horses: initialHorses(), city: initialCity(), pets: initialPets(), ironman: initialIron(), snakedash: { ...initialSnake }, jigsaw: { ...initialJigsaw }, dragons: { ...initialDragons }, chutes: { ...initialChutes } },
       purses: startingPurses(),
       // Everything starts frozen; the first game you open is the first to run.
       pausedAt: Object.fromEntries(
@@ -259,7 +260,7 @@ export const useHomesteadStore = create<HomesteadState>()(
 
       resetSave: () =>
         set({
-          progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet(), doctor: initialDoctor(), salon: initialSalon(), ocean: initialOcean(), spa: initialSpa(), horses: initialHorses(), city: initialCity(), pets: initialPets(), ironman: initialIron(), snakedash: { ...initialSnake }, jigsaw: { ...initialJigsaw }, dragons: { ...initialDragons } },
+          progress: { ...initialProgress(), pottery: initialPottery(), lumber: initialLumber(), fruit: initialFruit(), vet: initialVet(), doctor: initialDoctor(), salon: initialSalon(), ocean: initialOcean(), spa: initialSpa(), horses: initialHorses(), city: initialCity(), pets: initialPets(), ironman: initialIron(), snakedash: { ...initialSnake }, jigsaw: { ...initialJigsaw }, dragons: { ...initialDragons }, chutes: { ...initialChutes } },
           player: { x: 0, y: 0 },
           purses: startingPurses(),
           inventory: {},
@@ -269,7 +270,7 @@ export const useHomesteadStore = create<HomesteadState>()(
     }),
     {
       name: SAVE_KEY,
-      version: 20,
+      version: 21,
       storage: createJSONStorage(() => localStorage),
       // Runs before rehydration, so this captures the previous session's
       // save rather than anything this one has written.

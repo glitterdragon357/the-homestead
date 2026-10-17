@@ -26,6 +26,7 @@ import { spaPending, type SpaSave } from './spa/spaData'
 import { SnakeDashMinigame } from './snake/SnakeDashMinigame'
 import { JigsawMinigame } from './jigsaw/JigsawMinigame'
 import { AllDragonsMinigame } from './dragons/AllDragonsMinigame'
+import { ChutesMinigame } from './chutes/ChutesMinigame'
 import { type DragonSave } from './dragons/dragonData'
 import { SalonMinigame } from './salon/SalonMinigame'
 import { salonPending, type SalonSave } from './salon/salonData'
@@ -176,6 +177,13 @@ export const MINIGAME_REGISTRY: Record<string, MinigameDefinition> = {
     description: 'Dive the shelf: hunt fish, or just go and see what is down there.',
     icon: '\u{1F93F}',
     component: OceanMinigame,
+  },
+  chutes: {
+    id: 'chutes',
+    name: 'The Chutes',
+    description: 'A ball, a closed pipe, and a long way down. Nothing to hit - just the line.',
+    icon: '\u{1F3B1}',
+    component: ChutesMinigame,
   },
   dragons: {
     id: 'dragons',
