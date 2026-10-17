@@ -15,8 +15,10 @@ import {
   LEVEL_BY_KEY,
   STEP,
   buildChute,
+  obstaclesFor,
   type Ball,
   type Node,
+  type Obstacle,
 } from './chuteData'
 import {
   type Ride,
@@ -24,11 +26,23 @@ import {
   parOf,
   payFor,
   progress,
+  readAt,
+  safety,
+  slopeAhead,
   startRide,
   step,
   TOP,
 } from './chuteSim'
-import { VIEW, ballSwatch, drawBall, drawMouth, drawPipe, drawRush, drawSky } from './chuteDraw'
+import {
+  VIEW,
+  ballSwatch,
+  drawBall,
+  drawBlocks,
+  drawMouth,
+  drawRush,
+  drawSky,
+  drawTrack,
+} from './chuteDraw'
 
 /**
  * The Chutes.
@@ -76,16 +90,37 @@ export function ChutesMinigame({ onExit }: MinigameProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const rideRef = useRef<Ride | null>(null)
   const nodesRef = useRef<Node[]>([])
+  const blocksRef = useRef<Obstacle[]>([])
+  /**
+   * The camera's own position, carried between frames.
+   *
+   * It is eased towards where it wants to be rather than placed there,
+   * and everything it reads off the track is interpolated between nodes.
+   * Placed straight onto the integer node, the pitch and the heading
+   * both stepped at every node boundary - forty times a second at full
+   * speed - and the whole picture juddered.
+   */
+  const camRef = useRef<Camera | null>(null)
   const steerRef = useRef(0)
   const spinRef = useRef(0)
   const [riding, setRiding] = useState(false)
   const [denied, setDenied] = useState<string | null>(null)
-  const [hud, setHud] = useState({ speed: 0, t: 0, along: 0, grip: 1, air: false, airT: 0 })
+  const [hud, setHud] = useState({
+    speed: 0,
+    t: 0,
+    along: 0,
+    safe: 1,
+    air: false,
+    airT: 0,
+    falls: 0,
+    fell: false,
+  })
   const [result, setResult] = useState<null | {
     t: number
     pay: number
     record: boolean
     bestAir: number
+    falls: number
   }>(null)
 
   useAmbientMusic(save.music !== false, riding ? 'drive' : 'calm', 0.4)
@@ -101,7 +136,9 @@ export function ChutesMinigame({ onExit }: MinigameProps) {
   function drop() {
     const lv = LEVEL_BY_KEY[saveRef.current.level ?? 'firstrun'] ?? LEVELS[0]
     nodesRef.current = buildChute(lv)
+    blocksRef.current = obstaclesFor(lv)
     rideRef.current = startRide()
+    camRef.current = null
     steerRef.current = 0
     spinRef.current = 0
     setResult(null)
@@ -123,7 +160,7 @@ export function ChutesMinigame({ onExit }: MinigameProps) {
       best: record ? { ...(s.best ?? {}), [lv.key]: ride.t } : (s.best ?? {}),
       bestAir: Math.max(s.bestAir ?? 0, ride.bestAir),
     }))
-    setResult({ t: ride.t, pay, record, bestAir: ride.bestAir })
+    setResult({ t: ride.t, pay, record, bestAir: ride.bestAir, falls: ride.falls })
     setRiding(false)
     rideRef.current = null
   }, [earn, setSave])
@@ -146,7 +183,7 @@ export function ChutesMinigame({ onExit }: MinigameProps) {
       const dt = Math.min(0.04, (now - last) / 1000)
       last = now
 
-      const out = step(ride, nodes, steerRef.current, dt)
+      const out = step(ride, nodes, blocksRef.current, steerRef.current, dt)
       spinRef.current += (ride.speed / 90) * dt
 
       /* --- where to look from --------------------------------------- */
@@ -155,40 +192,49 @@ export function ChutesMinigame({ onExit }: MinigameProps) {
       // rather than dead on the centreline. On the centreline a ball
       // high on the outside of a corner leaves the frame entirely, and
       // the one thing you must always be able to see is your own line.
-      // Well back from the ball.
-      //
-      // At two and a half nodes the camera sat a hundred units off it,
-      // and a twenty-unit ball a hundred units from a five-hundred-and-
-      // twenty focal length fills a third of the screen. You could not
-      // see the chute past your own ball.
+      // Behind the ball, above the road, following it across.
       const back = Math.max(0, ride.s - 8.5)
-      const i = Math.min(nodes.length - 2, Math.floor(back))
-      const f = back - i
-      const a = nodes[i]
-      const b = nodes[i + 1]
-      const cx = a.x + (b.x - a.x) * f
-      const cy = a.y + (b.y - a.y) * f
-      const cz = a.z + (b.z - a.z) * f
-      const yaw = a.yaw + (b.yaw - a.yaw) * f
-      // Up out of the trough a little, so the road, the ball and the
-      // city ahead are all in frame at once.
-      const lean = a.radius * 0.5
-      const rx = Math.cos(yaw)
-      const rz = -Math.sin(yaw)
-      const cam: Camera = {
-        x: cx + rx * lean * Math.sin(ride.theta),
-        y: cy + lean * Math.cos(ride.theta) - a.radius * 0.3 + ride.airY * 0.7,
-        z: cz + rz * lean * Math.sin(ride.theta),
-        yaw,
-        pitch: a.dip * 0.5,
+      const r = readAt(nodes, back)
+      const rx = Math.cos(r.yaw)
+      const rz = -Math.sin(r.yaw)
+      // Only part of the way across, so a ball out at the edge is still
+      // in frame and you can see how much road is left beside it.
+      const follow = ride.u * 0.65
+      const want: Camera = {
+        x: r.x + rx * follow,
+        y: r.y - 78 - ride.h * 0.7,
+        z: r.z + rz * follow,
+        yaw: r.yaw,
+        // The slope of the hill, not the slope of the bump under you.
+        pitch: slopeAhead(nodes, back) * 0.5,
       }
+
+      // Eased, not snapped. Time-based so it behaves the same whatever
+      // the frame rate is doing.
+      const prev = camRef.current
+      const k = prev ? 1 - Math.pow(0.0001, dt) : 1
+      const cam: Camera = prev
+        ? {
+            x: prev.x + (want.x - prev.x) * k,
+            y: prev.y + (want.y - prev.y) * k,
+            z: prev.z + (want.z - prev.z) * k,
+            yaw: prev.yaw + (want.yaw - prev.yaw) * k,
+            pitch: prev.pitch + (want.pitch - prev.pitch) * k,
+          }
+        : want
+      camRef.current = cam
+      const yaw = cam.yaw
 
       /* --- paint ---------------------------------------------------- */
       drawSky(ctx, LEVEL_BY_KEY[saveRef.current.level]?.sky ?? 'sundown', yaw, cam.pitch, now)
-      drawPipe(ctx, cam, nodes, back, pipeHue(saveRef.current.level))
+      drawTrack(ctx, cam, nodes, back, pipeHue(saveRef.current.level))
+      drawBlocks(ctx, cam, nodes, blocksRef.current, back, now)
       if (ride.air) drawMouth(ctx, cam, nodes, ride.s, pipeHue(saveRef.current.level))
       const at = ballAt(nodes, ride)
-      drawBall(ctx, cam, ball, at.x, at.y, at.z, spinRef.current)
+      // Nothing to draw while it is being put back on the road.
+      if (ride.t * 1000 >= ride.fellUntil) {
+        drawBall(ctx, cam, ball, at.x, at.y, at.z, spinRef.current)
+      }
       drawRush(ctx, ride.speed, now)
 
       finish(ctx, VIEW, {
@@ -205,9 +251,11 @@ export function ChutesMinigame({ onExit }: MinigameProps) {
           speed: ride.speed,
           t: ride.t,
           along: progress(ride, nodes),
-          grip: ride.grip,
+          safe: safety(ride, nodes),
           air: ride.air,
           airT: ride.airT,
+          falls: ride.falls,
+          fell: ride.t * 1000 < ride.fellUntil,
         })
       }
       if (out.finished) land()
@@ -280,9 +328,16 @@ export function ChutesMinigame({ onExit }: MinigameProps) {
             <div style={S.track}>
               <div style={{ ...S.fill, width: `${Math.round(hud.along * 100)}%` }} />
             </div>
+            {hud.falls > 0 && (
+              <span style={S.falls}>
+                {hud.falls} fall{hud.falls === 1 ? '' : 's'}
+              </span>
+            )}
             <span style={S.clock}>{hud.t.toFixed(2)}s</span>
           </div>
-          {hud.air ? (
+          {hud.fell ? (
+            <div style={S.air}>off the edge · back at the checkpoint</div>
+          ) : hud.air ? (
             <div style={S.air}>in the air · {hud.airT.toFixed(1)}s</div>
           ) : (
             <div style={S.lineRead}>
@@ -290,14 +345,14 @@ export function ChutesMinigame({ onExit }: MinigameProps) {
                 <div
                   style={{
                     ...S.lineFill,
-                    width: `${Math.round(hud.grip * 100)}%`,
+                    width: `${Math.round(hud.safe * 100)}%`,
                     background:
-                      hud.grip > 0.72 ? '#8ef0a0' : hud.grip > 0.4 ? '#ffd48a' : '#ff9a86',
+                      hud.safe > 0.55 ? '#8ef0a0' : hud.safe > 0.25 ? '#ffd48a' : '#ff9a86',
                   }}
                 />
               </div>
               <span style={S.lineLabel}>
-                {hud.grip > 0.72 ? 'on the line' : hud.grip > 0.4 ? 'close' : 'scrubbing'}
+                {hud.safe > 0.55 ? 'on the road' : hud.safe > 0.25 ? 'near the edge' : 'on the lip'}
               </span>
             </div>
           )}
@@ -324,13 +379,21 @@ export function ChutesMinigame({ onExit }: MinigameProps) {
             {result.bestAir > 0.4 && (
               <span style={S.note}> · longest jump {result.bestAir.toFixed(1)}s</span>
             )}
+            {result.falls > 0 && (
+              <span style={S.note}>
+                {' '}
+                · {result.falls} fall{result.falls === 1 ? '' : 's'}
+              </span>
+            )}
           </div>
         )}
         {denied && <p style={S.denied}>{denied}</p>}
 
         <p style={S.rule}>
-          The pipe is closed, so there is nothing to hit. Speed is all in the line: ride up the
-          outside of a bend and the banking carries you, sit at the bottom and you scrub.
+          Steer to stay on the road. Corners throw you at the edge, the road narrows where you
+          would rather it did not, and there are things standing on it. Go off and you start again
+          at the last checkpoint with the clock still running — which is the only thing falling
+          ever costs you.
         </p>
 
         <button style={S.go} onClick={drop}>
@@ -488,6 +551,7 @@ const S: Record<string, React.CSSProperties> = {
   track: { flex: 1, height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.18)', overflow: 'hidden' },
   fill: { height: '100%', background: '#ffd48a' },
   clock: { fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 17 },
+  falls: { color: '#ffb0a0', fontWeight: 700 },
   lineRead: {
     position: 'absolute',
     bottom: 42,

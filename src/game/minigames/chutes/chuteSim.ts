@@ -1,69 +1,87 @@
 /**
  * Rolling.
  *
- * The ball's position is two numbers: how far down the chute it is, and
- * where it sits around the inside of the pipe. Everything else - the
- * banking, the scrubbing, the jumps - falls out of those two and the
- * shape of the node you happen to be on.
+ * The ball is three numbers: how far down the road it is, how far across
+ * it is, and how high above it. Across is in world units rather than an
+ * angle round a pipe, because the track is mostly a road - and a road
+ * has edges you can leave, which an angle round a closed pipe does not.
  *
- * There is no crash. The pipe is closed, so the only thing a bad line
- * costs you is speed, and the only thing it costs you on a jump is
- * landing badly into the next one.
+ * Leaving them is the point. A corner throws the ball to the outside, a
+ * narrow stretch gives it nowhere to be thrown, and a gap gives it
+ * nothing underneath at all. Falling off costs the time back to the last
+ * checkpoint, which is the only thing a run here can cost.
  */
 
-import { ARC, type Level, type Node, BALL_R, STEP } from './chuteData'
+import {
+  type Level,
+  type Node,
+  type Obstacle,
+  BALL_R,
+  STEP,
+  obstacleU,
+} from './chuteData'
 
-/** Gravity, in world units a second squared. */
 export const G = 3000
-/** Flat-out top speed, before a chute's own steepness is counted. */
-/**
- * Twice what it was.
- *
- * Everything that scales with speed scales with it: the gain off a
- * slope, the drag, and the pull a corner puts on the ball, so the shape
- * of a good line is unchanged and only the pace of it moves.
- */
+/** Flat-out top speed. */
 export const TOP = 6400
-/** How hard you can push the ball round the inside of the pipe. */
-export const STEER = 7.2
+/** How hard the ball can be pushed across the road. */
+export const STEER = 1800
+/** How long the ball is out of play after going over the edge. */
+export const FELL_FOR = 900
 
 export interface Ride {
   /** How far along, as a node index with a fraction. */
   s: number
-  /** Where the ball sits around the pipe. 0 is the bottom. */
-  theta: number
-  /** How fast it is going round the pipe. */
-  spin: number
-  /** Speed along the chute. */
+  /** How far across the road, in world units. Zero is the middle. */
+  u: number
+  /** How fast it is moving across. */
+  vu: number
+  /** Height above the road. Zero is on it. */
+  h: number
+  /** How fast it is rising. Negative is up, as down is positive here. */
+  vh: number
   speed: number
-  /** Seconds since the start. */
   t: number
-  /** Off the end of a lip, and how high above the centreline. */
+  /** Off a lip or over an edge. */
   air: boolean
-  airY: number
-  airV: number
-  /** How long the current jump has lasted, for the HUD. */
   airT: number
-  /** Longest jump this run, in seconds. */
   bestAir: number
-  /** How well the line is going right now, 0 to 1. Drives the HUD. */
-  grip: number
+  /** The last checkpoint passed, as a node index. */
+  checkpoint: number
+  /** Times fallen off this run. */
+  falls: number
+  /** Counting back in after a fall; nothing moves while this runs. */
+  fellUntil: number
+  /**
+   * Nothing on the road can touch it until this moment.
+   *
+   * Without it a block sitting just past a checkpoint is a trap with no
+   * way out: you come back, hit it, go off, come back, and hit it again
+   * for as long as you are willing to watch.
+   */
+  sparedUntil: number
+  /** Coins picked up. */
+  coins: number
   done: boolean
 }
 
 export function startRide(): Ride {
   return {
     s: 0,
-    theta: 0,
-    spin: 0,
+    u: 0,
+    vu: 0,
+    h: 0,
+    vh: 0,
     speed: 640,
     t: 0,
     air: false,
-    airY: 0,
-    airV: 0,
     airT: 0,
     bestAir: 0,
-    grip: 1,
+    checkpoint: 0,
+    falls: 0,
+    fellUntil: 0,
+    sparedUntil: 0,
+    coins: 0,
     done: false,
   }
 }
@@ -74,227 +92,262 @@ export function nodeAt(nodes: Node[], s: number): Node {
 }
 
 /**
- * The height on the wall where the corner does the work for you.
+ * The track, read smoothly rather than a node at a time.
  *
- * A banked turn holds itself when the wall's slope matches the ratio of
- * sideways pull to gravity, which for a ball going round a bend of this
- * curvature at this speed is the arctangent of one over the other. Ride
- * there and the pipe is carrying you; ride below it and you are dragging
- * the ball up the wall yourself every foot of the corner.
+ * Every value a camera or a ball needs is interpolated between the two
+ * nodes it sits between. Reading them off the integer node instead makes
+ * each one step at a node boundary, and at six thousand units a second
+ * that is forty steps a second - which is not a bumpy road, it is a
+ * picture that will not hold still.
  */
-export function idealLine(curve: number, speed: number): number {
-  const k = curve / STEP
-  const want = Math.atan((speed * speed * Math.abs(k)) / G)
-  return curve >= 0 ? want : -want
+export function readAt(nodes: Node[], s: number) {
+  const i = Math.max(0, Math.min(nodes.length - 2, Math.floor(s)))
+  const f = Math.max(0, Math.min(1, s - i))
+  const a = nodes[i]
+  const b = nodes[i + 1]
+  const mix = (p: number, q: number) => p + (q - p) * f
+  return {
+    x: mix(a.x, b.x),
+    y: mix(a.y, b.y),
+    z: mix(a.z, b.z),
+    yaw: mix(a.yaw, b.yaw),
+    dip: mix(a.dip, b.dip),
+    curve: mix(a.curve, b.curve),
+    half: mix(a.half, b.half),
+    bank: mix(a.bank, b.bank),
+    open: a.open || b.open,
+    closed: a.closed && b.closed,
+  }
 }
 
-/** How far ahead the line is read. */
-export const LOOK = 10
-
 /**
- * The line to be holding right now, read from the corner you are
- * entering rather than the inch of track under you.
+ * The slope the camera should sit at, averaged over the road ahead.
  *
- * Taken off the node alone it flips the instant the curvature does,
- * which on a twisty chute is several times a second - faster than the
- * ball can be moved round the pipe at all. The effect was that the
- * twistier a chute, the less a good line was worth, which is exactly
- * backwards. Averaging the corner ahead gives something a person can
- * actually set up for.
+ * The ball rides every bump; the camera must not. Read off a single
+ * point the pitch follows the washboard exactly, so on a bumpy run the
+ * whole picture nods several times a second - which is uncomfortable to
+ * watch and tells you nothing you need to know. Averaging a stretch of
+ * road gives the slope of the hill rather than the slope of the inch
+ * underneath you.
  */
-export function lineFor(nodes: Node[], s: number, speed: number): number {
+export function slopeAhead(nodes: Node[], s: number, span = 14): number {
   const i = Math.max(0, Math.min(nodes.length - 1, Math.floor(s)))
   let sum = 0
   let n = 0
-  for (let k = 0; k < LOOK && i + k < nodes.length; k++) {
-    // The near end of the look-ahead counts for more than the far end.
-    const w = 1 - k / LOOK
-    sum += nodes[i + k].curve * w
+  for (let k = 0; k < span && i + k < nodes.length; k++) {
+    const w = 1 - k / span
+    sum += nodes[i + k].dip * w
     n += w
   }
-  const want = idealLine(n > 0 ? sum / n : 0, speed)
-  // On open road the best line available is the top of the banking.
-  //
-  // Unclamped, a fast corner asks for a height the road does not have,
-  // so the best a player could possibly do still read as off the line -
-  // the needle sat on SCRUBBING for the whole run however well it was
-  // driven, and the speed went with it.
-  const lip = nodes[i].closed ? Math.PI : ARC * 0.92
-  return Math.max(-lip, Math.min(lip, want))
+  return n > 0 ? sum / n : 0
+}
+
+/** Where the ball actually is in the world. */
+export function ballAt(nodes: Node[], ride: Ride) {
+  const r = readAt(nodes, ride.s)
+  const rx = Math.cos(r.yaw)
+  const rz = -Math.sin(r.yaw)
+  return {
+    x: r.x + rx * ride.u,
+    // Down is positive, so being above the road is a negative offset.
+    y: r.y - BALL_R - ride.h + Math.abs(ride.u) * Math.sin(r.bank) * Math.sign(r.bank || 1),
+    z: r.z + rz * ride.u,
+    yaw: r.yaw,
+  }
+}
+
+/** Put the ball back on the road at the last checkpoint. */
+function recover(ride: Ride, now: number) {
+  ride.s = ride.checkpoint
+  ride.u = 0
+  ride.vu = 0
+  ride.h = 0
+  ride.vh = 0
+  ride.speed = 700
+  ride.air = false
+  ride.airT = 0
+  ride.falls++
+  ride.fellUntil = now + FELL_FOR
+  ride.sparedUntil = now + FELL_FOR + 1400
+}
+
+export interface Beat {
+  finished: boolean
+  /** Went over an edge or into a gap. */
+  fell: boolean
+  /** Hit something on the road. */
+  hit: boolean
+  /** Left a lip. */
+  launched: boolean
+  landed: boolean
+  /** Passed a checkpoint it had not passed before. */
+  checked: boolean
 }
 
 export function step(
   ride: Ride,
   nodes: Node[],
+  blocks: Obstacle[],
   steer: number,
   dt: number
-): { finished: boolean; landed: boolean; launched: boolean } {
-  if (ride.done) return { finished: true, landed: false, launched: false }
+): Beat {
+  const beat: Beat = {
+    finished: ride.done,
+    fell: false,
+    hit: false,
+    launched: false,
+    landed: false,
+    checked: false,
+  }
+  if (ride.done) return beat
   ride.t += dt
 
-  const n = nodeAt(nodes, ride.s)
-  const wasAir = ride.air
-  let landed = false
-  let launched = false
+  // Counting back in after a fall. The clock keeps running, which is
+  // what makes falling cost something at all.
+  if (ride.t * 1000 < ride.fellUntil) return beat
 
-  if (n.open) {
-    /* --- off the lip ---------------------------------------------- */
+  const r = readAt(nodes, ride.s)
+  const wasAir = ride.air
+
+  /* --- across the road -------------------------------------------- */
+  //
+  // A corner throws the ball to the outside, the banking holds some of
+  // that, and steering is what is left to you.
+  // What the corner does to it, and what the camber takes back. Both
+  // are real accelerations: v squared times curvature out, and gravity
+  // times the tangent of the banking in.
+  const throwOut = ride.speed * ride.speed * (r.curve / STEP)
+  const held = -Math.tan(r.bank) * G
+  ride.vu += (throwOut + held + steer * STEER) * dt
+  ride.vu *= 1 - 2.6 * dt
+  ride.u += ride.vu * dt
+
+  /* --- up and down -------------------------------------------------- */
+  if (r.open) {
+    // Nothing underneath. Whatever speed you came off the lip with is
+    // what decides whether you reach the far side.
     if (!wasAir) {
       ride.air = true
-      ride.airY = 0
-      // Everything you had going up the lip turns into height.
-      ride.airV = -(ride.speed * 0.42 + 260)
+      // Enough lift that even a ball arriving at its slowest clears the
+      // longest gap the generator is allowed to lay.
+      ride.vh = ride.speed * 0.26 + 420
       ride.airT = 0
-      launched = true
+      beat.launched = true
     }
     ride.airT += dt
-    ride.airV += G * 0.9 * dt
-    ride.airY += ride.airV * dt
-    if (ride.airY > 0) ride.airY = 0
-    // Air is cheap: you keep nearly all of it, which is why a jump is
-    // worth taking fast rather than something to be survived.
-    ride.speed *= 1 - 0.1 * dt
-    // You can still turn the ball in the air, just not much.
-    ride.spin += steer * STEER * 0.3 * dt
-    ride.theta += ride.spin * dt
-    ride.spin *= 1 - 1.6 * dt
-    ride.grip = 1
+    ride.vh -= G * 1.25 * dt
+    ride.h += ride.vh * dt
+    if (ride.h < -260) {
+      // Fell into the gap.
+      recover(ride, ride.t * 1000)
+      beat.fell = true
+      return beat
+    }
+    ride.speed *= 1 - 0.08 * dt
   } else {
-    /* --- back in the pipe ------------------------------------------ */
-    if (wasAir) {
+    if (wasAir || ride.h > 0) {
       ride.air = false
       ride.bestAir = Math.max(ride.bestAir, ride.airT)
-      // Coming down hard off a big one costs a little, and coming down
-      // sideways costs more. Nothing here can end the run.
-      const slam = Math.min(1, Math.abs(ride.airV) / 1600)
-      ride.speed *= 1 - slam * 0.1
-      ride.spin *= 0.4
-      ride.airY = 0
+      const slam = Math.min(1, Math.abs(ride.vh) / 2400)
+      ride.speed *= 1 - slam * 0.12
+      ride.h = 0
+      ride.vh = 0
       ride.airT = 0
-      landed = true
+      beat.landed = true
     }
 
-    const want = lineFor(nodes, ride.s, ride.speed)
+    /* --- the edge ------------------------------------------------- */
+    if (r.closed) {
+      // Roofed over: the wall is there, so it just stops you.
+      const lip = r.half
+      if (ride.u > lip) {
+        ride.u = lip
+        ride.vu = Math.min(0, ride.vu)
+        ride.speed *= 1 - 0.6 * dt
+      } else if (ride.u < -lip) {
+        ride.u = -lip
+        ride.vu = Math.max(0, ride.vu)
+        ride.speed *= 1 - 0.6 * dt
+      }
+    } else if (Math.abs(ride.u) > r.half + BALL_R * 0.4) {
+      recover(ride, ride.t * 1000)
+      beat.fell = true
+      return beat
+    }
 
-    // What the corner is doing to you, and what gravity is doing about
-    // it. Both act on where the ball sits round the pipe.
-    const sideways = (ride.speed * ride.speed * (n.curve / STEP)) / n.radius
-    const down = (-G * Math.sin(ride.theta)) / n.radius
-    ride.spin += (sideways + down + steer * STEER) * dt
-    // Barely damped, on purpose.
-    //
-    // Damped hard, the ball settles by itself at very nearly the right
-    // height on the wall and holds there with no help - so a run where
-    // the player never touched anything was as quick as a perfect one,
-    // because physics was doing the whole job. Left loose it sloshes up
-    // and down the bore through every corner instead, and settling that
-    // slosh is the thing there is to be good at.
-    ride.spin *= 1 - 0.9 * dt
-    ride.theta += ride.spin * dt
-
-    if (n.closed) {
-      // Roofed over: nowhere to go but round it.
-      if (ride.theta > Math.PI) ride.theta -= Math.PI * 2
-      if (ride.theta < -Math.PI) ride.theta += Math.PI * 2
-    } else {
-      // Open road. The banking comes up far enough that running out of
-      // it costs you the climb and sets you back down - which is why
-      // there is no falling off and nothing to crash into.
-      // Running out of road stops the climb and costs a little speed.
-      // It does not kick the ball back down: a rim that shoves started
-      // an oscillation the player could not settle, and the ball spent
-      // the rest of the run bouncing wall to wall at walking pace.
-      if (ride.theta > ARC) {
-        ride.theta = ARC
-        ride.spin = Math.min(0, ride.spin)
-        ride.speed *= 1 - 0.5 * dt
-      } else if (ride.theta < -ARC) {
-        ride.theta = -ARC
-        ride.spin = Math.max(0, ride.spin)
-        ride.speed *= 1 - 0.5 * dt
+    /* --- things in the way ---------------------------------------- */
+    const here = Math.floor(ride.s)
+    for (const o of blocks) {
+      if (Math.abs(o.at - here) > 1) continue
+      const ou = obstacleU(o, ride.t * 1000)
+      if (Math.abs(ride.u - ou) < o.half + BALL_R * 0.8) {
+        if (ride.t * 1000 < ride.sparedUntil) continue
+        // Knocked aside and slowed, never off.
+        //
+        // The knock used to be worth a hundred and sixty units of drift,
+        // which from the middle of a road this wide is over the edge -
+        // so every single clip of a block was a fall, and a block just
+        // past a checkpoint was a loop with no way out of it. A hit now
+        // costs speed and position, and the fall comes from what you do
+        // after it.
+        const away = Math.sign(ride.u - ou) || 1
+        const room = r.half * 0.78
+        ride.u = Math.max(-room, Math.min(room, ou + away * (o.half + BALL_R * 0.85)))
+        ride.vu = away * 150
+        ride.speed *= 0.72
+        beat.hit = true
       }
     }
 
-    // How close the line is. This is the whole game.
-    const off = Math.abs(ride.theta - want)
-    ride.grip = Math.max(0, 1 - off / 1.5 - Math.min(0.6, Math.abs(ride.spin) * 0.22))
-
-    // Downhill pays, the wrong line charges.
-    //
-    // The gap between the two is the game, and it has to be wide. At the
-    // first numbers a perfect line down a chute called Switchback was
-    // worth five per cent against sitting at the bottom the whole way,
-    // which is not a skill, it is a rounding error. A corner now pays
-    // properly for being taken well and charges properly for being
-    // dragged round.
-    const gain = n.dip * G * 0.6
-    const bend = Math.min(1, Math.abs(n.curve) / 0.016)
-    // Being off the line costs, and sloshing costs on top of it: a ball
-    // climbing and falling across the bore is spending on the wall every
-    // bit of height it keeps throwing away.
-    const slosh = Math.min(1.4, Math.abs(ride.spin) * 0.5)
-    const scrub = 0.2 + (1 - ride.grip) * (0.25 + bend * 0.9) + slosh * 0.55
-    // Drag has to actually bite, or every line saturates at the cap and
-    // the two are indistinguishable - which is what happened: a perfect
-    // run and a lazy one both sat pinned at top speed the whole way
-    // down, and the only difference between them was rounding.
-    ride.speed += (gain - scrub * ride.speed * 0.875) * dt
-    if (bend > 0.2) ride.speed += ride.grip * bend * 900 * dt
-    ride.speed = Math.max(140, Math.min(TOP, ride.speed))
+    /* --- speed ------------------------------------------------------ */
+    const gain = r.dip * G * 0.6
+    // Wide open and pointing downhill is fast; fighting a corner is not.
+    const drag = 0.2 + Math.min(1.2, Math.abs(ride.vu) / 420) * 0.5
+    ride.speed += (gain - drag * ride.speed * 0.875) * dt
+    ride.speed = Math.max(220, Math.min(TOP, ride.speed))
   }
 
+  /* --- along ------------------------------------------------------- */
+  const was = Math.floor(ride.s)
   ride.s += (ride.speed * dt) / STEP
+  const now = Math.floor(ride.s)
+  for (let i = was + 1; i <= now && i < nodes.length; i++) {
+    if (nodes[i].checkpoint && i > ride.checkpoint) {
+      ride.checkpoint = i
+      beat.checked = true
+    }
+  }
+
   if (ride.s >= nodes.length - 2) {
     ride.s = nodes.length - 2
     ride.done = true
+    beat.finished = true
   }
-  return { finished: ride.done, landed, launched }
+  return beat
 }
 
-/** How far down the chute, 0 to 1. */
 export function progress(ride: Ride, nodes: Node[]): number {
   return Math.max(0, Math.min(1, ride.s / (nodes.length - 2)))
 }
 
-/** Where the ball actually is in the world, and which way it is facing. */
-export function ballAt(nodes: Node[], ride: Ride): {
-  x: number
-  y: number
-  z: number
-  yaw: number
-} {
-  const i = Math.max(0, Math.min(nodes.length - 2, Math.floor(ride.s)))
-  const f = ride.s - i
-  const a = nodes[i]
-  const b = nodes[i + 1]
-  const cx = a.x + (b.x - a.x) * f
-  const cy = a.y + (b.y - a.y) * f
-  const cz = a.z + (b.z - a.z) * f
-  const yaw = a.yaw + (b.yaw - a.yaw) * f
-  // Out from the centre, round the pipe, in the plane across the track.
-  const r = a.radius - BALL_R
-  const rx = Math.cos(yaw)
-  const rz = -Math.sin(yaw)
-  const off = r * Math.sin(ride.theta)
-  return {
-    x: cx + rx * off,
-    y: cy + r * Math.cos(ride.theta) + ride.airY,
-    z: cz + rz * off,
-    yaw,
-  }
+/** How close to the middle of the road, 0 to 1. Drives the HUD. */
+export function safety(ride: Ride, nodes: Node[]): number {
+  const r = readAt(nodes, ride.s)
+  if (r.open) return 1
+  return Math.max(0, 1 - Math.abs(ride.u) / Math.max(1, r.half))
 }
 
 /**
  * What a finished run is worth.
  *
- * Paid on the clock rather than on turning up, with the par time coming
- * from the chute's own length, so a long chute is not automatically
- * worth more than a short one taken well.
+ * On the clock, and the clock already counts every fall - so there is no
+ * separate punishment for falling off, which would be charging twice for
+ * the same mistake.
  */
 export function payFor(level: Level, seconds: number, bestAir: number): number {
-  const par = (level.length * STEP) / 1800
+  const par = parOf(level)
   const ratio = par / Math.max(1, seconds)
-  return Math.max(12, Math.round(70 * ratio * ratio + bestAir * 40))
+  return Math.max(12, Math.round(80 * ratio * ratio + bestAir * 40))
 }
 
 export function parOf(level: Level): number {

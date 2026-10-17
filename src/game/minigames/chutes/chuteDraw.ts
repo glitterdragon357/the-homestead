@@ -15,7 +15,7 @@ import {
   projectPoly,
   fillPoly,
 } from '../../engine/firstPerson'
-import { ARC, type Node, type Sky, BALL_R } from './chuteData'
+import { type Node, type Obstacle, type Sky, BALL_R, obstacleU } from './chuteData'
 import { type Ball } from './chuteData'
 
 export const VIEW: Viewport = { width: 900, height: 560 }
@@ -157,18 +157,17 @@ function ringPoint(n: Node, a: number): { x: number; y: number; z: number } {
 /**
  * The track.
  *
- * Mostly open road - a deep banked trough with the sky above it - and
- * every so often a stretch where the roof closes over and it becomes a
- * tube. Both are the same ring of quads; the only difference is how far
- * round it goes, which is ARC for road and the whole way for tube.
+ * Mostly an open road - a ribbon with two edges and nothing beyond them -
+ * and every so often a stretch where it is roofed over into a tube. The
+ * edges are the game, so they are drawn as edges: a bright lip, and a
+ * dark skirt under it so the road reads as something with a drop beside
+ * it rather than a stripe painted on the sky.
  *
- * Painted far to near, one band per pair of rings. A band's colour
- * carries two things at once: how far off it is, which is what gives
- * the track its depth, and a rib every few rings, which is what makes
- * speed legible. Plain tarmac at six thousand units a second looks
- * exactly like plain tarmac standing still.
+ * Painted far to near. A rib every few nodes is what makes speed legible;
+ * plain tarmac at six thousand units a second looks exactly like plain
+ * tarmac standing still.
  */
-export function drawPipe(
+export function drawTrack(
   ctx: CanvasRenderingContext2D,
   cam: Camera,
   nodes: Node[],
@@ -178,65 +177,205 @@ export function drawPipe(
   const start = Math.max(0, Math.floor(from) - 2)
   const end = Math.min(nodes.length - 1, start + SEE)
 
+  const edge = (n: Node, side: number) => {
+    const rx = Math.cos(n.yaw)
+    const rz = -Math.sin(n.yaw)
+    const u = n.half * side
+    return {
+      x: n.x + rx * u,
+      y: n.y + Math.abs(u) * Math.sin(n.bank) * Math.sign(n.bank || 1) * side * side,
+      z: n.z + rz * u,
+    }
+  }
+
   for (let i = end - 1; i >= start; i--) {
     const a = nodes[i]
     const b = nodes[i + 1]
-    // No pipe over a jump: that is the jump.
     if (a.open || b.open) continue
 
     const far = (i - start) / SEE
-    const lit = 1 - far * 0.78
-    // A rib every four rings, which is what you actually read speed off.
+    const lit = 1 - far * 0.72
     const rib = i % 4 === 0
-    const roofed = a.closed && b.closed
-    // Open road only goes round as far as its banking does.
-    const span = roofed ? Math.PI * 2 : ARC * 2
-    const base = roofed ? 0 : -ARC
 
-    for (let q = 0; q < AROUND; q++) {
-      const a0 = base + (q / AROUND) * span
-      const a1 = base + ((q + 1) / AROUND) * span
-      const p0 = ringPoint(a, a0)
-      const p1 = ringPoint(a, a1)
-      const p2 = ringPoint(b, a1)
-      const p3 = ringPoint(b, a0)
+    if (a.closed && b.closed) {
+      // Roofed over: the whole ring.
+      for (let q = 0; q < AROUND; q++) {
+        const a0 = (q / AROUND) * Math.PI * 2
+        const a1 = ((q + 1) / AROUND) * Math.PI * 2
+        const p0 = ringPoint(a, a0)
+        const p1 = ringPoint(a, a1)
+        const p2 = ringPoint(b, a1)
+        const p3 = ringPoint(b, a0)
+        const quad = projectPoly(
+          cam,
+          [
+            [p0.x, p0.y, p0.z],
+            [p1.x, p1.y, p1.z],
+            [p2.x, p2.y, p2.z],
+            [p3.x, p3.y, p3.z],
+          ],
+          VIEW
+        )
+        if (!quad || quad.length < 3) continue
+        const up = (Math.cos((a0 + a1) / 2) + 1) / 2
+        ctx.fillStyle = hsl(hue, 26 + up * 10, Math.max(4, (14 + up * 20) * lit + (rib ? 9 : 0)))
+        fillPoly(ctx, quad)
+      }
+      continue
+    }
 
-      // Clipped against the near plane rather than projected corner by
-      // corner.
-      //
-      // Projecting each corner on its own means any band with one corner
-      // behind the camera gets dropped whole - and inside a pipe that is
-      // every band near you, all the way round. The hole that leaves is
-      // the sky, so the chute rendered as a tube hanging in the air
-      // instead of as somewhere you are inside of.
-      const quad = projectPoly(
+    const al = edge(a, -1)
+    const ar = edge(a, 1)
+    const bl = edge(b, -1)
+    const br = edge(b, 1)
+
+    // The skirt below the road, which is what makes the edge read as a
+    // drop rather than as a line.
+    const drop = 46
+    const skirtL = projectPoly(
+      cam,
+      [
+        [al.x, al.y, al.z],
+        [bl.x, bl.y, bl.z],
+        [bl.x, bl.y + drop, bl.z],
+        [al.x, al.y + drop, al.z],
+      ],
+      VIEW
+    )
+    if (skirtL && skirtL.length > 2) {
+      ctx.fillStyle = hsl(hue, 18, Math.max(3, 9 * lit))
+      fillPoly(ctx, skirtL)
+    }
+    const skirtR = projectPoly(
+      cam,
+      [
+        [ar.x, ar.y, ar.z],
+        [br.x, br.y, br.z],
+        [br.x, br.y + drop, br.z],
+        [ar.x, ar.y + drop, ar.z],
+      ],
+      VIEW
+    )
+    if (skirtR && skirtR.length > 2) {
+      ctx.fillStyle = hsl(hue, 18, Math.max(3, 9 * lit))
+      fillPoly(ctx, skirtR)
+    }
+
+    // The road itself.
+    const road = projectPoly(
+      cam,
+      [
+        [al.x, al.y, al.z],
+        [ar.x, ar.y, ar.z],
+        [br.x, br.y, br.z],
+        [bl.x, bl.y, bl.z],
+      ],
+      VIEW
+    )
+    if (!road || road.length < 3) continue
+    ctx.fillStyle = hsl(hue, 10, Math.max(5, (30 + (rib ? 7 : 0)) * lit))
+    fillPoly(ctx, road)
+
+    // Centre line, dashed.
+    if (i % 6 < 3) {
+      const cl = {
+        x: (al.x + ar.x) / 2,
+        y: (al.y + ar.y) / 2,
+        z: (al.z + ar.z) / 2,
+      }
+      const cr = { x: (bl.x + br.x) / 2, y: (bl.y + br.y) / 2, z: (bl.z + br.z) / 2 }
+      const w = 7
+      const rx = Math.cos(a.yaw) * w
+      const rz = -Math.sin(a.yaw) * w
+      const line = projectPoly(
         cam,
         [
-          [p0.x, p0.y, p0.z],
-          [p1.x, p1.y, p1.z],
-          [p2.x, p2.y, p2.z],
-          [p3.x, p3.y, p3.z],
+          [cl.x - rx, cl.y, cl.z - rz],
+          [cl.x + rx, cl.y, cl.z + rz],
+          [cr.x + rx, cr.y, cr.z + rz],
+          [cr.x - rx, cr.y, cr.z - rz],
         ],
         VIEW
       )
-      if (!quad || quad.length < 3) continue
-
-      // Lit from the top of the pipe, so the bottom of the bore reads
-      // as the floor and you can tell which way up you are.
-      const mid = (a0 + a1) / 2
-      const up = (Math.cos(mid) + 1) / 2
-      // Road reads lighter than tube, because road has the sky on it.
-      const l = (roofed ? 16 + up * 20 : 26 + up * 22) * lit + (rib ? 9 : 0)
-      const sat = roofed ? 26 + up * 10 : 12 + up * 8
-      ctx.fillStyle = hsl(hue, sat, Math.max(4, l))
-      fillPoly(ctx, quad)
-
-      // A centre line down the open road, and a lip along both rims.
-      if (!roofed && !rib) continue
-      if (!roofed && Math.abs(mid) < span / AROUND) {
-        ctx.fillStyle = hsl(46, 86, Math.max(10, 62 * lit))
-        fillPoly(ctx, quad)
+      if (line && line.length > 2) {
+        ctx.fillStyle = hsl(46, 84, Math.max(12, 58 * lit))
+        fillPoly(ctx, line)
       }
+    }
+
+    // Both lips, bright, because they are the thing you must not cross.
+    for (const [p, q] of [
+      [al, bl],
+      [ar, br],
+    ]) {
+      const lip = projectPoly(
+        cam,
+        [
+          [p.x, p.y - 3, p.z],
+          [q.x, q.y - 3, q.z],
+          [q.x, q.y + 3, q.z],
+          [p.x, p.y + 3, p.z],
+        ],
+        VIEW
+      )
+      if (lip && lip.length > 2) {
+        ctx.fillStyle = a.checkpoint
+          ? hsl(140, 80, Math.max(20, 66 * lit))
+          : hsl(hue, 40, Math.max(12, 56 * lit))
+        fillPoly(ctx, lip)
+      }
+    }
+  }
+}
+
+/** Everything standing on the road. */
+export function drawBlocks(
+  ctx: CanvasRenderingContext2D,
+  cam: Camera,
+  nodes: Node[],
+  blocks: Obstacle[],
+  from: number,
+  t: number
+) {
+  const start = Math.floor(from)
+  const list = blocks
+    .filter((o) => o.at >= start - 2 && o.at < start + SEE)
+    .sort((a, b) => b.at - a.at)
+  for (const o of list) {
+    const n = nodes[o.at]
+    if (!n) continue
+    const u = obstacleU(o, t)
+    const rx = Math.cos(n.yaw)
+    const rz = -Math.sin(n.yaw)
+    const h = o.kind === 'gate' ? 54 : o.kind === 'wall' ? 66 : 48
+    const d = 16
+    const fx = Math.sin(n.yaw) * d
+    const fz = Math.cos(n.yaw) * d
+    const corners: [number, number, number][] = [
+      [n.x + rx * (u - o.half) - fx, n.y - h, n.z + rz * (u - o.half) - fz],
+      [n.x + rx * (u + o.half) - fx, n.y - h, n.z + rz * (u + o.half) - fz],
+      [n.x + rx * (u + o.half) - fx, n.y, n.z + rz * (u + o.half) - fz],
+      [n.x + rx * (u - o.half) - fx, n.y, n.z + rz * (u - o.half) - fz],
+    ]
+    const face = projectPoly(cam, corners, VIEW)
+    if (!face || face.length < 3) continue
+    const hue = o.kind === 'sweeper' ? 348 : o.kind === 'gate' ? 196 : 32
+    ctx.fillStyle = hsl(hue, 62, 44)
+    fillPoly(ctx, face)
+    // A bright cap, so a block reads as solid at a distance.
+    const cap = projectPoly(
+      cam,
+      [
+        corners[0],
+        corners[1],
+        [n.x + rx * (u + o.half) + fx, n.y - h, n.z + rz * (u + o.half) + fz],
+        [n.x + rx * (u - o.half) + fx, n.y - h, n.z + rz * (u - o.half) + fz],
+      ],
+      VIEW
+    )
+    if (cap && cap.length > 2) {
+      ctx.fillStyle = hsl(hue, 70, 62)
+      fillPoly(ctx, cap)
     }
   }
 }
