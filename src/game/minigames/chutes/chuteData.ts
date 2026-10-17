@@ -81,11 +81,69 @@ export const ARC = 1.34
  * that fast, so anything quicker gets thrown out and anything slower
  * falls in, and steering is what covers the difference.
  */
-export const MIN_GAP = 4
-export const MAX_GAP = 8
+/**
+ * How long a jump is.
+ *
+ * Long. The point of a jump is the few seconds in the air, and four
+ * nodes of nothing is a pothole - the ball hopped it in a fifth of a
+ * second and it read as a stutter rather than as a jump at all.
+ */
+export const MIN_GAP = 20
+export const MAX_GAP = 28
+/** How many nodes of ramp tilt up into one. */
+export const RAMP = 10
+/** How many nodes of straight road every run opens with. */
+export const OPENING = 70
 
-export const MAX_CURVE = 0.0035
-export const BANK_AT = 3500
+/**
+ * The tightest a bend is allowed to be, and the speed its banking is
+ * built to hold.
+ *
+ * Both were set so low that the road barely bent at all - which fixed
+ * the ball falling off every corner by removing the corners. A bend is
+ * properly tight now, and what holds it is a properly steep camber: up
+ * to a radian of banking, which is a wall you are driving along the side
+ * of, and the reason it can be driven at all.
+ */
+export const BANK_AT = 4200
+export const MAX_BANK = 1.0
+/**
+ * Derived rather than chosen, from the one rule that has to hold
+ * everywhere: whatever a corner does, the camber, the road's grip and
+ * full steering lock together have to be able to answer it - at the
+ * fastest the ball can possibly arrive, and at the slowest.
+ *
+ * At the top speed a corner pulls TOP squared times its curvature, and
+ * the camber built for BANK_AT gives back BANK_AT squared times the
+ * same - so the unanswered part is curvature times the difference of
+ * those two squares, and it has to fit inside grip plus steering.
+ *
+ * Picking this by feel and fixing whatever fell over was a losing game:
+ * every time one run was made passable the generator found a new
+ * impossible corner somewhere else, because nothing stopped it building
+ * one. holdable() below is checked against every node of every run.
+ */
+export const MAX_CURVE = 0.0045
+
+/**
+ * Can a ball going this fast be held on this piece of road?
+ *
+ * The corner pulls v squared times its curvature; the camber gives back
+ * gravity times its tangent; the surface absorbs `grip` of whatever is
+ * left and the player has `steer` on top. If the sum still comes up
+ * short then no amount of skill keeps the ball on, and the corner has
+ * no business existing.
+ */
+export function holdable(
+  curve: number,
+  bank: number,
+  speed: number,
+  budget: number
+): boolean {
+  const pull =
+    speed * speed * Math.abs(curve / STEP) - Math.tan(Math.abs(bank)) * 3000
+  return Math.abs(pull) <= budget
+}
 
 export const WIDE = 150
 export const NARROW = 52
@@ -180,9 +238,11 @@ export function buildChute(level: Level): Node[] {
     // tenth of a second - a chute you cannot set up for, only survive.
     { k: 0.004 + rnd() * 0.006, a: (0.15 + rnd() * 0.5) * level.twist, p: rnd() * 7 },
   ]
+  // Bumps big enough to see the road move. The first set is the roll of
+  // the hill, the second is the washboard on top of it.
   const rolls = [
-    { k: 0.006 + rnd() * 0.012, a: (0.1 + rnd() * 0.5) * level.bumps, p: rnd() * 7 },
-    { k: 0.02 + rnd() * 0.04, a: (0.04 + rnd() * 0.2) * level.bumps, p: rnd() * 7 },
+    { k: 0.004 + rnd() * 0.008, a: (0.3 + rnd() * 0.9) * level.bumps, p: rnd() * 7 },
+    { k: 0.016 + rnd() * 0.03, a: (0.12 + rnd() * 0.4) * level.bumps, p: rnd() * 7 },
   ]
 
   // Where the pipe opens up. Spread out, never at the very start, and
@@ -215,6 +275,11 @@ export function buildChute(level: Level): Node[] {
   for (let i = 0; i < level.length; i++) {
     let turn = 0
     for (const t of turns) turn += Math.sin(i * t.k + t.p) * t.a
+    // Every run opens straight and eases into its first bend. Dropping
+    // a ball that has not got going yet straight onto a steep camber is
+    // a fall before the first checkpoint, and a fall before the first
+    // checkpoint is a loop back to the same fall.
+    if (i < OPENING) turn *= (i / OPENING) ** 2
     let dip = 0.16 + 0.5 * level.drop
     for (const r of rolls) dip += Math.sin(i * r.k + r.p) * r.a
 
@@ -222,9 +287,20 @@ export function buildChute(level: Level): Node[] {
     // launching sideways out of a banked corner is a way to arrive
     // somewhere the next chute is not.
     const gap = gaps.find((g) => i >= g.at && i < g.at + g.len)
+    const ramp = gaps.find((g) => i >= g.at - RAMP && i < g.at)
     if (gap) {
+      // Over the gap there is no road, so the only thing that matters
+      // here is that it is straight - launching sideways out of a banked
+      // corner is a way to arrive where the next piece of road is not.
       turn = 0
-      dip = -0.26 // nose up off the lip
+      dip = 0
+    } else if (ramp) {
+      // The run-up tilts up, and it does it gradually. Going from
+      // downhill to nose-up in a single node is the jolt rather than
+      // the jump.
+      const into = (i - (ramp.at - RAMP)) / RAMP
+      turn = turn * (1 - into)
+      dip = dip * (1 - into) - 0.5 * into * into
     }
 
     // Capped, and the cap is physics rather than taste.
@@ -243,7 +319,7 @@ export function buildChute(level: Level): Node[] {
     // them over and over and no two of them could be told apart. This
     // leaves gentle bends gentle and only bites on the ones that were
     // going to be impossible.
-    const curve = MAX_CURVE * Math.tanh((turn * 0.0015) / MAX_CURVE)
+    const curve = MAX_CURVE * Math.tanh((turn * 0.004) / MAX_CURVE)
     yaw += curve
 
     const roof = roofs.find((r) => i >= r.at && i < r.at + r.len)
@@ -251,9 +327,16 @@ export function buildChute(level: Level): Node[] {
     // setting decides how far in. Narrow stretches are placed by a slow
     // wave rather than at random, so one is always visibly coming.
     const squeeze = (Math.sin(i * 0.013 + level.seed) + 1) / 2
-    const half = roof
-      ? WIDE
-      : WIDE - (WIDE - NARROW) * level.pinch * squeeze * squeeze
+    // A tight bend gets its road back.
+    //
+    // The pinch and the twist are laid out by different waves, so sooner
+    // or later they line up - and a fifty-five degree corner on seventy
+    // units of road is not difficult, it is arithmetic: the ball cannot
+    // be anywhere that is not off the edge. Night Line lost fifteen
+    // lives to one of them.
+    const tight = Math.min(1, Math.abs(curve) / MAX_CURVE)
+    const pinched = WIDE - (WIDE - NARROW) * level.pinch * squeeze * squeeze
+    const half = roof ? WIDE : pinched + (WIDE - pinched) * tight * 0.75
     nodes.push({
       x,
       y,
@@ -270,7 +353,7 @@ export function buildChute(level: Level): Node[] {
       // a corner well.
       bank:
         Math.sign(curve) *
-        Math.min(0.62, Math.atan((BANK_AT * BANK_AT * Math.abs(curve / STEP)) / 3000)),
+        Math.min(MAX_BANK, Math.atan((BANK_AT * BANK_AT * Math.abs(curve / STEP)) / 3000)),
       checkpoint: i % CHECK_EVERY === 0 && i > 0 && !gap,
     })
 
@@ -281,8 +364,24 @@ export function buildChute(level: Level): Node[] {
 
   // A checkpoint on the run-up to every jump, so a missed one costs the
   // approach rather than the last minute and a half.
+  // Clear of the ramp, not on it. Dropped five nodes before the gap the
+  // checkpoint lands halfway up the run-up, where the road is already
+  // tilting skyward and there is nowhere left to build any speed - so
+  // you restart, crawl off the lip, and drop straight into the same
+  // gap. The Ladder did that eight times in forty seconds.
   for (const g of gaps) {
-    const before = g.at - 5
+    // Clear every checkpoint off the run-up and the gap first.
+    //
+    // The regular every-ninetieth-node checkpoint lands wherever it
+    // lands, and when that was partway up a ramp it beat the one placed
+    // deliberately - so the ball restarted nine nodes from the lip, on
+    // road already tilting skyward, reached the edge slower than it had
+    // restarted and dropped straight in. The Drop did that seven times
+    // from the same spot.
+    for (let i = Math.max(0, g.at - RAMP - 6); i < g.at + g.len + 2; i++) {
+      if (nodes[i]) nodes[i].checkpoint = false
+    }
+    const before = g.at - RAMP - 16
     if (before > 0 && nodes[before] && !nodes[before].open) nodes[before].checkpoint = true
   }
 
@@ -315,15 +414,15 @@ export function lengthOf(level: Level): number {
 /* ------------------------------------------------------------------ */
 
 export const LEVELS: Level[] = [
-  { key: 'r01', name: '1 · Easy Street', blurb: 'Wide road, gentle bends, a tunnel and one gap.', length: 620, twist: 0.4, drop: 0.3, bumps: 0.45, jumps: 5, tubes: 1, clutter: 0.25, pinch: 0.15, seed: 11, sky: 'sundown' },
-  { key: 'r02', name: '2 · The Overpass', blurb: 'Long sweeping curves above the ring road.', length: 760, twist: 0.6, drop: 0.4, bumps: 0.6, jumps: 8, tubes: 1, clutter: 0.4, pinch: 0.3, seed: 29, sky: 'sundown' },
-  { key: 'r03', name: '3 · Switchback', blurb: 'It changes its mind about every four seconds.', length: 820, twist: 1, drop: 0.45, bumps: 0.75, jumps: 8, tubes: 1, clutter: 0.45, pinch: 0.4, seed: 47, sky: 'ember' },
-  { key: 'r04', name: '4 · Washboard', blurb: 'Bumps the whole way down, and pillars in the middle of them.', length: 840, twist: 0.7, drop: 0.5, bumps: 1.0, jumps: 8, tubes: 1, clutter: 0.6, pinch: 0.45, seed: 63, sky: 'ember' },
-  { key: 'r05', name: '5 · Leapfrog', blurb: 'Five times the road just is not there. Carry your speed.', length: 920, twist: 0.6, drop: 0.5, bumps: 0.6, jumps: 17, tubes: 1, clutter: 0.4, pinch: 0.5, seed: 81, sky: 'violet' },
-  { key: 'r06', name: '6 · The Narrows', blurb: 'A ledge, really. Sweepers on it.', length: 900, twist: 0.7, drop: 0.5, bumps: 0.75, jumps: 11, tubes: 1, clutter: 0.5, pinch: 0.62, seed: 97, sky: 'violet' },
-  { key: 'r07', name: '7 · The Drop', blurb: 'Steep, straight-ish, and very fast. Gates all the way down.', length: 760, twist: 0.55, drop: 1, bumps: 0.75, jumps: 11, tubes: 1, clutter: 0.8, pinch: 0.55, seed: 113, sky: 'cold' },
-  { key: 'r08', name: '8 · The Ladder', blurb: 'Bumps, gaps and walls, one after the other, all the way down.', length: 1040, twist: 0.8, drop: 0.7, bumps: 1.0, jumps: 20, tubes: 1, clutter: 0.9, pinch: 0.7, seed: 131, sky: 'cold' },
-  { key: 'r09', name: '9 · Night Line', blurb: 'The long one, after dark, with every single thing in it.', length: 1300, twist: 0.9, drop: 0.8, bumps: 1.0, jumps: 20, tubes: 2, clutter: 1, pinch: 0.85, seed: 149, sky: 'night' },
+  { key: 'r01', name: '1 · Easy Street', blurb: 'Wide road, gentle bends, a tunnel and one gap.', length: 1240, twist: 0.4, drop: 0.3, bumps: 0.45, jumps: 5, tubes: 1, clutter: 0.25, pinch: 0.15, seed: 11, sky: 'sundown' },
+  { key: 'r02', name: '2 · The Overpass', blurb: 'Long sweeping curves above the ring road.', length: 1520, twist: 0.6, drop: 0.4, bumps: 0.6, jumps: 8, tubes: 1, clutter: 0.4, pinch: 0.3, seed: 29, sky: 'sundown' },
+  { key: 'r03', name: '3 · Switchback', blurb: 'It changes its mind about every four seconds.', length: 1640, twist: 1, drop: 0.45, bumps: 0.75, jumps: 8, tubes: 1, clutter: 0.45, pinch: 0.4, seed: 47, sky: 'ember' },
+  { key: 'r04', name: '4 · Washboard', blurb: 'Bumps the whole way down, and pillars in the middle of them.', length: 1680, twist: 0.7, drop: 0.5, bumps: 1.0, jumps: 8, tubes: 1, clutter: 0.6, pinch: 0.45, seed: 63, sky: 'ember' },
+  { key: 'r05', name: '5 · Leapfrog', blurb: 'Five times the road just is not there. Carry your speed.', length: 1840, twist: 0.85, drop: 0.5, bumps: 0.6, jumps: 17, tubes: 1, clutter: 0.55, pinch: 0.7, seed: 81, sky: 'violet' },
+  { key: 'r06', name: '6 · The Narrows', blurb: 'A ledge, really. Sweepers on it.', length: 1800, twist: 0.7, drop: 0.5, bumps: 0.75, jumps: 11, tubes: 1, clutter: 0.5, pinch: 0.62, seed: 97, sky: 'violet' },
+  { key: 'r07', name: '7 · The Drop', blurb: 'Steep, straight-ish, and very fast. Gates all the way down.', length: 1520, twist: 0.55, drop: 1, bumps: 0.75, jumps: 11, tubes: 1, clutter: 0.8, pinch: 0.55, seed: 113, sky: 'cold' },
+  { key: 'r08', name: '8 · The Ladder', blurb: 'Bumps, gaps and walls, one after the other, all the way down.', length: 2080, twist: 0.8, drop: 0.7, bumps: 1.0, jumps: 20, tubes: 1, clutter: 0.9, pinch: 0.7, seed: 131, sky: 'cold' },
+  { key: 'r09', name: '9 · Night Line', blurb: 'The long one, after dark, with every single thing in it.', length: 2600, twist: 0.9, drop: 0.8, bumps: 1.0, jumps: 20, tubes: 2, clutter: 1, pinch: 0.85, seed: 149, sky: 'night' },
 ]
 
 /**

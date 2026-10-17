@@ -101,6 +101,8 @@ export function ChutesMinigame({ onExit }: MinigameProps) {
    * speed - and the whole picture juddered.
    */
   const camRef = useRef<Camera | null>(null)
+  /** How far the picture is tilted, eased the same way the camera is. */
+  const rollRef = useRef(0)
   const steerRef = useRef(0)
   const spinRef = useRef(0)
   const [riding, setRiding] = useState(false)
@@ -206,11 +208,21 @@ export function ChutesMinigame({ onExit }: MinigameProps) {
         z: r.z + rz * follow,
         yaw: r.yaw,
         // The slope of the hill, not the slope of the bump under you.
-        pitch: slopeAhead(nodes, back) * 0.5,
+        // The slope of the hill, not the slope of the bump under you -
+        // but read over a short enough stretch that a hill still reads
+        // as a hill. Averaged over fourteen nodes the road went flat.
+        pitch: slopeAhead(nodes, back, 6) * 0.5,
       }
 
       // Eased, not snapped. Time-based so it behaves the same whatever
       // the frame rate is doing.
+      //
+      // Except after a fall. Putting the ball back at a checkpoint moves
+      // it a long way backwards at once, and easing the camera across
+      // that gap drags the whole picture back down the hill and then
+      // hauls it forward again - which is most of what "it keeps jumping
+      // forward and backward" was.
+      if (out.fell) camRef.current = null
       const prev = camRef.current
       const k = prev ? 1 - Math.pow(0.0001, dt) : 1
       const cam: Camera = prev
@@ -225,7 +237,24 @@ export function ChutesMinigame({ onExit }: MinigameProps) {
       camRef.current = cam
       const yaw = cam.yaw
 
+      /* --- how far over it is leaning ------------------------------- */
+      //
+      // Without this the banking is a thing the road does and the ball
+      // does, and the player never feels any of it. Rolling the whole
+      // frame is what turns a steep camber into a corner you are leaning
+      // into.
+      const wantRoll = r.bank * 0.8 + Math.max(-0.2, Math.min(0.2, ride.vu / 3000))
+      rollRef.current += (wantRoll - rollRef.current) * (out.fell ? 1 : k)
+      const roll = rollRef.current
+
       /* --- paint ---------------------------------------------------- */
+      ctx.save()
+      ctx.translate(VIEW.width / 2, VIEW.height / 2)
+      ctx.rotate(roll)
+      // Scaled up a touch so the corners of the frame stay covered once
+      // it is turned.
+      ctx.scale(1.18, 1.18)
+      ctx.translate(-VIEW.width / 2, -VIEW.height / 2)
       drawSky(ctx, LEVEL_BY_KEY[saveRef.current.level]?.sky ?? 'sundown', yaw, cam.pitch, now)
       drawTrack(ctx, cam, nodes, back, pipeHue(saveRef.current.level))
       drawBlocks(ctx, cam, nodes, blocksRef.current, back, now)
@@ -236,6 +265,7 @@ export function ChutesMinigame({ onExit }: MinigameProps) {
         drawBall(ctx, cam, ball, at.x, at.y, at.z, spinRef.current)
       }
       drawRush(ctx, ride.speed, now)
+      ctx.restore()
 
       finish(ctx, VIEW, {
         vignette: 0.4,

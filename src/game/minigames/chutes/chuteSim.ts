@@ -25,7 +25,32 @@ export const G = 3000
 /** Flat-out top speed. */
 export const TOP = 6400
 /** How hard the ball can be pushed across the road. */
-export const STEER = 1800
+export const STEER = 3000
+/**
+ * Gravity while in the air, which is a fifth of what it is on the road.
+ *
+ * A jump is supposed to be a few seconds of flight, and under full
+ * gravity off a short lip it was a third of a second - up and down again
+ * before you had registered leaving the ground. This buys about two
+ * seconds at speed, and enough at the slowest restart speed to clear the
+ * longest gap the generator can lay.
+ */
+export const AIR_G = 620
+/**
+ * How much sideways pull the road itself absorbs before the ball starts
+ * to move across it.
+ *
+ * Without it, banking that is steep enough to hold a ball at speed
+ * throws a slow one straight off the inside: the camber on a fifty-one
+ * degree corner pulls nearly three thousand units a second squared down
+ * the slope, and a ball that has not got going yet simply slides down
+ * it and over the edge. That is what killed three of the nine runs - at
+ * the second corner, before the first checkpoint, over and over.
+ *
+ * The force budget said those corners were holdable. They were; the ball
+ * just was not going fast enough to need holding.
+ */
+export const GRIP = 1200
 /** How long the ball is out of play after going over the edge. */
 export const FELL_FOR = 900
 
@@ -72,7 +97,7 @@ export function startRide(): Ride {
     vu: 0,
     h: 0,
     vh: 0,
-    speed: 640,
+    speed: 1600,
     t: 0,
     air: false,
     airT: 0,
@@ -163,7 +188,7 @@ function recover(ride: Ride, now: number) {
   ride.vu = 0
   ride.h = 0
   ride.vh = 0
-  ride.speed = 700
+  ride.speed = 1400
   ride.air = false
   ride.airT = 0
   ride.falls++
@@ -216,36 +241,85 @@ export function step(
   // What the corner does to it, and what the camber takes back. Both
   // are real accelerations: v squared times curvature out, and gravity
   // times the tangent of the banking in.
-  const throwOut = ride.speed * ride.speed * (r.curve / STEP)
-  const held = -Math.tan(r.bank) * G
-  ride.vu += (throwOut + held + steer * STEER) * dt
+  if (ride.air) {
+    // In the air there is no camber to lean on and no corner pulling at
+    // you, and barely any steering either.
+    //
+    // At full authority a ball could fly sideways off the road while it
+    // was in mid-flight, which is how a run with seventeen clearable
+    // jumps in it still managed ninety-two falls. You can nudge where
+    // you land. You cannot drive there.
+    ride.vu += steer * STEER * 0.18 * dt
+  } else {
+    const throwOut = ride.speed * ride.speed * (r.curve / STEP)
+    const held = -Math.tan(r.bank) * G
+    // Whatever the corner and the camber do not settle between them, the
+    // road holds up to GRIP of - and you deal with the rest.
+    const pull = throwOut + held
+    const slips = Math.sign(pull) * Math.max(0, Math.abs(pull) - GRIP)
+    ride.vu += (slips + steer * STEER) * dt
+  }
   ride.vu *= 1 - 2.6 * dt
   ride.u += ride.vu * dt
 
   /* --- up and down -------------------------------------------------- */
-  if (r.open) {
-    // Nothing underneath. Whatever speed you came off the lip with is
-    // what decides whether you reach the far side.
-    if (!wasAir) {
-      ride.air = true
-      // Enough lift that even a ball arriving at its slowest clears the
-      // longest gap the generator is allowed to lay.
-      ride.vh = ride.speed * 0.26 + 420
-      ride.airT = 0
-      beat.launched = true
-    }
+  //
+  // Being in the air is a property of the ball, not of the road beneath
+  // it. Tied to the road, the ball slammed back down the instant it
+  // crossed the far lip however high it happened to be - so a jump was
+  // over the moment the gap was, and the arc you were in the middle of
+  // just stopped. Now it leaves the ramp, flies, and comes down when it
+  // comes down, over road or not.
+  if (r.open && !wasAir && ride.h <= 0) {
+    ride.air = true
+    // Mostly a fixed shove rather than one that scales with pace.
+    //
+    // Tied to speed, a fast ball flew both higher and longer, and two
+    // seconds at four and a half thousand units a second is nine
+    // thousand units - more than a third of a run in one jump. Three
+    // jumps finished a level, the ball spent most of its time in the
+    // air where nothing can touch it, and the picture leapt forward in
+    // great chunks. A jump is now roughly the same jump however fast
+    // you arrive; arriving fast makes it longer, not slower.
+    //
+    // On top of that, the ramp throws you across whatever gap is
+    // actually in front of you. A fixed shove means the gap you can
+    // clear depends on how fast you happened to arrive, and arriving
+    // slowly is exactly what happens after a fall or from behind a
+    // block - so a jump could become a hole you drop into over and over
+    // with no way to build the speed to get out of it. Four separate
+    // attempts to place checkpoints generously enough to prevent that
+    // each moved the problem somewhere else. Arriving fast still flies
+    // further and longer; arriving slowly clears it and no more.
+    // Walk forward to the gap first, then across it.
+    //
+    // readAt reports a node as open when either end of it is, so at the
+    // moment of launch the integer node underneath is usually still
+    // solid - and a loop that starts there and runs "while open" stops
+    // immediately, measures nothing, and adds no lift at all.
+    let far = Math.floor(ride.s)
+    while (far < nodes.length && !nodes[far].open) far++
+    while (far < nodes.length && nodes[far].open) far++
+    const across = (far - ride.s) * STEP + BALL_R * 6
+    const needed = (AIR_G * across) / (2 * Math.max(200, ride.speed))
+    ride.vh = Math.max(ride.speed * 0.03 + 420, needed)
+    ride.airT = 0
+    beat.launched = true
+  }
+
+  if (ride.air) {
     ride.airT += dt
-    ride.vh -= G * 1.25 * dt
+    ride.vh -= AIR_G * dt
     ride.h += ride.vh * dt
-    if (ride.h < -260) {
-      // Fell into the gap.
-      recover(ride, ride.t * 1000)
-      beat.fell = true
-      return beat
-    }
-    ride.speed *= 1 - 0.08 * dt
-  } else {
-    if (wasAir || ride.h > 0) {
+    ride.speed *= 1 - 0.05 * dt
+    if (r.open) {
+      if (ride.h < -200) {
+        // Came down where there was nothing to come down onto.
+        recover(ride, ride.t * 1000)
+        beat.fell = true
+        return beat
+      }
+    } else if (ride.h <= 0) {
       ride.air = false
       ride.bestAir = Math.max(ride.bestAir, ride.airT)
       const slam = Math.min(1, Math.abs(ride.vh) / 2400)
@@ -255,6 +329,17 @@ export function step(
       ride.airT = 0
       beat.landed = true
     }
+    // Nothing on the road can touch a ball that is above it.
+    ride.s += (ride.speed * dt) / STEP
+    if (ride.s >= nodes.length - 2) {
+      ride.s = nodes.length - 2
+      ride.done = true
+      beat.finished = true
+    }
+    return beat
+  }
+
+  if (!r.open) {
 
     /* --- the edge ------------------------------------------------- */
     if (r.closed) {
