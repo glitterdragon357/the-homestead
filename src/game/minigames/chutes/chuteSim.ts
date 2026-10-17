@@ -52,7 +52,14 @@ export const AIR_G = 620
  */
 export const GRIP = 1200
 /** How long the ball is out of play after going over the edge. */
-export const FELL_FOR = 900
+/**
+ * How long the ball is out of play after going over the edge.
+ *
+ * Short. Nearly a second of a run where nothing you do has any effect
+ * is a long time to sit through, and sat through often enough it reads
+ * as the controls not working rather than as a penalty.
+ */
+export const FELL_FOR = 420
 
 export interface Ride {
   /** How far along, as a node index with a fraction. */
@@ -249,7 +256,10 @@ export function step(
     // was in mid-flight, which is how a run with seventeen clearable
     // jumps in it still managed ninety-two falls. You can nudge where
     // you land. You cannot drive there.
-    ride.vu += steer * STEER * 0.18 * dt
+    // Noticeably less than on the road, but not nothing. A jump lasts
+    // about two seconds, and two seconds of a dead stick in the middle
+    // of a run feels like the game has stopped listening.
+    ride.vu += steer * STEER * 0.4 * dt
   } else {
     const throwOut = ride.speed * ride.speed * (r.curve / STEP)
     const held = -Math.tan(r.bank) * G

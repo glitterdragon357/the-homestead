@@ -28,7 +28,6 @@ import {
   progress,
   readAt,
   safety,
-  slopeAhead,
   startRide,
   step,
   TOP,
@@ -37,7 +36,6 @@ import {
   VIEW,
   ballSwatch,
   drawBall,
-  drawBlocks,
   drawMouth,
   drawRush,
   drawSky,
@@ -101,8 +99,6 @@ export function ChutesMinigame({ onExit }: MinigameProps) {
    * speed - and the whole picture juddered.
    */
   const camRef = useRef<Camera | null>(null)
-  /** How far the picture is tilted, eased the same way the camera is. */
-  const rollRef = useRef(0)
   const steerRef = useRef(0)
   const spinRef = useRef(0)
   const [riding, setRiding] = useState(false)
@@ -194,70 +190,61 @@ export function ChutesMinigame({ onExit }: MinigameProps) {
       // rather than dead on the centreline. On the centreline a ball
       // high on the outside of a corner leaves the frame entirely, and
       // the one thing you must always be able to see is your own line.
-      // Behind the ball, above the road, following it across.
-      const back = Math.max(0, ride.s - 8.5)
-      const r = readAt(nodes, back)
-      const rx = Math.cos(r.yaw)
-      const rz = -Math.sin(r.yaw)
-      // Only part of the way across, so a ball out at the edge is still
-      // in frame and you can see how much road is left beside it.
-      const follow = ride.u * 0.65
+      // Bolted to the ball.
+      //
+      // Every previous version of this camera was parked on the track
+      // instead - at a point some way back down the centreline, leaning
+      // partway across towards wherever the ball was, pitching with the
+      // slope, rolling with the camber, lifting with the jump. Five
+      // separate things all moving at once, none of them the ball, and
+      // the result was a view that swung about on its own while the
+      // ball sat in the middle of it.
+      //
+      // Now there is one rule: sit a fixed distance behind the ball and
+      // a fixed height above it, and look at it. The ball holds still
+      // in the frame and the world moves past, which is the only
+      // arrangement that cannot drift away from what you are steering.
+      const b = ballAt(nodes, ride)
+      const r = readAt(nodes, ride.s)
+      const BEHIND = 250
+      const ABOVE = 96
       const want: Camera = {
-        x: r.x + rx * follow,
-        y: r.y - 78 - ride.h * 0.7,
-        z: r.z + rz * follow,
+        x: b.x - Math.sin(r.yaw) * BEHIND,
+        // Down is positive here, so up is a subtraction.
+        y: b.y - ABOVE,
+        z: b.z - Math.cos(r.yaw) * BEHIND,
         yaw: r.yaw,
-        // The slope of the hill, not the slope of the bump under you.
-        // The slope of the hill, not the slope of the bump under you -
-        // but read over a short enough stretch that a hill still reads
-        // as a hill. Averaged over fourteen nodes the road went flat.
-        pitch: slopeAhead(nodes, back, 6) * 0.5,
+        // Aimed at the ball. Constant, because the offset is constant -
+        // so hills and bumps show up as the road moving, which is what
+        // they are, rather than as the camera nodding at them.
+        pitch: Math.atan2(ABOVE, BEHIND),
       }
 
-      // Eased, not snapped. Time-based so it behaves the same whatever
-      // the frame rate is doing.
-      //
-      // Except after a fall. Putting the ball back at a checkpoint moves
-      // it a long way backwards at once, and easing the camera across
-      // that gap drags the whole picture back down the hill and then
-      // hauls it forward again - which is most of what "it keeps jumping
-      // forward and backward" was.
+      // Eased only enough to take the edge off, and cut outright when
+      // the ball is put back at a checkpoint - easing across that gap
+      // is what dragged the view back down the hill and hauled it
+      // forward again.
       if (out.fell) camRef.current = null
       const prev = camRef.current
-      const k = prev ? 1 - Math.pow(0.0001, dt) : 1
+      const k = prev ? 1 - Math.pow(0.000002, dt) : 1
       const cam: Camera = prev
         ? {
             x: prev.x + (want.x - prev.x) * k,
             y: prev.y + (want.y - prev.y) * k,
             z: prev.z + (want.z - prev.z) * k,
             yaw: prev.yaw + (want.yaw - prev.yaw) * k,
-            pitch: prev.pitch + (want.pitch - prev.pitch) * k,
+            pitch: want.pitch,
           }
         : want
       camRef.current = cam
       const yaw = cam.yaw
 
-      /* --- how far over it is leaning ------------------------------- */
-      //
-      // Without this the banking is a thing the road does and the ball
-      // does, and the player never feels any of it. Rolling the whole
-      // frame is what turns a steep camber into a corner you are leaning
-      // into.
-      const wantRoll = r.bank * 0.8 + Math.max(-0.2, Math.min(0.2, ride.vu / 3000))
-      rollRef.current += (wantRoll - rollRef.current) * (out.fell ? 1 : k)
-      const roll = rollRef.current
-
       /* --- paint ---------------------------------------------------- */
-      ctx.save()
-      ctx.translate(VIEW.width / 2, VIEW.height / 2)
-      ctx.rotate(roll)
-      // Scaled up a touch so the corners of the frame stay covered once
-      // it is turned.
-      ctx.scale(1.18, 1.18)
-      ctx.translate(-VIEW.width / 2, -VIEW.height / 2)
       drawSky(ctx, LEVEL_BY_KEY[saveRef.current.level]?.sky ?? 'sundown', yaw, cam.pitch, now)
-      drawTrack(ctx, cam, nodes, back, pipeHue(saveRef.current.level))
-      drawBlocks(ctx, cam, nodes, blocksRef.current, back, now)
+      // Start drawing a little behind the ball so the road under it is
+      // there, not just the road in front.
+      const from = Math.max(0, ride.s - 10)
+      drawTrack(ctx, cam, nodes, from, pipeHue(saveRef.current.level))
       if (ride.air) drawMouth(ctx, cam, nodes, ride.s, pipeHue(saveRef.current.level))
       const at = ballAt(nodes, ride)
       // Nothing to draw while it is being put back on the road.
@@ -265,7 +252,6 @@ export function ChutesMinigame({ onExit }: MinigameProps) {
         drawBall(ctx, cam, ball, at.x, at.y, at.z, spinRef.current)
       }
       drawRush(ctx, ride.speed, now)
-      ctx.restore()
 
       finish(ctx, VIEW, {
         vignette: 0.4,
@@ -301,9 +287,11 @@ export function ChutesMinigame({ onExit }: MinigameProps) {
   useEffect(() => {
     if (!riding) return
     const keys = new Set<string>()
+    // Lower-cased, because a capital A is still an A. With caps lock on
+    // the keys did nothing at all.
     const read = () => {
-      const left = keys.has('ArrowLeft') || keys.has('a')
-      const right = keys.has('ArrowRight') || keys.has('d')
+      const left = keys.has('arrowleft') || keys.has('a')
+      const right = keys.has('arrowright') || keys.has('d')
       steerRef.current = (right ? 1 : 0) - (left ? 1 : 0)
     }
     const down = (e: KeyboardEvent) => {
@@ -311,11 +299,11 @@ export function ChutesMinigame({ onExit }: MinigameProps) {
         land()
         return
       }
-      keys.add(e.key)
+      keys.add(e.key.toLowerCase())
       read()
     }
     const up = (e: KeyboardEvent) => {
-      keys.delete(e.key)
+      keys.delete(e.key.toLowerCase())
       read()
     }
     window.addEventListener('keydown', down)
@@ -326,6 +314,14 @@ export function ChutesMinigame({ onExit }: MinigameProps) {
     }
   }, [riding, land])
 
+  /**
+   * Where the pointer is across the canvas, as a steer from -1 to 1.
+   *
+   * Leaving the canvas used to zero the steering, which on a narrow
+   * window meant the ball stopped responding the moment the pointer
+   * wandered off the edge of the picture. It now keeps whatever it was
+   * last told until it is told something else.
+   */
   function aim(e: React.PointerEvent<HTMLCanvasElement>) {
     const r = e.currentTarget.getBoundingClientRect()
     const x = (e.clientX - r.left) / r.width
@@ -350,7 +346,7 @@ export function ChutesMinigame({ onExit }: MinigameProps) {
             height={VIEW.height}
             style={S.canvas}
             onPointerMove={aim}
-            onPointerLeave={() => (steerRef.current = 0)}
+            onPointerDown={aim}
           />
           <div style={S.hudTop}>
             <span style={S.speed}>{kmh}</span>

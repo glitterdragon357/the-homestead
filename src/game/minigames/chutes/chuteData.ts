@@ -336,7 +336,12 @@ export function buildChute(level: Level): Node[] {
     // lives to one of them.
     const tight = Math.min(1, Math.abs(curve) / MAX_CURVE)
     const pinched = WIDE - (WIDE - NARROW) * level.pinch * squeeze * squeeze
-    const half = roof ? WIDE : pinched + (WIDE - pinched) * tight * 0.75
+    // A bend gets some of its road back, but not all of it. Handing
+    // back three quarters meant the narrow stretches only ever landed
+    // on the straights, where being narrow costs nothing - and with
+    // nothing standing on the road any more, the road is the only thing
+    // asking anything of you.
+    const half = roof ? WIDE : pinched + (WIDE - pinched) * tight * 0.35
     nodes.push({
       x,
       y,
@@ -418,7 +423,7 @@ export const LEVELS: Level[] = [
   { key: 'r02', name: '2 · The Overpass', blurb: 'Long sweeping curves above the ring road.', length: 1520, twist: 0.6, drop: 0.4, bumps: 0.6, jumps: 8, tubes: 1, clutter: 0.4, pinch: 0.3, seed: 29, sky: 'sundown' },
   { key: 'r03', name: '3 · Switchback', blurb: 'It changes its mind about every four seconds.', length: 1640, twist: 1, drop: 0.45, bumps: 0.75, jumps: 8, tubes: 1, clutter: 0.45, pinch: 0.4, seed: 47, sky: 'ember' },
   { key: 'r04', name: '4 · Washboard', blurb: 'Bumps the whole way down, and pillars in the middle of them.', length: 1680, twist: 0.7, drop: 0.5, bumps: 1.0, jumps: 8, tubes: 1, clutter: 0.6, pinch: 0.45, seed: 63, sky: 'ember' },
-  { key: 'r05', name: '5 · Leapfrog', blurb: 'Five times the road just is not there. Carry your speed.', length: 1840, twist: 0.85, drop: 0.5, bumps: 0.6, jumps: 17, tubes: 1, clutter: 0.55, pinch: 0.7, seed: 81, sky: 'violet' },
+  { key: 'r05', name: '5 · Leapfrog', blurb: 'Five times the road just is not there. Carry your speed.', length: 2900, twist: 0.95, drop: 0.5, bumps: 0.6, jumps: 17, tubes: 1, clutter: 0, pinch: 0.9, seed: 81, sky: 'violet' },
   { key: 'r06', name: '6 · The Narrows', blurb: 'A ledge, really. Sweepers on it.', length: 1800, twist: 0.7, drop: 0.5, bumps: 0.75, jumps: 11, tubes: 1, clutter: 0.5, pinch: 0.62, seed: 97, sky: 'violet' },
   { key: 'r07', name: '7 · The Drop', blurb: 'Steep, straight-ish, and very fast. Gates all the way down.', length: 1520, twist: 0.55, drop: 1, bumps: 0.75, jumps: 11, tubes: 1, clutter: 0.8, pinch: 0.55, seed: 113, sky: 'cold' },
   { key: 'r08', name: '8 · The Ladder', blurb: 'Bumps, gaps and walls, one after the other, all the way down.', length: 2080, twist: 0.8, drop: 0.7, bumps: 1.0, jumps: 20, tubes: 1, clutter: 0.9, pinch: 0.7, seed: 131, sky: 'cold' },
@@ -437,48 +442,19 @@ export const LEVELS: Level[] = [
  * through, and finding it at speed is the game. A level you cannot pass
  * without stopping is a wall with extra steps.
  */
-export function obstaclesFor(level: Level): Obstacle[] {
-  const rnd = (() => {
-    let a = (level.seed * 7919) | 0
-    return () => {
-      a = (a + 0x6d2b79f5) | 0
-      let t = Math.imul(a ^ (a >>> 15), 1 | a)
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-    }
-  })()
-  const nodes = buildChute(level)
-  const out: Obstacle[] = []
-  const gap = Math.max(14, Math.round(44 - level.clutter * 30))
-  for (let i = 60; i < nodes.length - 30; i += gap) {
-    const at = i + Math.round(rnd() * gap * 0.5)
-    const n = nodes[at]
-    if (!n || n.open) continue
-    // Never right on a checkpoint, or landing there is a trap.
-    if (nodes.slice(at - 3, at + 3).some((m) => m.checkpoint)) continue
-    const roll = rnd()
-    const kind: Block = roll < 0.4 ? 'pillar' : roll < 0.65 ? 'gate' : roll < 0.88 ? 'sweeper' : 'wall'
-    const room = n.half
-    if (kind === 'gate') {
-      // A gate is two blocks with a hole between them; the hole is never
-      // narrower than a ball needs.
-      const hole = Math.max(BALL_R * 2.4, room * (0.3 + rnd() * 0.25))
-      const side = room - hole / 2
-      out.push({ at, kind, u: -(hole / 2 + side / 2), half: side / 2, sweep: 0, span: 0 })
-      out.push({ at, kind, u: hole / 2 + side / 2, half: side / 2, sweep: 0, span: 0 })
-    } else if (kind === 'sweeper') {
-      const half = Math.min(room * 0.3, 46)
-      out.push({ at, kind, u: 0, half, sweep: 0.9 + rnd() * 1.3, span: Math.max(0, room - half) })
-    } else if (kind === 'wall') {
-      // A wall blocks one side and leaves the other open.
-      const half = room * (0.3 + rnd() * 0.2)
-      out.push({ at, kind, u: (rnd() < 0.5 ? -1 : 1) * (room - half), half, sweep: 0, span: 0 })
-    } else {
-      const half = Math.min(room * 0.26, 38)
-      out.push({ at, kind, u: (rnd() * 2 - 1) * Math.max(0, room - half * 1.6), half, sweep: 0, span: 0 })
-    }
-  }
-  return out
+/**
+ * Nothing stands on the road.
+ *
+ * There was a stretch where there were pillars, gates, sweepers and
+ * walls on it. That was me overriding a decision that had already been
+ * made twice: no obstacles. The road, the corners, the narrow bits and
+ * the gaps are the whole of the difficulty.
+ *
+ * The type and the plumbing stay because the draw and the step still
+ * take a list; it is simply always empty.
+ */
+export function obstaclesFor(_level: Level): Obstacle[] {
+  return []
 }
 
 /** Where a sweeper is right now. */
